@@ -9,8 +9,7 @@
         "dist/**",
         ".next/**",
         "!.next/cache/**",
-        "build/**",
-        ".turbo/**"
+        "build/**"
       ]
     },
     "dev": {
@@ -18,15 +17,15 @@
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "outputs": ["coverage/**"]
     },
     "db:migrate": {
