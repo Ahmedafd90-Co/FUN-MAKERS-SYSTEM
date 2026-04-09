@@ -17,5 +17,7 @@
     "db:migrate": "pnpm --filter @fmksa/db db:migrate",
     "db:seed": "pnpm --filter @fmksa/db db:seed"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  }
 }
