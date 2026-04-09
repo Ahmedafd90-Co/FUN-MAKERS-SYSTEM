@@ -112,8 +112,10 @@ fun-makers-ksa/
 │       │   └── layout.tsx
 │       ├── components/                   # page-level components (not shared library)
 │       ├── server/
-│       │   ├── trpc.ts                   # base router, procedures, middleware
+│       │   ├── trpc.ts                   # base router, procedures
+│       │   ├── trpc-middleware/          # tRPC middleware (project-scope, etc.)
 │       │   ├── routers/                  # one router per service
+│       │   ├── event-handlers.ts         # workflow + posting event subscribers
 │       │   └── context.ts                # request context (session, db, services)
 │       ├── lib/
 │       │   ├── auth.ts                   # Auth.js config
@@ -944,7 +946,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 - [ ] `aws-cdk-lib` and `constructs` are dependencies.
 - [ ] `bin/app.ts` instantiates the 7 stacks for environment `dev` only (M1 scope).
 - [ ] `pnpm --filter @fmksa/cdk exec cdk synth` succeeds and produces a `cdk.out/` directory with CloudFormation JSON.
-- [ ] No AWS credentials needed for synth (only for deploy).
+- [ ] **Verify with `unset AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY && pnpm --filter @fmksa/cdk exec cdk synth`** — synth must succeed with no AWS credentials in the environment. If it fails, the stacks have a hidden lookup that needs to be replaced with a context value.
 
 **Tests:** the synth itself is the test.
 
@@ -1046,6 +1048,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 | 1.2.20 | Integration test: seed runs idempotently | test | 1.2.17 | yes |
 | 1.2.21 | Integration test: signed-version middleware blocks updates | test | 1.2.18 | yes |
 | 1.2.22 | Integration test: soft-delete whitelist enforced | test | 1.2.19 | yes |
+| 1.2.23 | Base `audit` service: `log()` method (no withOverride yet) | backend | 1.2.11 | yes |
 
 ### Task 1.2.1 — Schema: identity & access `[database]`
 
@@ -1490,7 +1493,7 @@ export async function seedStatusDictionaries(prisma: PrismaClient) {
 
 **Tests:** verified in 1.2.20.
 
-**Notes:** The seed password is **never** committed in plaintext. The default falls back only when the env var is missing, with a loud console warning telling the operator to change it before any non-local environment.
+**Notes:** The seed password is **never** committed in plaintext. The default falls back only when the env var is missing, with a loud console warning telling the operator to change it before any non-local environment. The seed imports `bcryptjs` directly (rather than from `@fmksa/core/auth/password`, which doesn't exist yet — that's Task 1.3.2) to avoid a phantom dependency on Phase 1.3.
 
 ### Task 1.2.18 — Prisma middleware: signed-version immutability `[backend]`
 
@@ -1734,12 +1737,76 @@ export const noDeleteOnImmutableExtension = {
 **Acceptance:**
 - [ ] All immutable tables tested under realistic data shapes.
 
+### Task 1.2.23 — Base `audit` service: `log()` method `[backend]`
+
+**Objective:** Land the base `audit.log()` method in Phase 1.2 so every later phase can write audit entries from the moment the data layer is up. The override helper (`withOverride`) ships in Phase 1.7 because it depends on the override policy from Pause #3 (1.3.11).
+
+**Files:**
+- Create: `packages/core/src/audit/service.ts`
+- Create: `packages/core/tests/audit/log.test.ts`
+
+**Deps:** 1.2.11
+
+**Acceptance:**
+- [ ] `auditService.log({ actorUserId, actorSource, action, resourceType, resourceId, projectId?, beforeJson, afterJson, reason?, ip?, userAgent? }, tx?)` writes one row to `audit_logs`. Optional `tx` parameter accepts a Prisma transaction client so callers can write the audit entry inside the same transaction as the business write.
+- [ ] When called without `tx`, opens its own transaction.
+- [ ] Throws if `actorSource === 'user'` but `actorUserId` is missing (defensive check).
+- [ ] Returns the created `AuditLog` row.
+- [ ] Tests cover: with-tx and without-tx paths, defensive validation, the table is append-only (verified by attempting `prisma.auditLog.delete` and asserting the Phase 1.2.19 middleware blocks it).
+
+**Notes:** Keep this service deliberately small. The override helper, override-log integration, and override policy enforcement all live in Task 1.7.6. This task only ships the base `log()` method so Phases 1.3–1.6 can use it.
+
+```typescript
+// packages/core/src/audit/service.ts
+import { prisma } from '@fmksa/db';
+import type { Prisma } from '@prisma/client';
+
+type AuditEntry = {
+  actorUserId?: string | null;
+  actorSource: 'user' | 'system' | 'agent' | 'job';
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  projectId?: string | null;
+  beforeJson: Prisma.JsonValue;
+  afterJson: Prisma.JsonValue;
+  reason?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+};
+
+export const auditService = {
+  async log(entry: AuditEntry, tx?: Prisma.TransactionClient) {
+    if (entry.actorSource === 'user' && !entry.actorUserId) {
+      throw new Error('auditService.log: actorUserId required when actorSource is "user"');
+    }
+    const client = tx ?? prisma;
+    return client.auditLog.create({
+      data: {
+        actorUserId: entry.actorUserId ?? null,
+        actorSource: entry.actorSource,
+        action: entry.action,
+        resourceType: entry.resourceType,
+        resourceId: entry.resourceId,
+        projectId: entry.projectId ?? null,
+        beforeJson: entry.beforeJson as Prisma.InputJsonValue,
+        afterJson: entry.afterJson as Prisma.InputJsonValue,
+        reason: entry.reason ?? null,
+        ip: entry.ip ?? null,
+        userAgent: entry.userAgent ?? null,
+      },
+    });
+  },
+};
+```
+
 **Phase 1.2 exit criteria:**
 - [ ] All schema files committed; `prisma validate` clean.
 - [ ] Initial migration applies cleanly to a fresh DB.
 - [ ] Seed populates dev DB with reference data, permissions (Pause #1 done), roles, role-permissions, status dictionaries (Pause #5 done), notification templates, sample entity, sample project, Master Admin.
 - [ ] Re-running seed is a no-op.
 - [ ] Both Prisma middleware tests green.
+- [ ] Base `auditService.log()` available for use by Phase 1.3+ code.
 - [ ] CI green on the phase branch.
 
 ---
@@ -1769,7 +1836,7 @@ export const noDeleteOnImmutableExtension = {
 | 1.3.9 | `access-control` service: cross-project read check | backend | 1.3.7 | no |
 | 1.3.10 | `access-control` service: requirePermission helper | backend | 1.3.6 | no |
 | 1.3.11 | `access-control` service: override policy ⚠️ **LEARNING PAUSE #3** | backend | 1.3.10 | no |
-| 1.3.12 | `projectScope` tRPC middleware | backend | 1.3.5, 1.3.7, 1.3.10 | no |
+| 1.3.12 | `projectScope` tRPC middleware | backend | 1.3.5, 1.3.7, 1.3.10, 1.2.23 | no |
 | 1.3.13 | Sign-in screen UI | frontend | 1.3.5 | with 1.3.14, 1.3.15 |
 | 1.3.14 | Forgot-password stub screen UI | frontend | 1.3.5 | with 1.3.13, 1.3.15 |
 | 1.3.15 | User profile screen UI | frontend | 1.3.5 | with 1.3.13, 1.3.14 |
@@ -2098,7 +2165,7 @@ export function isNeverOverridable(action: OverrideActionType): boolean {
 - Create: `apps/web/server/trpc-middleware/project-scope.ts`
 - Create: `apps/web/server/trpc-middleware/project-scope.test.ts`
 
-**Deps:** 1.3.5, 1.3.7, 1.3.10
+**Deps:** 1.3.5, 1.3.7, 1.3.10, **1.2.23 (base audit service)**
 
 **TDD sequence:**
 
@@ -3347,11 +3414,11 @@ export async function seedWorkflowTemplates(prisma: PrismaClient) {
 | # | Task | Type | Deps | Parallel? |
 |---|---|---|---|---|
 | 1.7.1 | `posting` service: event-type registry (Zod schemas) | backend | 1.3 | no |
-| 1.7.2 | `posting` service: post() with idempotency | backend | 1.7.1 | no |
+| 1.7.2 | `posting` service: post() with idempotency | backend | 1.7.1, 1.2.23 | no |
 | 1.7.3 | `posting` service: failure → exception | backend | 1.7.2 | no |
 | 1.7.4 | `posting` service: reverse() (additive reversal) | backend | 1.7.2 | no |
 | 1.7.5 | `posting` service: exception retry + resolve | backend | 1.7.3 | no |
-| 1.7.6 | `audit` service + `withOverride` helper | backend | 1.3 | yes |
+| 1.7.6 | `audit` service: `withOverride` helper | backend | 1.2.23, 1.3.11 | yes |
 | 1.7.7 | tRPC router: posting (admin only) | backend | 1.7.5 | no |
 | 1.7.8 | Admin → Posting Exceptions screen | frontend | 1.7.7 | yes |
 | 1.7.9 | Integration tests: happy path | test | 1.7.2 | yes |
@@ -3562,6 +3629,8 @@ export const postingService = {
 - [ ] Cannot reverse an already-reversed event.
 - [ ] Tests cover all paths.
 
+**Notes:** The "additive reversal" rule from spec §7.4 means the original event's domain values (eventType, payload, postedAt, sourceRecord) are never mutated. Setting the original row's `reversedByEventId` pointer is the *only* allowed mutation — it's a back-pointer for audit traversal. The original posted facts remain intact and the reversal is a new row that downstream consumers must apply additively.
+
 ### Task 1.7.5 — Exception retry + resolve `[backend]`
 
 **Objective:** Allow Master Admin to retry a failed event or mark an exception as resolved.
@@ -3577,25 +3646,23 @@ export const postingService = {
 - [ ] Permission check: `posting.resolve_exception`.
 - [ ] Tests cover both paths.
 
-### Task 1.7.6 — `audit` service + `withOverride` helper `[backend]`
+### Task 1.7.6 — `audit` service: `withOverride` helper `[backend]`
 
-**Objective:** The audit service that all other services use to write logs, plus the `withOverride` wrapper that captures override actions in the dedicated `override_logs` table.
+**Objective:** Add the `withOverride` wrapper that captures override actions in the dedicated `override_logs` table. The base `auditService.log()` method already exists from Task 1.2.23 — this task only adds the override helper, which depends on the override policy from Task 1.3.11 (Pause #3).
 
 **Files:**
-- Create: `packages/core/src/audit/service.ts`
 - Create: `packages/core/src/audit/override.ts`
-- Create: `packages/core/tests/audit/{service,override}.test.ts`
+- Create: `packages/core/tests/audit/override.test.ts`
 
-**Deps:** Phase 1.3
+**Deps:** 1.2.23 (base audit), 1.3.11 (override policy)
 
 **Acceptance:**
-- [ ] `auditService.log(entry, tx?)` writes a row to `audit_logs`. Accepts optional Prisma transaction.
-- [ ] `withOverride({ overrideType, reason, actorUserId, fn })` runs `fn`, then writes both the standard audit log and an `override_logs` row referencing it.
-- [ ] If `overrideType` is in the `never` list (from override-policy.ts), throws `OverrideNotPermittedError`.
-- [ ] If `overrideType` requires a second approver and no `approvedBy` is provided, throws `SecondApproverRequiredError`.
-- [ ] Tests cover all paths.
+- [ ] `withOverride({ overrideType, reason, actorUserId, fn })` runs `fn`, then writes both the standard audit log (via `auditService.log`) and an `override_logs` row referencing it, in a single transaction.
+- [ ] If `overrideType` is in the `never` list (from `override-policy.ts`), throws `OverrideNotPermittedError` BEFORE calling `fn`.
+- [ ] If `overrideType` requires a second approver and no `approvedBy` is provided, throws `SecondApproverRequiredError` BEFORE calling `fn`.
+- [ ] Tests cover all paths: allowed override, blocked override, requires-second-approver path.
 
-**Notes:** This task lives in Phase 1.7 even though `audit` is its own service because the override helper is the natural counterpart to posting reversal — both deal with sensitive operations that must leave a trail.
+**Notes:** The base `auditService.log()` was already created in Task 1.2.23 so it could be used by the project scope middleware (1.3.12), workflow service (1.5.5), document service (1.6.x), etc. This task adds only the override-specific helper because it depends on the policy from Pause #3.
 
 ### Task 1.7.7 — tRPC router: posting `[backend]`
 
@@ -4052,7 +4119,7 @@ Files: `packages/core/tests/posting/{post,idempotency,exceptions,reversal}.test.
 - [ ] For each, runs the method, asserts at least one audit log row was created with the matching `resourceType`.
 - [ ] Uses a small registry of "expected to mutate" methods to avoid false positives from query methods.
 
-**Notes:** This is a meta-test. Maintain the registry as new services are added.
+**Notes:** This is a meta-test. Maintain the registry as new services are added — every Phase 1.3–1.8 task that creates a new mutating service method must add an entry to `packages/core/tests/audit-coverage-registry.ts` in the same commit. By the time Phase 1.10 runs this suite, the registry should already be populated, not built from scratch.
 
 ### Task 1.10.19 — Permission deny test suite (full) `[test]`
 
