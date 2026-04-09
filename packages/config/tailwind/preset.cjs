@@ -1,11 +1,19 @@
+const defaultTheme = require('tailwindcss/defaultTheme');
+
 /**
  * Shared Tailwind preset for the Fun Makers KSA monorepo.
  *
  * Extends (never replaces) Tailwind defaults and exposes:
  *   - HSL color tokens compatible with shadcn/ui (consumed via CSS variables
  *     that the application layer defines in globals.css)
- *   - Inter as the default sans-serif font
+ *   - Inter as the default sans-serif font (wired through the CSS variable
+ *     set by next/font in layout.tsx)
  *   - Status chip tokens from the Module 1 design spec §8.3
+ *
+ * Color values use the `hsl(var(--name) / <alpha-value>)` pattern so that
+ * Tailwind opacity modifiers (e.g. `bg-primary/50`) work correctly.
+ * The consuming app's globals.css must store raw HSL triplets without the
+ * `hsl()` wrapper (e.g. `--primary: 0 0% 9%;`).
  *
  * Status chip CSS variables the consuming app must expose in its global
  * stylesheet (HSL triplets so Tailwind can compose them with opacity):
@@ -29,63 +37,54 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: [
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'sans-serif',
-        ],
+        sans: ['var(--font-inter)', ...defaultTheme.fontFamily.sans],
       },
       colors: {
         // Neutral + accent tokens (HSL CSS variables, shadcn/ui compatible).
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
+        // Uses `hsl(var(--name) / <alpha-value>)` so Tailwind opacity modifiers work.
+        border: 'hsl(var(--border) / <alpha-value>)',
+        input: 'hsl(var(--input) / <alpha-value>)',
+        ring: 'hsl(var(--ring) / <alpha-value>)',
+        background: 'hsl(var(--background) / <alpha-value>)',
+        foreground: 'hsl(var(--foreground) / <alpha-value>)',
         primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
+          DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
+          foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
         },
         secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
+          DEFAULT: 'hsl(var(--secondary) / <alpha-value>)',
+          foreground: 'hsl(var(--secondary-foreground) / <alpha-value>)',
         },
         muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
+          DEFAULT: 'hsl(var(--muted) / <alpha-value>)',
+          foreground: 'hsl(var(--muted-foreground) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
+          DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+          foreground: 'hsl(var(--accent-foreground) / <alpha-value>)',
         },
         destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
+          DEFAULT: 'hsl(var(--destructive) / <alpha-value>)',
+          foreground: 'hsl(var(--destructive-foreground) / <alpha-value>)',
         },
         popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
+          DEFAULT: 'hsl(var(--popover) / <alpha-value>)',
+          foreground: 'hsl(var(--popover-foreground) / <alpha-value>)',
         },
         card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+          DEFAULT: 'hsl(var(--card) / <alpha-value>)',
+          foreground: 'hsl(var(--card-foreground) / <alpha-value>)',
         },
         // Status chip tokens (spec §8.3). Each token maps to a CSS variable the
         // consuming app exposes so we can tweak the palette in one place.
         status: {
-          draft: 'hsl(var(--status-draft))',
-          'in-review': 'hsl(var(--status-in-review))',
-          approved: 'hsl(var(--status-approved))',
-          rejected: 'hsl(var(--status-rejected))',
-          signed: 'hsl(var(--status-signed))',
-          superseded: 'hsl(var(--status-superseded))',
-          exception: 'hsl(var(--status-exception))',
+          draft: 'hsl(var(--status-draft) / <alpha-value>)',
+          'in-review': 'hsl(var(--status-in-review) / <alpha-value>)',
+          approved: 'hsl(var(--status-approved) / <alpha-value>)',
+          rejected: 'hsl(var(--status-rejected) / <alpha-value>)',
+          signed: 'hsl(var(--status-signed) / <alpha-value>)',
+          superseded: 'hsl(var(--status-superseded) / <alpha-value>)',
+          exception: 'hsl(var(--status-exception) / <alpha-value>)',
         },
       },
       borderRadius: {
