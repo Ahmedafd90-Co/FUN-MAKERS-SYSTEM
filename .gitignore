@@ -21,6 +21,7 @@ build/
 # Tooling caches
 .turbo/
 coverage/
+*.tsbuildinfo
 
 # Editors
 .vscode/
