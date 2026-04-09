@@ -1,14 +1,30 @@
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build output
 .next/
 dist/
 build/
+
+# Environment
 .env
 .env.local
 .env.*.local
+
+# Logs
 *.log
+
+# OS
 .DS_Store
+
+# Tooling caches
 .turbo/
 coverage/
+
+# Editors
 .vscode/
 .idea/
+
+# Infrastructure
 cdk.out/

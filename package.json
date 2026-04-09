@@ -1,0 +1,21 @@
+{
+  "name": "fmksa",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pico Play Fun Makers KSA — internal operations platform for construction and project delivery.",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "pnpm --filter @fmksa/db db:migrate",
+    "db:seed": "pnpm --filter @fmksa/db db:seed"
+  },
+  "devDependencies": {}
+}
