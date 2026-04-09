@@ -1,0 +1,15 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "environments": {
+      "dev": { "account": "PLACEHOLDER", "region": "me-south-1" },
+      "qa": { "account": "PLACEHOLDER", "region": "me-south-1" },
+      "staging": { "account": "PLACEHOLDER", "region": "me-south-1" },
+      "prod": { "account": "PLACEHOLDER", "region": "me-south-1" }
+    }
+  },
+  "watch": {
+    "include": ["**"],
+    "exclude": ["node_modules", "cdk.out", "dist"]
+  }
+}

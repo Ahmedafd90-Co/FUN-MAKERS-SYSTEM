@@ -1,0 +1,26 @@
+{
+  "name": "@fmksa/cdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AWS CDK infrastructure stacks for Fun Makers KSA.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.175.0",
+    "constructs": "^10.4.0"
+  },
+  "devDependencies": {
+    "@fmksa/config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.175.0",
+    "source-map-support": "^0.5.21",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
