@@ -90,7 +90,7 @@ These apply to Module 1 and every later module. They are not adjustable without 
 - Posting service skeleton with idempotency and exception queue
 - Audit and override logging
 - Notifications (in-app + email via SES/MailHog)
-- 21 core screens (listed in §9.1)
+- 22 core screens (listed in §8.1)
 - Testing scaffolding (Vitest, Playwright, testcontainers) and full test suites for M1 functionality
 - Docker Compose local dev stack
 - AWS CDK dev stack (TypeScript) — stamped and deployable, not yet deployed
@@ -550,12 +550,13 @@ Other business nav items from the full spec (Commercial, Procurement, Materials,
 10. PMO user is denied operational edit access to project-scoped records but allowed approved reporting/KPI visibility only.
 11. Supersession: upload v2 of a signed document → v1 marked `superseded`, v2 becomes current, v1 still retrievable.
 12. Effective-dated role: assign a user role with a future `effective_from` → user doesn't have that permission until the date passes; audit captures the scheduled change.
-13. Document categories: upload a shop drawing, a material submittal, and a test certificate — each is categorized correctly and retrievable via category filter.
+13. Document categories: upload a shop drawing, a material submittal, and a test certificate — each is categorized correctly and the category filter surfaces them correctly (combines category ingestion and filter retrieval).
 14. User with a project assignment can view that project's documents but cannot see documents from another project — tested with two users and two projects.
-15. Document category filters work correctly for shop drawing, material submittal, and test certificate.
-16. Role permission change takes effect correctly after save and is reflected in access behavior without requiring a re-login.
-17. Notification generated from a workflow event appears in-app and respects read/unread state.
-18. Posting exception retry succeeds and writes an audit trail of the resolution.
+15. Role permission change takes effect correctly after save and is reflected in access behavior without requiring a re-login.
+16. Notification generated from a workflow event appears in-app and respects read/unread state.
+17. Posting exception retry succeeds and writes an audit trail of the resolution.
+
+**Note:** critical scenario count is 17 after collapsing two overlapping document-category tests into scenario 13. References elsewhere in this document (§10 phase 1.10, §15) use "all critical E2E scenarios" rather than a fixed number so this count can evolve during implementation.
 
 ### 9.3 Coverage targets
 
@@ -586,7 +587,7 @@ Module 1 ships in **10 phases** on one branch with per-phase commits. Each phase
 | **1.7 Posting service skeleton** | `posting_events` table + idempotency logic; ingestion API; exception queue; admin review screen; reversal primitive; no actual financial tables yet | Event-in → posted-or-exception; retry path works; reversal creates additive event |
 | **1.8 Notifications** | In-app notification list; email via SES/MailHog; template engine; user preferences; idempotent per (event, recipient); notifications fire on workflow events | Notifications appear in-app and email (MailHog captured) on a workflow action |
 | **1.9 Home + command palette + nav polish** | Home dashboard; ⌘K command palette; empty-state polish across all screens; placeholder tabs for future modules (subtle, clean); design polish pass | App feels cohesive and credible; all empty states are helpful, not generic |
-| **1.10 Tests + docs** | Complete E2E suites (all 18 scenarios); permission deny tests; audit coverage suite; README, local setup guide, migration guide, permissions guide, module boundary notes; CDK dev stack validated (synth + deploy dry-run) | All tests green; documentation complete; Module 1 ready for sign-off |
+| **1.10 Tests + docs** | Complete E2E suites (all §9.2 critical scenarios); permission deny tests; audit coverage suite; README, local setup guide, migration guide, permissions guide, module boundary notes; CDK dev stack validated (synth + deploy dry-run) | All tests green; documentation complete; Module 1 ready for sign-off |
 
 **Explicitly deferred** (reaffirmed): visual workflow designer, real e-signature, TOTP/WebAuthn MFA, corporate SSO, Arabic/RTL translations, staging/prod AWS stacks, load tests.
 
@@ -602,7 +603,7 @@ Five pauses during Module 1 build where Ahmed writes 5–10 meaningful lines of 
 | 2 | `packages/db/src/seed/workflow-templates.ts` | 1.5 | One representative workflow template (e.g., "Document Approval") with steps and approver rules used at Pico Play |
 | 3 | `packages/core/src/access-control/override-policy.ts` | 1.3 | Rules for Master Admin override: what requires reason, what triggers escalation, what's never overridable |
 | 4 | `packages/core/src/projects/project-settings-defaults.ts` | 1.4 | Default `project_settings` for a new project (workflow toggles, doc requirements, material tracking flags — even if later modules use them) |
-| 5 | `packages/db/src/seed/status-dictionaries.ts` | 1.2 | Status dictionaries and document categories for later modules (material statuses, shop drawing statuses, fabrication statuses, testing statuses, notice/claim statuses) |
+| 5 | `packages/db/src/seed/status-dictionaries.ts` | 1.2 | Status dictionaries for later modules (material statuses, shop drawing statuses, fabrication statuses, testing statuses, notice/claim statuses). **Document categories live in phase 1.6 in the documents service enum** — this seed covers workflow/material/procurement status vocabularies only. |
 
 Each contribution point gets a prepared file with types, comments, and `// TODO(ahmed):` markers before Ahmed is asked.
 
@@ -665,7 +666,7 @@ Module 1 exposes the following typed contracts for Modules 2–7 to consume. The
 Module 1 is **done** when:
 
 1. All 10 phases complete with acceptance criteria met.
-2. All 18 critical E2E scenarios pass in CI.
+2. All critical E2E scenarios listed in §9.2 pass in CI.
 3. Permission deny suite: 100% of protected tRPC procedures tested for unauthorized access.
 4. Audit coverage suite: 100% of mutating procedures verified to write audit entries.
 5. `packages/core` coverage ≥ 80% statements and branches.
