@@ -1,0 +1,207 @@
+# Fun Makers KSA — Continuous Integration
+# Runs lint, typecheck, test, and build on every PR and push to main.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9.15.0"
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Shared setup — checkout, install pnpm + deps
+  # ──────────────────────────────────────────────
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache the entire workspace so downstream jobs skip install
+      - name: Cache workspace
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .
+            !.git
+          key: workspace-${{ github.sha }}
+
+  # ──────────────────────────────────────────────
+  # Lint
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            !.git
+          key: workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout (git metadata)
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run lint
+        run: pnpm turbo run lint
+
+  # ──────────────────────────────────────────────
+  # Typecheck
+  # ──────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            !.git
+          key: workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout (git metadata)
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run typecheck
+        run: pnpm turbo run typecheck
+
+  # ──────────────────────────────────────────────
+  # Test (with Postgres service container)
+  # ──────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: setup
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fmksa
+          POSTGRES_PASSWORD: fmksa
+          POSTGRES_DB: fmksa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL_TEST: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            !.git
+          key: workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout (git metadata)
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run tests
+        run: pnpm turbo run test
+
+  # ──────────────────────────────────────────────
+  # Build
+  # ──────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            !.git
+          key: workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Checkout (git metadata)
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run build
+        run: pnpm turbo run build
