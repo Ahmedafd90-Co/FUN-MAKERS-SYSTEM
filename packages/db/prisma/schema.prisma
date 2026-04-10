@@ -711,6 +711,8 @@ enum NotificationStatus {
 enum VariationSubtype {
   vo           @map("vo")
   change_order @map("change_order")
+
+  @@map("variation_subtype")
 }
 
 enum CorrespondenceSubtype {
@@ -718,11 +720,15 @@ enum CorrespondenceSubtype {
   notice      @map("notice")
   claim       @map("claim")
   back_charge @map("back_charge")
+
+  @@map("correspondence_subtype")
 }
 
 enum VariationInitiatedBy {
   contractor @map("contractor")
   client     @map("client")
+
+  @@map("variation_initiated_by")
 }
 
 enum NoticeType {
@@ -732,12 +738,16 @@ enum NoticeType {
   dispute           @map("dispute")
   force_majeure     @map("force_majeure")
   general           @map("general")
+
+  @@map("notice_type")
 }
 
 enum ClaimType {
   time_extension  @map("time_extension")
   additional_cost @map("additional_cost")
   time_and_cost   @map("time_and_cost")
+
+  @@map("claim_type")
 }
 
 enum BackChargeCategory {
@@ -746,6 +756,8 @@ enum BackChargeCategory {
   non_compliance @map("non_compliance")
   damage         @map("damage")
   other          @map("other")
+
+  @@map("back_charge_category")
 }
 
 enum LetterType {
@@ -753,6 +765,8 @@ enum LetterType {
   response    @map("response")
   transmittal @map("transmittal")
   general     @map("general")
+
+  @@map("letter_type")
 }
 
 // ---------------------------------------------------------------------------
@@ -813,9 +827,9 @@ model NotificationPreference {
 // ---------------------------------------------------------------------------
 
 model Ipa {
-  id                String   @id @default(uuid())
+  id                String   @id @default(uuid()) @map("id")
   projectId         String   @map("project_id")
-  status            String   @default("draft")
+  status            String   @default("draft") @map("status")
   referenceNumber   String?  @unique @map("reference_number")
   periodNumber      Int      @map("period_number")
   periodFrom        DateTime @map("period_from")
@@ -828,8 +842,8 @@ model Ipa {
   advanceRecovery   Decimal? @map("advance_recovery") @db.Decimal(18, 2)
   otherDeductions   Decimal? @map("other_deductions") @db.Decimal(18, 2)
   netClaimed        Decimal  @map("net_claimed") @db.Decimal(18, 2)
-  currency          String
-  description       String?
+  currency          String   @map("currency")
+  description       String?  @map("description")
   createdBy         String   @map("created_by")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -843,18 +857,18 @@ model Ipa {
 }
 
 model Ipc {
-  id                String   @id @default(uuid())
+  id                String   @id @default(uuid()) @map("id")
   projectId         String   @map("project_id")
   ipaId             String   @map("ipa_id")
-  status            String   @default("draft")
+  status            String   @default("draft") @map("status")
   referenceNumber   String?  @unique @map("reference_number")
   certifiedAmount   Decimal  @map("certified_amount") @db.Decimal(18, 2)
   retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
-  adjustments       Decimal? @db.Decimal(18, 2)
+  adjustments       Decimal? @map("adjustments") @db.Decimal(18, 2)
   netCertified      Decimal  @map("net_certified") @db.Decimal(18, 2)
   certificationDate DateTime @map("certification_date")
-  currency          String
-  remarks           String?
+  currency          String   @map("currency")
+  remarks           String?  @map("remarks")
   createdBy         String   @map("created_by")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -864,22 +878,23 @@ model Ipc {
   taxInvoices TaxInvoice[]
 
   @@index([projectId, status])
+  @@index([projectId, createdAt])
   @@index([ipaId])
   @@map("ipcs")
 }
 
 model Variation {
-  id                     String                @id @default(uuid())
+  id                     String                @id @default(uuid()) @map("id")
   projectId              String                @map("project_id")
-  subtype                VariationSubtype
-  status                 String                @default("draft")
+  subtype                VariationSubtype      @map("subtype")
+  status                 String                @default("draft") @map("status")
   referenceNumber        String?               @unique @map("reference_number")
-  title                  String
-  description            String
-  reason                 String
+  title                  String                @map("title")
+  description            String                @map("description")
+  reason                 String                @map("reason")
   costImpact             Decimal?              @map("cost_impact") @db.Decimal(18, 2)
   timeImpactDays         Int?                  @map("time_impact_days")
-  currency               String
+  currency               String                @map("currency")
   // Assessment fields (Addendum A) — populated during review/approve
   assessedCostImpact     Decimal?              @map("assessed_cost_impact") @db.Decimal(18, 2)
   assessedTimeImpactDays Int?                  @map("assessed_time_impact_days")
@@ -904,22 +919,23 @@ model Variation {
   costProposals   CostProposal[]
 
   @@index([projectId, subtype, status])
+  @@index([projectId, status])
   @@index([projectId, createdAt])
   @@map("variations")
 }
 
 model CostProposal {
-  id                String   @id @default(uuid())
+  id                String   @id @default(uuid()) @map("id")
   projectId         String   @map("project_id")
   variationId       String?  @map("variation_id")
-  status            String   @default("draft")
+  status            String   @default("draft") @map("status")
   referenceNumber   String?  @unique @map("reference_number")
   revisionNumber    Int      @map("revision_number")
   estimatedCost     Decimal  @map("estimated_cost") @db.Decimal(18, 2)
   estimatedTimeDays Int?     @map("estimated_time_days")
-  methodology       String?
+  methodology       String?  @map("methodology")
   costBreakdown     String?  @map("cost_breakdown")
-  currency          String
+  currency          String   @map("currency")
   // Assessment fields (Addendum A) — populated during review/approve
   assessedCost      Decimal? @map("assessed_cost") @db.Decimal(18, 2)
   assessedTimeDays  Int?     @map("assessed_time_days")
@@ -933,15 +949,16 @@ model CostProposal {
   variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
+  @@index([projectId, createdAt])
   @@index([variationId])
   @@map("cost_proposals")
 }
 
 model TaxInvoice {
-  id              String    @id @default(uuid())
+  id              String    @id @default(uuid()) @map("id")
   projectId       String    @map("project_id")
   ipcId           String    @map("ipc_id")
-  status          String    @default("draft")
+  status          String    @default("draft") @map("status")
   referenceNumber String?   @unique @map("reference_number")
   invoiceNumber   String    @unique @map("invoice_number")
   invoiceDate     DateTime  @map("invoice_date")
@@ -950,7 +967,7 @@ model TaxInvoice {
   vatAmount       Decimal   @map("vat_amount") @db.Decimal(18, 2)
   totalAmount     Decimal   @map("total_amount") @db.Decimal(18, 2)
   dueDate         DateTime? @map("due_date")
-  currency        String
+  currency        String    @map("currency")
   buyerName       String    @map("buyer_name")
   buyerTaxId      String?   @map("buyer_tax_id")
   sellerTaxId     String    @map("seller_tax_id")
@@ -962,21 +979,22 @@ model TaxInvoice {
   ipc     Ipc     @relation(fields: [ipcId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
+  @@index([projectId, createdAt])
   @@index([ipcId])
   @@map("tax_invoices")
 }
 
 model Correspondence {
-  id                     String                @id @default(uuid())
+  id                     String                @id @default(uuid()) @map("id")
   projectId              String                @map("project_id")
-  subtype                CorrespondenceSubtype
-  status                 String                @default("draft")
+  subtype                CorrespondenceSubtype @map("subtype")
+  status                 String                @default("draft") @map("status")
   referenceNumber        String?               @unique @map("reference_number")
-  subject                String
-  body                   String
+  subject                String                @map("subject")
+  body                   String                @map("body")
   recipientName          String                @map("recipient_name")
   recipientOrg           String?               @map("recipient_org")
-  currency               String?
+  currency               String?               @map("currency")
   parentCorrespondenceId String?               @map("parent_correspondence_id")
   // Notice-specific
   noticeType             NoticeType?           @map("notice_type")
@@ -990,7 +1008,7 @@ model Correspondence {
   settledTimeDays        Int?                  @map("settled_time_days")
   // Back-charge-specific
   targetName             String?               @map("target_name")
-  category               BackChargeCategory?
+  category               BackChargeCategory?   @map("category")
   chargedAmount          Decimal?              @map("charged_amount") @db.Decimal(18, 2)
   evidenceDescription    String?               @map("evidence_description")
   // Letter-specific
@@ -1007,12 +1025,13 @@ model Correspondence {
   replies              Correspondence[] @relation("CorrespondenceReply")
 
   @@index([projectId, subtype, status])
+  @@index([projectId, status])
   @@index([projectId, createdAt])
   @@map("correspondences")
 }
 
 model ReferenceCounter {
-  id         String @id @default(uuid())
+  id         String @id @default(uuid()) @map("id")
   projectId  String @map("project_id")
   typeCode   String @map("type_code")
   lastNumber Int    @default(0) @map("last_number")
