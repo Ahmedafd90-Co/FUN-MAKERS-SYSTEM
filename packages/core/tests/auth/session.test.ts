@@ -108,10 +108,11 @@ describe('sessionService.signIn', () => {
       where: { userId: testUserId },
     });
     expect(sessions.length).toBe(1);
-    expect(sessions[0].ip).toBe(TEST_IP);
-    expect(sessions[0].userAgent).toBe(TEST_UA);
-    expect(sessions[0].tokenHash).toBeDefined();
-    expect(sessions[0].tokenHash.length).toBe(64); // SHA-256 hex
+    const session = sessions[0]!;
+    expect(session.ip).toBe(TEST_IP);
+    expect(session.userAgent).toBe(TEST_UA);
+    expect(session.tokenHash).toBeDefined();
+    expect(session.tokenHash.length).toBe(64); // SHA-256 hex
   });
 
   it('writes an audit log entry on successful login', async () => {

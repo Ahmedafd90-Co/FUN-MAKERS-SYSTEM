@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@auth/core": "^0.34.3",
     "@fmksa/contracts": "workspace:^",
     "@fmksa/core": "workspace:^",
     "@fmksa/db": "workspace:^",

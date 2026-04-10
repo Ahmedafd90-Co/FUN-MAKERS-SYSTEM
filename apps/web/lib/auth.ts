@@ -1,6 +1,9 @@
+import { authService, InvalidCredentialsError, AccountLockedError } from '@fmksa/core';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import { authService, InvalidCredentialsError, AccountLockedError } from '@fmksa/core';
+
+import type { NextRequest } from 'next/server';
+import type { NextAuthConfig, Session } from 'next-auth';
 
 /**
  * Auth.js v5 configuration for the Fun Makers KSA platform.
@@ -15,15 +18,26 @@ import { authService, InvalidCredentialsError, AccountLockedError } from '@fmksa
  * wired in Module 1.
  */
 
-// Fail fast if AUTH_SECRET is missing in production
-if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
-  throw new Error(
-    'AUTH_SECRET environment variable is required in production. ' +
-      'Generate one with: npx auth secret',
-  );
+/**
+ * AUTH_SECRET check — deferred to runtime (not build time).
+ *
+ * next build sets NODE_ENV=production but AUTH_SECRET is only needed at
+ * runtime when the server actually handles requests. The check runs on
+ * the first request, not at module evaluation.
+ */
+let authSecretChecked = false;
+function ensureAuthSecret() {
+  if (authSecretChecked) return;
+  authSecretChecked = true;
+  if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
+    throw new Error(
+      'AUTH_SECRET environment variable is required in production. ' +
+        'Generate one with: npx auth secret',
+    );
+  }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const authConfig: NextAuthConfig = {
   // Session strategy: JWT — simpler for tRPC context, no DB lookup per request
   session: {
     strategy: 'jwt',
@@ -44,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        ensureAuthSecret();
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
@@ -87,8 +102,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // `user` is only present on initial sign-in
       if (user) {
         token.userId = user.id;
-        token.email = user.email;
-        token.name = user.name;
+        token.email = user.email ?? null;
+        token.name = user.name ?? null;
       }
       return token;
     },
@@ -99,13 +114,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.userId as string;
-        session.user.email = token.email as string;
-        session.user.name = token.name as string;
+        session.user.email = (token.email as string) ?? '';
+        session.user.name = (token.name as string) ?? '';
       }
       return session;
     },
   },
+};
 
-  // Trust the AUTH_SECRET env var (or auto-generated in dev)
-  secret: process.env.AUTH_SECRET,
-});
+// Only set secret if it exists (Auth.js auto-generates in dev)
+if (process.env.AUTH_SECRET) {
+  authConfig.secret = process.env.AUTH_SECRET;
+}
+
+const nextAuth = NextAuth(authConfig);
+
+export const handlers: {
+  GET: (req: NextRequest) => Promise<Response>;
+  POST: (req: NextRequest) => Promise<Response>;
+} = nextAuth.handlers as typeof handlers;
+export const auth: () => Promise<Session | null> =
+  nextAuth.auth as typeof auth;
+export const signIn: (
+  ...args: Parameters<typeof nextAuth.signIn>
+) => Promise<unknown> = nextAuth.signIn;
+export const signOut: (
+  ...args: Parameters<typeof nextAuth.signOut>
+) => Promise<unknown> = nextAuth.signOut;
