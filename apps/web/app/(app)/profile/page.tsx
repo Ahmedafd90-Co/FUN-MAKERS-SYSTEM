@@ -1,7 +1,7 @@
-import type { Metadata } from 'next';
-
-import { ProfileInfo } from '@/components/profile/profile-info';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
+import { ProfileInfo } from '@/components/profile/profile-info';
+
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Profile — Pico Play Fun Makers KSA',
