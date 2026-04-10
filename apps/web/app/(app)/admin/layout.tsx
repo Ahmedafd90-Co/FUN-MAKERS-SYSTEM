@@ -17,6 +17,8 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { AdminMobileSidebar } from '@/components/layout/admin-mobile-sidebar';
+
 // ---------------------------------------------------------------------------
 // Admin sidebar navigation items
 // ---------------------------------------------------------------------------
@@ -25,7 +27,6 @@ type AdminNavItem = {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  stub?: string; // "Coming in Phase X.Y"
 };
 
 const adminNavItems: AdminNavItem[] = [
@@ -48,13 +49,11 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Audit Log',
     href: '/admin/audit-log',
     icon: ScrollText,
-    stub: 'Coming in Phase 1.9',
   },
   {
     label: 'Override Log',
     href: '/admin/override-log',
     icon: ArrowLeftRight,
-    stub: 'Coming in Phase 1.9',
   },
   {
     label: 'Posting Exceptions',
@@ -65,7 +64,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'System Health',
     href: '/admin/system-health',
     icon: Activity,
-    stub: 'Coming in Phase 1.9',
   },
 ];
 
@@ -95,19 +93,6 @@ export default function AdminLayout({
             const isActive =
               pathname === item.href || pathname.startsWith(item.href + '/');
 
-            if (item.stub) {
-              return (
-                <span
-                  key={item.href}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/50 cursor-default"
-                  title={item.stub}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </span>
-              );
-            }
-
             return (
               <Link
                 key={item.href}
@@ -129,6 +114,7 @@ export default function AdminLayout({
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
+        <AdminMobileSidebar />
         <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8">{children}</div>
       </div>
     </div>

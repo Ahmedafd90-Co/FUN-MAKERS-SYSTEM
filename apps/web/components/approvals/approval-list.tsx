@@ -15,6 +15,9 @@ import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/layout/page-header';
+
 import {
   ApproveDialog,
   RejectDialog,
@@ -119,13 +122,10 @@ export function ApprovalList() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">My Approvals</h1>
-        <p className="text-sm text-muted-foreground">
-          Workflow steps waiting for your approval across all assigned projects.
-        </p>
-      </div>
+      <PageHeader
+        title="My Approvals"
+        description="Workflow steps waiting for your approval across all assigned projects."
+      />
 
       {/* Loading */}
       {isLoading && (
@@ -136,11 +136,11 @@ export function ApprovalList() {
 
       {/* Empty state */}
       {!isLoading && (!approvals || approvals.length === 0) && (
-        <div className="py-16 text-center">
-          <p className="text-muted-foreground text-lg">
-            No approvals waiting for you -- your queue is clear.
-          </p>
-        </div>
+        <EmptyState
+          icon={CheckCircle2}
+          title="No pending approvals"
+          description="Your queue is clear — nothing needs your attention right now."
+        />
       )}
 
       {/* Approval cards */}
@@ -197,7 +197,7 @@ export function ApprovalList() {
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Button
                   size="sm"
                   onClick={() => setApproveItem(item as unknown as ApprovalItem)}

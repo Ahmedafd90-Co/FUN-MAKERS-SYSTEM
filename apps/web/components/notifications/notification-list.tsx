@@ -19,6 +19,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 
+import { EmptyState } from '@/components/ui/empty-state';
+
 // ---------------------------------------------------------------------------
 // Relative-time helper (no external dependency)
 // ---------------------------------------------------------------------------
@@ -192,12 +194,11 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
 
       {/* Empty state */}
       {!isLoading && allItems.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <BellOff className="h-10 w-10 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">
-            {unreadOnly ? 'No unread notifications.' : 'No notifications yet.'}
-          </p>
-        </div>
+        <EmptyState
+          icon={BellOff}
+          title={unreadOnly ? 'No unread notifications' : 'No notifications yet'}
+          description={unreadOnly ? "You're all caught up." : 'Notifications will appear here when you receive them.'}
+        />
       )}
 
       {/* Notification list */}

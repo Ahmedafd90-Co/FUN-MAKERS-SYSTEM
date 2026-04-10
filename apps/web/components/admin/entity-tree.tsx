@@ -5,6 +5,8 @@ import { Button } from '@fmksa/ui/components/button';
 import { ChevronDown, ChevronRight, Building2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { statusBadgeStyle } from '@/lib/badge-variants';
+
 // ---------------------------------------------------------------------------
 // Types — matching Prisma Entity shape from the entities router
 // ---------------------------------------------------------------------------
@@ -41,16 +43,9 @@ function typeBadge(type: string) {
 }
 
 function statusBadge(status: string) {
-  switch (status) {
-    case 'active':
-      return <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">Active</Badge>;
-    case 'inactive':
-      return <Badge variant="secondary" className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 text-xs">Inactive</Badge>;
-    case 'archived':
-      return <Badge variant="secondary" className="bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300 text-xs">Archived</Badge>;
-    default:
-      return <Badge variant="outline" className="text-xs">{status}</Badge>;
-  }
+  const { variant, className } = statusBadgeStyle(status);
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return <Badge variant={variant} className={`${className ?? ''} text-xs`.trim()}>{label}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +142,7 @@ export function EntityTree({ entities, onSelect, onCreateClick }: EntityTreeProp
       </div>
 
       {/* Tree table */}
-      <div className="rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">

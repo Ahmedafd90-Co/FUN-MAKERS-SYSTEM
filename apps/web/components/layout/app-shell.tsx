@@ -1,5 +1,6 @@
 'use client';
 
+import { CommandPalette } from './command-palette';
 import { TopNav } from './top-nav';
 
 type AppShellProps = {
@@ -27,6 +28,7 @@ export function AppShell({
         permissions={permissions}
       />
       <main className="flex-1">{children}</main>
+      <CommandPalette permissions={permissions} />
     </div>
   );
 }

@@ -12,6 +12,9 @@ import { workflowRouter } from './workflow';
 import { documentsRouter } from './documents';
 import { postingRouter } from './posting';
 import { notificationsRouter } from './notifications';
+import { dashboardRouter } from './dashboard';
+import { auditRouter } from './audit';
+import { healthRouter } from './health';
 
 export const appRouter = router({
   auth: authRouter,
@@ -22,6 +25,9 @@ export const appRouter = router({
   documents: documentsRouter,
   posting: postingRouter,
   notifications: notificationsRouter,
+  dashboard: dashboardRouter,
+  audit: auditRouter,
+  health: healthRouter,
 });
 
 export type AppRouter = typeof appRouter;

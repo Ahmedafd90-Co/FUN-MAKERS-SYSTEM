@@ -2,7 +2,7 @@
 
 import { Button } from '@fmksa/ui/components/button';
 import { cn } from '@fmksa/ui/lib/utils';
-import { Menu, X } from 'lucide-react';
+import { Menu, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -131,17 +131,34 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
             {futureModuleItems.map((item) => (
               <span
                 key={item.label}
-                className="px-2 py-1 text-xs text-muted-foreground/40 cursor-default"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground/40 cursor-default"
                 title={`Coming in ${item.module}`}
               >
                 {item.label}
+                <span className="text-[10px] text-muted-foreground/30">Soon</span>
               </span>
             ))}
           </div>
         </nav>
 
-        {/* Right: Notification bell + User menu (desktop) */}
+        {/* Right: Search trigger + Notification bell + User menu (desktop) */}
         <div className="hidden md:flex items-center gap-2 ml-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-48 justify-start text-xs text-muted-foreground"
+            onClick={() => {
+              document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+              );
+            }}
+          >
+            <Search className="mr-2 h-3.5 w-3.5" />
+            Search...
+            <kbd className="ml-auto rounded border bg-muted px-1.5 text-[10px] font-medium">
+              {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '⌘' : 'Ctrl+'}K
+            </kbd>
+          </Button>
           <NotificationBell />
           <UserMenu userName={userName} userEmail={userEmail} />
         </div>
@@ -181,7 +198,7 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    'px-3 py-2 text-sm rounded-md transition-colors',
+                    'px-3 py-2.5 text-sm rounded-md transition-colors',
                     item.active
                       ? 'bg-accent text-accent-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
