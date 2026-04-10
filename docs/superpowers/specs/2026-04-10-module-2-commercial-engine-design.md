@@ -22,7 +22,7 @@ Module 2 does **not** introduce a full financial ledger, procurement workflows, 
 - 6 new Prisma models (2 with subtype families)
 - 7 posting event types
 - 10 logical record types (collapsed into 6 models)
-- 14 screens
+- 13 screens (1 dashboard + 6 list/detail pairs; client submission history is a dashboard section)
 - ~50 new permission codes
 - ~12 seeded workflow templates
 
@@ -101,7 +101,7 @@ Correspondence ──[optional parent]──→ Correspondence (notice → claim
 
 All statuses are stored as a string enum. Terminal statuses cannot be reopened. Status transitions are validated at the service layer.
 
-### IPA and IPC (shared status set)
+### IPA
 
 | Status | Terminal? | Notes |
 |---|---|---|
@@ -110,13 +110,30 @@ All statuses are stored as a string enum. Terminal statuses cannot be reopened. 
 | `under_review` | No | Being reviewed |
 | `returned` | No | Sent back for revision — returns to editable state |
 | `rejected` | Yes | Permanently rejected |
-| `approved_internal` | No | Internally approved — posting fires here |
-| `signed` | No | Digitally signed — record becomes immutable |
+| `approved_internal` | No | Posting fires: `IPA_APPROVED` |
+| `signed` | No | Digitally signed — record becomes immutable (optional per template) |
 | `issued` | No | Formally issued with reference number |
 | `superseded` | Yes | Replaced by a revised record |
 | `closed` | Yes | Final closure |
 
-IPC finance check is mandatory (enforced by workflow template). IPA finance check is optional by project/template rule.
+IPA finance check is optional by project/template rule. IPA signing is optional — some templates skip `signed` and go directly from `approved_internal` to `issued`.
+
+### IPC
+
+| Status | Terminal? | Notes |
+|---|---|---|
+| `draft` | No | Initial creation |
+| `submitted` | No | Sent for internal review |
+| `under_review` | No | Being reviewed |
+| `returned` | No | Sent back for revision — returns to editable state |
+| `rejected` | Yes | Permanently rejected |
+| `approved_internal` | No | Internally approved — no posting here |
+| `signed` | No | Digitally signed (mandatory) — posting fires: `IPC_SIGNED` |
+| `issued` | No | Formally issued with reference number |
+| `superseded` | Yes | Replaced by a revised record |
+| `closed` | Yes | Final closure |
+
+IPC finance check is mandatory (enforced by workflow template). IPC signing is mandatory — posting fires at `signed`, not `approved_internal`.
 
 ### Variation (shared for `vo` and `change_order` subtypes)
 
@@ -136,7 +153,7 @@ IPC finance check is mandatory (enforced by workflow template). IPA finance chec
 | `superseded` | Yes | |
 | `closed` | Yes | |
 
-Client-status tracking (`client_pending` → `client_approved` / `client_rejected`) is a manual status update after issuance, not part of the approval workflow.
+Client-status tracking (`client_pending` → `client_approved` / `client_rejected`) is a manual status update after issuance, not part of the approval workflow. This applies to `vo` subtype only — internal `change_order` records typically do not go to client and transition directly from `issued` to `closed`. The service-layer transition map enforces this: `client_pending` is not a valid target from `issued` for `change_order` subtype.
 
 ### Cost Proposal
 
@@ -149,7 +166,7 @@ Client-status tracking (`client_pending` → `client_approved` / `client_rejecte
 | `rejected` | Yes | |
 | `approved_internal` | No | |
 | `issued` | No | |
-| `linked_to_variation` | No | Linked to a VO/CO for tracking |
+| `linked_to_variation` | No | Set via manual `transition` action after issue, when the Cost Proposal is formally linked to a Variation for tracking. Not auto-set when `variationId` is populated at creation — that FK is informational. The status transition is a deliberate "link" action. |
 | `superseded` | Yes | Replaced by revised proposal |
 | `closed` | Yes | |
 
@@ -177,32 +194,115 @@ No posting by default. Cost Proposal is a supporting record.
 
 **Base statuses (all subtypes):**
 
-| Status | Terminal? |
-|---|---|
-| `draft` | No |
-| `under_review` | No |
-| `returned` | No |
-| `rejected` | Yes |
-| `approved_internal` | No |
-| `signed` | No |
-| `issued` | No — posting fires here for claim and back_charge subtypes |
-| `superseded` | Yes |
-| `closed` | Yes |
+| Status | Terminal? | Notes |
+|---|---|---|
+| `draft` | No | Initial creation |
+| `under_review` | No | Entered via `submit` action (no intermediate `submitted` status — Correspondence goes directly from `draft` to `under_review`) |
+| `returned` | No | Sent back for revision |
+| `rejected` | Yes | |
+| `approved_internal` | No | |
+| `signed` | No | Mandatory for notice, claim, back_charge |
+| `issued` | No | Posting fires here for claim (`CLAIM_ISSUED`) and back_charge (`BACK_CHARGE_ISSUED`) subtypes |
+| `superseded` | Yes | |
+| `closed` | Yes | |
+
+**Note:** Correspondence does not have a `submitted` status. The `submit` action transitions directly from `draft` to `under_review`. This is intentional — Correspondence does not need a separate "submitted" holding state before review begins.
 
 **Subtype-specific extensions:**
 
 | Subtype | Additional Statuses | Terminal? |
 |---|---|---|
 | `letter` | *(none)* | — |
-| `notice` | `response_due`, `responded` | `responded` = Yes |
-| `claim` | `under_evaluation`, `partially_accepted`, `accepted`, `disputed` | `accepted` = Yes |
-| `back_charge` | `acknowledged`, `disputed`, `recovered`, `partially_recovered` | `recovered` = Yes |
+| `notice` | `response_due`, `responded` | All non-terminal — `closed` is the terminal state |
+| `claim` | `under_evaluation`, `partially_accepted`, `accepted`, `disputed` | All non-terminal — `closed` is the terminal state |
+| `back_charge` | `acknowledged`, `disputed`, `recovered`, `partially_recovered` | All non-terminal — `closed` is the terminal state |
 
-Subtype-specific statuses are valid only after `issued`. A letter flows `issued` → `closed`. A claim might flow `issued` → `under_evaluation` → `partially_accepted` → `closed`.
+Subtype-specific statuses are valid only after `issued`. A letter flows `issued` → `closed`. A claim might flow `issued` → `under_evaluation` → `partially_accepted` → `closed`. A back charge might flow `issued` → `acknowledged` → `recovered` → `closed`.
+
+All post-issuance subtype-specific transitions (e.g., `acknowledged`, `disputed`, `recovered` for back charges) are manual status updates via the `transition` endpoint — not workflow steps. The approval workflow ends at `issued`. Everything after is operational tracking.
 
 ### Status Transition Validation
 
 The service layer validates every status transition against a transition map defined per model (and per subtype for Variation and Correspondence). Invalid transitions are rejected with a `BAD_REQUEST` error. The transition map is a simple `Record<Status, Status[]>` — no state machine library needed.
+
+### Transition Maps
+
+**IPA:**
+```
+draft            → [submitted]
+submitted        → [under_review, returned, rejected]
+under_review     → [approved_internal, returned, rejected]
+returned         → [submitted]
+approved_internal→ [signed, issued]          // signed is optional; can skip to issued
+signed           → [issued]
+issued           → [superseded, closed]
+```
+
+**IPC:**
+```
+draft            → [submitted]
+submitted        → [under_review, returned, rejected]
+under_review     → [approved_internal, returned, rejected]
+returned         → [submitted]
+approved_internal→ [signed]                  // signing is mandatory for IPC
+signed           → [issued]
+issued           → [superseded, closed]
+```
+
+**Variation (base — all subtypes):**
+```
+draft            → [submitted]
+submitted        → [under_review, returned, rejected]
+under_review     → [approved_internal, returned, rejected]
+returned         → [submitted]
+approved_internal→ [signed]
+signed           → [issued]
+issued           → [client_pending, superseded, closed]  // client_pending for vo only
+client_pending   → [client_approved, client_rejected]
+client_approved  → [closed]
+closed           → []                        // terminal
+```
+
+For `change_order` subtype: the service-layer validation excludes `client_pending` from `issued`'s allowed transitions. Change orders go directly `issued → closed`.
+
+**Cost Proposal:**
+```
+draft            → [submitted]
+submitted        → [under_review, returned, rejected]
+under_review     → [approved_internal, returned, rejected]
+returned         → [submitted]
+approved_internal→ [issued]
+issued           → [linked_to_variation, superseded, closed]
+linked_to_variation → [superseded, closed]
+```
+
+**Tax Invoice:**
+```
+draft            → [under_review]            // no submitted status — goes to finance review
+under_review     → [approved_internal, returned]
+returned         → [under_review]
+approved_internal→ [issued]
+issued           → [submitted, overdue, cancelled, superseded]
+submitted        → [partially_collected, collected, overdue, cancelled]
+overdue          → [partially_collected, collected, cancelled]
+partially_collected → [collected, overdue]
+```
+
+**Correspondence (base):**
+```
+draft            → [under_review]            // submit action, no submitted status
+under_review     → [approved_internal, returned, rejected]
+returned         → [under_review]
+approved_internal→ [signed]
+signed           → [issued]
+issued           → [superseded, closed, ...]  // subtype extensions below
+```
+
+**Correspondence subtype extensions from `issued`:**
+- `notice`: `issued → [response_due, closed]`, `response_due → [responded, closed]`, `responded → [closed]`
+- `claim`: `issued → [under_evaluation, closed]`, `under_evaluation → [partially_accepted, accepted, disputed, closed]`, `partially_accepted → [closed]`, `accepted → [closed]`, `disputed → [under_evaluation, closed]`
+- `back_charge`: `issued → [acknowledged, disputed, closed]`, `acknowledged → [recovered, partially_recovered, closed]`, `disputed → [acknowledged, closed]`, `partially_recovered → [recovered, closed]`, `recovered → [closed]`
+- `letter`: `issued → [closed]`
 
 ---
 
@@ -397,6 +497,8 @@ Each event type has a Zod schema registered in the event registry. Schemas inclu
 
 Each commercial service calls `postingService.post()` inside the status transition handler. The idempotency key is derived from the record ID + status transition (e.g., `ipa:{id}:approved_internal`). This ensures posting is exactly-once even if the transition is retried.
 
+**`entityId` resolution:** The M1 `PostInput` type includes an optional `entityId` field. Each commercial service resolves `entityId` by reading `project.entityId` from the project record (already loaded by `projectProcedure`) and passes it to every `postingService.post()` call. This enables Module 4 to aggregate receivables by entity.
+
 ### Contract Value Tracking
 
 **Resolved as MINOR OPEN:** Module 2 does **not** maintain a stored `contractValue` field on Project. Contract value can be derived from `VARIATION_APPROVED_CLIENT` posting events. A dedicated contract value tracking model is deferred to Module 4. The commercial dashboard computes contract value on-the-fly from posting events for display purposes.
@@ -574,7 +676,7 @@ Module 2's posting events carry all the data Module 4 needs — no schema change
 
 ## 11. Screen List and Screen Behavior
 
-### 14 Screens
+### 13 Screens
 
 All screens are project-scoped, inside the project workspace. All respect M1 project isolation and RBAC.
 
@@ -679,6 +781,8 @@ Legend: **C** = create, **E** = edit, **S** = submit, **R** = review, **A** = ap
 | **qs_commercial** | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V | V |
 | **finance** | V,R | V,R | V | V | V,C,E,R,G,I | V | V | V |
 | **cost_controller** | V | V | V | V,C,E,R | V | V,R | V | V |
+
+> **Note on Cost Controller permissions:** Cost Controller has `review` on Correspondence because they serve as the finance checker for Claim and Cost Proposal records per the finance-check rules in §6.
 | **site_team** | V | V | V,C,E | V | V | V,C,E | V | V |
 | **design** | V | V | V,C,E | V | V | V,C,E | V | V |
 | **qa_qc** | V | V | V | V | V | V,C,E | V | V |
@@ -766,7 +870,22 @@ All models use the M1 conventions: UUID primary keys, `createdAt`/`updatedAt` ti
 
 ### Migration
 
-One migration: `{timestamp}_add_commercial_engine`. All additive — new tables only. No changes to M1 tables.
+One migration: `{timestamp}_add_commercial_engine`. All additive — new tables and columns only. No destructive changes to M1 tables.
+
+**Project model update required:** Prisma requires reciprocal relation arrays on the `Project` model for all 7 new models. This is a schema-only addition (no database column changes — Prisma relation arrays are virtual). The following fields must be added to the existing `Project` model:
+
+```prisma
+// Added by M2 migration — relation arrays only (no DB columns)
+ipas              Ipa[]
+ipcs              Ipc[]
+variations        Variation[]
+costProposals     CostProposal[]
+taxInvoices       TaxInvoice[]
+correspondences   Correspondence[]
+referenceCounters ReferenceCounter[]
+```
+
+This does **not** alter the `projects` table in the database — Prisma relation arrays are resolved via the FK on the child model. The migration creates the new tables with FK columns pointing to `projects.id`.
 
 ### Schema Overview
 
@@ -826,7 +945,7 @@ model Ipa {
   id                String      @id @default(uuid())
   projectId         String      @map("project_id")
   status            String      @default("draft")
-  referenceNumber   String?     @map("reference_number")
+  referenceNumber   String?     @unique @map("reference_number")
   periodNumber      Int         @map("period_number")
   periodFrom        DateTime    @map("period_from")
   periodTo          DateTime    @map("period_to")
@@ -844,7 +963,7 @@ model Ipa {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  project           Project     @relation(fields: [projectId], references: [id])
+  project           Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
   ipcs              Ipc[]
 
   @@index([projectId, status])
@@ -857,7 +976,7 @@ model Ipc {
   projectId         String      @map("project_id")
   ipaId             String      @map("ipa_id")
   status            String      @default("draft")
-  referenceNumber   String?     @map("reference_number")
+  referenceNumber   String?     @unique @map("reference_number")
   certifiedAmount   Decimal     @map("certified_amount") @db.Decimal(18, 2)
   retentionAmount   Decimal     @map("retention_amount") @db.Decimal(18, 2)
   adjustments       Decimal?    @db.Decimal(18, 2)
@@ -869,8 +988,8 @@ model Ipc {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  project           Project     @relation(fields: [projectId], references: [id])
-  ipa               Ipa         @relation(fields: [ipaId], references: [id])
+  project           Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipa               Ipa         @relation(fields: [ipaId], references: [id], onDelete: Restrict)
   taxInvoices       TaxInvoice[]
 
   @@index([projectId, status])
@@ -883,7 +1002,7 @@ model Variation {
   projectId             String              @map("project_id")
   subtype               VariationSubtype
   status                String              @default("draft")
-  referenceNumber       String?             @map("reference_number")
+  referenceNumber       String?             @unique @map("reference_number")
   title                 String
   description           String
   reason                String
@@ -903,8 +1022,8 @@ model Variation {
   createdAt             DateTime             @default(now()) @map("created_at")
   updatedAt             DateTime             @updatedAt @map("updated_at")
 
-  project               Project              @relation(fields: [projectId], references: [id])
-  parentVariation       Variation?           @relation("VariationParent", fields: [parentVariationId], references: [id])
+  project               Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentVariation       Variation?           @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
   childVariations       Variation[]          @relation("VariationParent")
   costProposals         CostProposal[]
 
@@ -918,7 +1037,7 @@ model CostProposal {
   projectId       String      @map("project_id")
   variationId     String?     @map("variation_id")
   status          String      @default("draft")
-  referenceNumber String?     @map("reference_number")
+  referenceNumber String?     @unique @map("reference_number")
   revisionNumber  Int         @map("revision_number")
   estimatedCost   Decimal     @map("estimated_cost") @db.Decimal(18, 2)
   estimatedTimeDays Int?      @map("estimated_time_days")
@@ -929,8 +1048,8 @@ model CostProposal {
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  project         Project     @relation(fields: [projectId], references: [id])
-  variation       Variation?  @relation(fields: [variationId], references: [id])
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  variation       Variation?  @relation(fields: [variationId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
   @@index([variationId])
@@ -938,11 +1057,12 @@ model CostProposal {
 }
 
 model TaxInvoice {
-  id            String      @id @default(uuid())
-  projectId     String      @map("project_id")
-  ipcId         String      @map("ipc_id")
-  status        String      @default("draft")
-  invoiceNumber String      @map("invoice_number") @unique
+  id              String      @id @default(uuid())
+  projectId       String      @map("project_id")
+  ipcId           String      @map("ipc_id")
+  status          String      @default("draft")
+  referenceNumber String?     @unique @map("reference_number")
+  invoiceNumber   String      @map("invoice_number") @unique
   invoiceDate   DateTime    @map("invoice_date")
   grossAmount   Decimal     @map("gross_amount") @db.Decimal(18, 2)
   vatRate       Decimal     @map("vat_rate") @db.Decimal(5, 4)
@@ -957,8 +1077,8 @@ model TaxInvoice {
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
-  project       Project     @relation(fields: [projectId], references: [id])
-  ipc           Ipc         @relation(fields: [ipcId], references: [id])
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipc           Ipc         @relation(fields: [ipcId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
   @@index([ipcId])
@@ -970,7 +1090,7 @@ model Correspondence {
   projectId               String                  @map("project_id")
   subtype                 CorrespondenceSubtype
   status                  String                  @default("draft")
-  referenceNumber         String?                 @map("reference_number")
+  referenceNumber         String?                 @unique @map("reference_number")
   subject                 String
   body                    String
   recipientName           String                  @map("recipient_name")
@@ -999,10 +1119,10 @@ model Correspondence {
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
 
-  project                 Project                 @relation(fields: [projectId], references: [id])
-  parentCorrespondence    Correspondence?         @relation("CorrespondenceParent", fields: [parentCorrespondenceId], references: [id])
+  project                 Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentCorrespondence    Correspondence?         @relation("CorrespondenceParent", fields: [parentCorrespondenceId], references: [id], onDelete: Restrict)
   childCorrespondences    Correspondence[]        @relation("CorrespondenceParent")
-  inReplyTo               Correspondence?         @relation("CorrespondenceReply", fields: [inReplyToId], references: [id])
+  inReplyTo               Correspondence?         @relation("CorrespondenceReply", fields: [inReplyToId], references: [id], onDelete: Restrict)
   replies                 Correspondence[]        @relation("CorrespondenceReply")
 
   @@index([projectId, subtype, status])
@@ -1016,7 +1136,7 @@ model ReferenceCounter {
   typeCode    String  @map("type_code")
   lastNumber  Int     @default(0) @map("last_number")
 
-  project     Project @relation(fields: [projectId], references: [id])
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
   @@unique([projectId, typeCode])
   @@map("reference_counters")
@@ -1026,6 +1146,8 @@ model ReferenceCounter {
 ### Indexes
 
 Each model is indexed on `(projectId, status)` for filtered list queries and `(projectId, createdAt)` for chronological sorting. FK columns are indexed for join performance. The `ReferenceCounter` has a unique constraint on `(projectId, typeCode)` for atomic counter increment.
+
+**Reference number uniqueness:** All models with `referenceNumber` should include a `@unique` attribute on the field. Since `referenceNumber` is nullable (assigned only at `issued`), the unique constraint applies to non-null values only (Postgres unique indexes ignore nulls by default). This provides a database-level guarantee against duplicate reference numbers even under concurrent access.
 
 ### Seed Data
 
@@ -1168,6 +1290,8 @@ Module 2 adds notification templates for commercial workflow events:
 
 Templates use the M1 notification system (in-app + email via BullMQ).
 
+**Decimal serialization:** Prisma `Decimal` fields are `Prisma.Decimal` objects, not JavaScript `number`. The tRPC output schema must use a Zod `z.string()` or `z.number()` transform (e.g., `.transform(v => v.toString())`) for `Decimal` fields in the dashboard response to avoid JSON serialization errors.
+
 ---
 
 ## 17. Risks and Mitigations
@@ -1193,7 +1317,7 @@ Module 2 is **done** when:
 3. All 7 posting events registered and firing at the correct status transitions.
 4. All ~12 workflow templates seeded and functional.
 5. All 50 permission codes seeded with correct role mappings.
-6. All 14 screens functional with correct RBAC gating.
+6. All 13 screens functional with correct RBAC gating.
 7. Commercial dashboard shows all 9 sections with real data.
 8. Reference number generation is atomic and sequential per project per type.
 9. IPC creation gated: parent IPA must be in `approved_internal` or later status.
