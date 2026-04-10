@@ -122,9 +122,13 @@ describe('Dashboard Service', () => {
     expect(result.recentActivity.length).toBeLessThanOrEqual(10);
     // Most recent first
     if (result.recentActivity.length > 1) {
-      expect(result.recentActivity[0].createdAt.getTime()).toBeGreaterThanOrEqual(
-        result.recentActivity[1].createdAt.getTime()
-      );
+      const first = result.recentActivity[0];
+      const second = result.recentActivity[1];
+      if (first && second) {
+        expect(first.createdAt.getTime()).toBeGreaterThanOrEqual(
+          second.createdAt.getTime()
+        );
+      }
     }
   });
 

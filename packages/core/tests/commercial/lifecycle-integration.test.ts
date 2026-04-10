@@ -72,6 +72,7 @@ describe('Commercial Lifecycle Integration', () => {
   const makeTaxInvoiceInput = (ipcId: string, overrides = {}) => ({
     projectId: testProject.id,
     ipcId,
+    invoiceNumber: 'IGNORED',
     invoiceDate: new Date().toISOString(),
     grossAmount: 72000,
     vatRate: 0.15,
