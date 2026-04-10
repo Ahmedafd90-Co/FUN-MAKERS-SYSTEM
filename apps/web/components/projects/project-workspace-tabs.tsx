@@ -2,7 +2,10 @@
 
 import { Separator } from '@fmksa/ui/components/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fmksa/ui/components/tabs';
+import { useState } from 'react';
 
+import { DocumentList } from '@/components/documents/document-list';
+import { UploadWidget } from '@/components/documents/upload-widget';
 import { ProjectSettingsTab } from './project-settings-tab';
 import { ProjectTeamTab } from './project-team-tab';
 
@@ -100,6 +103,8 @@ type ProjectWorkspaceTabsProps = {
 };
 
 export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
+  const [uploadOpen, setUploadOpen] = useState(false);
+
   return (
     <Tabs defaultValue="overview" className="w-full">
       <TabsList className="flex-wrap h-auto gap-1">
@@ -152,11 +157,15 @@ export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
       </TabsContent>
 
       <TabsContent value="documents">
-        <div className="py-12 text-center">
-          <p className="text-sm text-muted-foreground/70">
-            Document library available in Phase 1.6
-          </p>
-        </div>
+        <DocumentList
+          projectId={project.id}
+          onUploadClick={() => setUploadOpen(true)}
+        />
+        <UploadWidget
+          projectId={project.id}
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+        />
       </TabsContent>
 
       <TabsContent value="team">
