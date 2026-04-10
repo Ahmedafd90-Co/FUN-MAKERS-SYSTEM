@@ -19,6 +19,17 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
 
+type FilterState = {
+  statusFilter: string[];
+  dateFrom?: string;
+  dateTo?: string;
+  amountMin?: number;
+  amountMax?: number;
+  createdByFilter?: string;
+  sortField: string;
+  sortDirection: 'asc' | 'desc';
+};
+
 const COST_PROPOSAL_STATUSES = [
   'draft',
   'submitted',
@@ -49,10 +60,10 @@ export default function CostProposalsListPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
 
-  const [filters, setFilters] = useState({
-    statusFilter: [] as string[],
+  const [filters, setFilters] = useState<FilterState>({
+    statusFilter: [],
     sortField: 'createdAt',
-    sortDirection: 'desc' as const,
+    sortDirection: 'desc',
   });
   const [page, setPage] = useState(0);
   const pageSize = 20;

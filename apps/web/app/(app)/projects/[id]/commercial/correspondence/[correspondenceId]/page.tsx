@@ -224,22 +224,25 @@ export default function CorrespondenceDetailPage() {
             <CardTitle className="text-sm">Back Charge Details</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {data.backChargeAmount != null && (
+            {data.targetName && (
+              <Field label="Target" value={data.targetName} />
+            )}
+            {data.category && (
               <Field
-                label="Back Charge Amount"
-                value={`${formatMoney(data.backChargeAmount)} ${data.currency ?? ''}`}
+                label="Category"
+                value={String(data.category).replace(/_/g, ' ')}
               />
             )}
-            {data.backChargeReason && (
+            {data.chargedAmount != null && (
               <Field
-                label="Reason"
-                value={data.backChargeReason}
+                label="Charged Amount"
+                value={`${formatMoney(data.chargedAmount)} ${data.currency ?? ''}`}
               />
             )}
-            {data.recoveredAmount != null && (
+            {data.evidenceDescription && (
               <Field
-                label="Recovered Amount"
-                value={`${formatMoney(data.recoveredAmount)} ${data.currency ?? ''}`}
+                label="Evidence"
+                value={data.evidenceDescription}
               />
             )}
           </CardContent>
