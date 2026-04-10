@@ -13,7 +13,8 @@
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import { cn } from '@fmksa/ui/lib/utils';
-import { BellOff, CheckCheck } from 'lucide-react';
+import { BellOff, CheckCheck, ExternalLink } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
@@ -58,10 +59,31 @@ type NotificationListProps = {
 };
 
 // ---------------------------------------------------------------------------
+// Navigation helper: derive resource URL from notification metadata
+// ---------------------------------------------------------------------------
+
+function getResourceUrl(notification: NotificationItem): string | null {
+  // Workflow notifications link to the approvals queue
+  if (notification.templateCode.startsWith('workflow_')) {
+    return '/approvals';
+  }
+  // Document notifications link to the documents view
+  if (notification.templateCode === 'document_signed') {
+    return '/documents';
+  }
+  // Posting exception → admin posting exceptions
+  if (notification.templateCode === 'posting_exception') {
+    return '/admin/posting-exceptions';
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function NotificationList({ unreadOnly = false }: NotificationListProps) {
+  const router = useRouter();
   const utils = trpc.useUtils();
 
   // Accumulated items across pages
@@ -166,15 +188,35 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
         <div className="divide-y divide-border rounded-md border">
           {allItems.map((notification) => {
             const isUnread = !notification.readAt;
+            const resourceUrl = getResourceUrl(notification);
             return (
               <div
                 key={notification.id}
+                role={resourceUrl ? 'link' : undefined}
+                tabIndex={resourceUrl ? 0 : undefined}
                 className={cn(
                   'flex items-start gap-4 px-4 py-4 transition-colors',
                   isUnread
                     ? 'bg-accent/30 hover:bg-accent/50'
                     : 'hover:bg-muted/30',
+                  resourceUrl && 'cursor-pointer',
                 )}
+                onClick={() => {
+                  if (!resourceUrl) return;
+                  if (isUnread) {
+                    markRead.mutate({ notificationId: notification.id });
+                  }
+                  router.push(resourceUrl);
+                }}
+                onKeyDown={(e) => {
+                  if (resourceUrl && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    if (isUnread) {
+                      markRead.mutate({ notificationId: notification.id });
+                    }
+                    router.push(resourceUrl);
+                  }
+                }}
               >
                 {/* Unread dot */}
                 <div className="mt-1.5 shrink-0">
@@ -224,12 +266,30 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
                       variant="ghost"
                       size="sm"
                       className="h-7 text-xs"
-                      onClick={() =>
-                        markRead.mutate({ notificationId: notification.id })
-                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markRead.mutate({ notificationId: notification.id });
+                      }}
                       disabled={markRead.isPending}
                     >
                       Mark read
+                    </Button>
+                  )}
+                  {resourceUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isUnread) {
+                          markRead.mutate({ notificationId: notification.id });
+                        }
+                        router.push(resourceUrl);
+                      }}
+                    >
+                      <ExternalLink className="mr-1 h-3 w-3" />
+                      View
                     </Button>
                   )}
                 </div>
