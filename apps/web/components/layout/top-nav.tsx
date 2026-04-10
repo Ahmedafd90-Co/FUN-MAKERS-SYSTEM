@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
+import { NotificationBell } from '@/components/notifications/notification-bell';
+
 import { UserMenu } from './user-menu';
 
 // ---------------------------------------------------------------------------
@@ -138,8 +140,9 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
           </div>
         </nav>
 
-        {/* Right: User menu (desktop) */}
-        <div className="hidden md:flex items-center ml-4">
+        {/* Right: Notification bell + User menu (desktop) */}
+        <div className="hidden md:flex items-center gap-2 ml-4">
+          <NotificationBell />
           <UserMenu userName={userName} userEmail={userEmail} />
         </div>
 

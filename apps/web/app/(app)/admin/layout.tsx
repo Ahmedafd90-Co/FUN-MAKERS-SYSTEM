@@ -43,7 +43,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Notification Templates',
     href: '/admin/notification-templates',
     icon: Bell,
-    stub: 'Coming in Phase 1.8',
   },
   {
     label: 'Audit Log',

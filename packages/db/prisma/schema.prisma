@@ -714,19 +714,23 @@ model NotificationTemplate {
 }
 
 model Notification {
-  id           String              @id @default(uuid()) @map("id")
-  userId       String              @map("user_id")
-  templateCode String              @map("template_code")
-  payloadJson  Json                @map("payload_json")
-  channel      NotificationChannel @map("channel")
-  status       NotificationStatus  @map("status")
-  sentAt       DateTime?           @map("sent_at")
-  readAt       DateTime?           @map("read_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
+  id             String              @id @default(uuid()) @map("id")
+  userId         String              @map("user_id")
+  templateCode   String              @map("template_code")
+  idempotencyKey String?             @map("idempotency_key")
+  subject        String              @map("subject")
+  body           String              @map("body")
+  payloadJson    Json                @map("payload_json")
+  channel        NotificationChannel @map("channel")
+  status         NotificationStatus  @map("status")
+  sentAt         DateTime?           @map("sent_at")
+  readAt         DateTime?           @map("read_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id])
 
+  @@unique([idempotencyKey, userId, channel])
   @@index([userId, status, createdAt])
   @@map("notifications")
 }

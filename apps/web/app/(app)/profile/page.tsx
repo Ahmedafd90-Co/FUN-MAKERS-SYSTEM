@@ -1,3 +1,4 @@
+import { NotificationPreferences } from '@/components/notification-preferences';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { ProfileInfo } from '@/components/profile/profile-info';
 
@@ -13,6 +14,7 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-bold tracking-tight">Your profile</h1>
       <ProfileInfo />
       <ChangePasswordForm />
+      <NotificationPreferences />
     </div>
   );
 }

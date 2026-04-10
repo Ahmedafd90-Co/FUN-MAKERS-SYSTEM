@@ -26,6 +26,14 @@ const TEMPLATES = [
     defaultEnabled: true,
   },
   {
+    code: 'workflow_returned',
+    channel: 'in_app' as const,
+    subjectTemplate: '{{recordType}} {{recordRef}} returned for correction',
+    bodyTemplate:
+      '{{recordType}} {{recordRef}} has been returned for correction by {{actorName}} in project {{projectName}}. Reason: {{comment}}',
+    defaultEnabled: true,
+  },
+  {
     code: 'document_signed',
     channel: 'in_app' as const,
     subjectTemplate: 'Document signed: {{documentTitle}}',
