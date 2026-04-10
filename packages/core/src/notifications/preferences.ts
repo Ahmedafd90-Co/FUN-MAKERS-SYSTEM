@@ -13,8 +13,7 @@ import { auditService } from '../audit/service';
 // Types
 // ---------------------------------------------------------------------------
 
-/** Channels we support. Mirrors the Prisma enum. */
-export type NotificationChannel = 'in_app' | 'email';
+import type { NotificationChannel } from './service';
 
 export type PreferenceKey = {
   templateCode: string;

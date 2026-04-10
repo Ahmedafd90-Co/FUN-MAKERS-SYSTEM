@@ -61,35 +61,65 @@ export type RenderedTemplate = {
 };
 
 /**
- * Render a notification template by code.
+ * A fetched template record with the fields needed for rendering.
+ */
+export type TemplateDef = {
+  code: string;
+  subjectTemplate: string;
+  bodyTemplate: string;
+};
+
+/**
+ * Fetch a template definition by code. Returns null if not found.
+ */
+export async function fetchTemplate(
+  templateCode: string,
+): Promise<TemplateDef | null> {
+  const t = await prisma.notificationTemplate.findUnique({
+    where: { code: templateCode },
+    select: { code: true, subjectTemplate: true, bodyTemplate: true },
+  });
+  return t;
+}
+
+/**
+ * Render a pre-fetched template with the given payload.
+ *
+ * @throws {TemplateRenderError} If Handlebars compilation or execution fails.
+ */
+export function renderWithTemplate(
+  template: TemplateDef,
+  payload: Record<string, unknown>,
+): RenderedTemplate {
+  try {
+    const compiledSubject = Handlebars.compile(template.subjectTemplate, { strict: true });
+    const compiledBody = Handlebars.compile(template.bodyTemplate, { strict: true });
+
+    return {
+      subject: compiledSubject(payload),
+      body: compiledBody(payload),
+    };
+  } catch (err) {
+    throw new TemplateRenderError(template.code, err);
+  }
+}
+
+/**
+ * Render a notification template by code. Fetches from DB, then renders.
  *
  * @param templateCode - The unique code of the template (e.g. 'workflow_step_assigned').
  * @param payload      - Key/value pairs to interpolate into the template.
  *
- * @throws {TemplateNotFoundError} If no template with the given code exists.
+ * @throws {NotificationTemplateNotFoundError} If no template with the given code exists.
  * @throws {TemplateRenderError}   If Handlebars compilation or execution fails.
  */
 export async function renderTemplate(
   templateCode: string,
   payload: Record<string, unknown>,
 ): Promise<RenderedTemplate> {
-  const template = await prisma.notificationTemplate.findUnique({
-    where: { code: templateCode },
-  });
-
+  const template = await fetchTemplate(templateCode);
   if (!template) {
     throw new NotificationTemplateNotFoundError(templateCode);
   }
-
-  try {
-    const compiledSubject = Handlebars.compile(template.subjectTemplate, { strict: true });
-    const compiledBody = Handlebars.compile(template.bodyTemplate, { strict: true });
-
-    const subject = compiledSubject(payload);
-    const body = compiledBody(payload);
-
-    return { subject, body };
-  } catch (err) {
-    throw new TemplateRenderError(templateCode, err);
-  }
+  return renderWithTemplate(template, payload);
 }

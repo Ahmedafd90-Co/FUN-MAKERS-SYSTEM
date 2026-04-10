@@ -6,9 +6,12 @@
 
 export {
   renderTemplate,
+  fetchTemplate,
+  renderWithTemplate,
   NotificationTemplateNotFoundError,
   TemplateRenderError,
   type RenderedTemplate,
+  type TemplateDef,
 } from './templates';
 
 export {

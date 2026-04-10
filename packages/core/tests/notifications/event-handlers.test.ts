@@ -251,8 +251,8 @@ describe('workflow event handlers', () => {
 
   describe('workflow.returned', () => {
     it('notifies the workflow starter and the actor', async () => {
-      const beforeStarter = await countNotifications(starterUser.id, 'workflow_rejected');
-      const beforeActor = await countNotifications(approverUser.id, 'workflow_rejected');
+      const beforeStarter = await countNotifications(starterUser.id, 'workflow_returned');
+      const beforeActor = await countNotifications(approverUser.id, 'workflow_returned');
 
       await workflowEvents.emit('workflow.returned', {
         instanceId: instance.id,
@@ -264,8 +264,8 @@ describe('workflow event handlers', () => {
         comment: 'Needs revision',
       });
 
-      const afterStarter = await countNotifications(starterUser.id, 'workflow_rejected');
-      const afterActor = await countNotifications(approverUser.id, 'workflow_rejected');
+      const afterStarter = await countNotifications(starterUser.id, 'workflow_returned');
+      const afterActor = await countNotifications(approverUser.id, 'workflow_returned');
       expect(afterStarter).toBeGreaterThan(beforeStarter);
       expect(afterActor).toBeGreaterThan(beforeActor);
     });

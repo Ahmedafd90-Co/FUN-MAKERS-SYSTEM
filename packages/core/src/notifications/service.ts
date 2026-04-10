@@ -11,7 +11,7 @@ import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
-import { renderTemplate } from './templates';
+import { fetchTemplate, renderWithTemplate, NotificationTemplateNotFoundError } from './templates';
 import { isPreferenceEnabled } from './preferences';
 
 // ---------------------------------------------------------------------------
@@ -100,9 +100,32 @@ export async function notify(input: NotifyInput): Promise<void> {
     channels = ['in_app', 'email'],
   } = input;
 
+  // Pre-fetch template once (avoids N queries inside the loop)
+  const template = await fetchTemplate(templateCode);
+  if (!template) {
+    throw new NotificationTemplateNotFoundError(templateCode);
+  }
+
+  // Batch idempotency check: find all existing notifications for this key
+  const recipientIds = recipients.map((r) => r.id);
+  const existingNotifications = await prisma.notification.findMany({
+    where: {
+      idempotencyKey,
+      userId: { in: recipientIds },
+      channel: { in: channels },
+    },
+    select: { userId: true, channel: true },
+  });
+  const existingSet = new Set(
+    existingNotifications.map((n) => `${n.userId}:${n.channel}`),
+  );
+
   for (const recipient of recipients) {
     for (const channel of channels) {
-      // 1. Check user preference
+      // 1. Idempotency check (from pre-fetched set)
+      if (existingSet.has(`${recipient.id}:${channel}`)) continue;
+
+      // 2. Check user preference
       const enabled = await isPreferenceEnabled(
         recipient.id,
         templateCode,
@@ -110,15 +133,9 @@ export async function notify(input: NotifyInput): Promise<void> {
       );
       if (!enabled) continue;
 
-      // 2. Idempotency check
-      const existing = await prisma.notification.findFirst({
-        where: { idempotencyKey, userId: recipient.id, channel },
-      });
-      if (existing) continue;
-
-      // 3. Render template
+      // 3. Render template (pre-fetched, per-recipient payload)
       const recipientPayload = { ...payload, recipientName: recipient.name };
-      const { subject, body } = await renderTemplate(templateCode, recipientPayload);
+      const { subject, body } = renderWithTemplate(template, recipientPayload);
 
       if (channel === 'in_app') {
         // 4 + 5: Create and immediately mark as sent for in-app

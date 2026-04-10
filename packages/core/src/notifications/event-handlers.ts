@@ -185,7 +185,7 @@ async function handleWorkflowReturned(payload: WorkflowEventPayload): Promise<vo
   if (recipients.length === 0) return;
 
   await notify({
-    templateCode: 'workflow_rejected',
+    templateCode: 'workflow_returned',
     recipients,
     payload: {
       recordType,
