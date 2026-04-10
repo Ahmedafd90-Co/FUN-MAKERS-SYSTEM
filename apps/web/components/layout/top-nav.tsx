@@ -131,10 +131,11 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
             {futureModuleItems.map((item) => (
               <span
                 key={item.label}
-                className="px-2 py-1 text-xs text-muted-foreground/40 cursor-default"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground/40 cursor-default"
                 title={`Coming in ${item.module}`}
               >
                 {item.label}
+                <span className="text-[10px] text-muted-foreground/30">Soon</span>
               </span>
             ))}
           </div>
