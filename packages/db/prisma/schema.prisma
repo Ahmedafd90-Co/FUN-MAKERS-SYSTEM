@@ -613,3 +613,63 @@ model PostingException {
 
   @@map("posting_exceptions")
 }
+
+// ---------------------------------------------------------------------------
+// Enums — Audit
+// ---------------------------------------------------------------------------
+
+enum AuditActorSource {
+  user   @map("user")
+  system @map("system")
+  agent  @map("agent")
+  job    @map("job")
+
+  @@map("audit_actor_source")
+}
+
+// ---------------------------------------------------------------------------
+// 9. Audit (append-only)
+// ---------------------------------------------------------------------------
+
+/// APPEND-ONLY: no updatedAt, no soft-delete. Never updated, never deleted.
+model AuditLog {
+  id           String           @id @default(uuid()) @map("id")
+  actorUserId  String?          @map("actor_user_id")
+  actorSource  AuditActorSource @map("actor_source")
+  action       String           @map("action")
+  resourceType String           @map("resource_type")
+  resourceId   String           @map("resource_id")
+  projectId    String?          @map("project_id")
+  beforeJson   Json             @map("before_json")
+  afterJson    Json             @map("after_json")
+  reason       String?          @map("reason")
+  ip           String?          @map("ip")
+  userAgent    String?          @map("user_agent")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  overrideLogs OverrideLog[]
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("audit_logs")
+}
+
+/// Override log: denormalized view of audit entries where an override occurred.
+/// Materialized on write for fast admin visibility.
+model OverrideLog {
+  id              String   @id @default(uuid()) @map("id")
+  auditLogId      String   @map("audit_log_id")
+  overrideType    String   @map("override_type")
+  overriderUserId String   @map("overrider_user_id")
+  reason          String   @map("reason")
+  beforeJson      Json     @map("before_json")
+  afterJson       Json     @map("after_json")
+  approvedBy      String?  @map("approved_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  auditLog AuditLog @relation(fields: [auditLogId], references: [id])
+
+  @@map("override_logs")
+}
