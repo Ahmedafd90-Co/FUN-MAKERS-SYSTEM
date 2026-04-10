@@ -11,6 +11,10 @@ import { seedSampleEntity } from './sample-entity';
 import { seedSampleProject } from './sample-project';
 import { seedMasterAdmin } from './master-admin';
 import { seedWorkflowTemplates } from './workflow-templates';
+import { seedCommercialPermissions } from './commercial-permissions';
+import { seedCommercialRolePermissions } from './commercial-role-permissions';
+import { seedCommercialWorkflowTemplates } from './commercial-workflow-templates';
+import { seedCommercialNotificationTemplates } from './commercial-notification-templates';
 
 const prisma = new PrismaClient();
 
@@ -30,6 +34,10 @@ async function main() {
   await seedSampleProject(prisma);
   await seedMasterAdmin(prisma);
   await seedWorkflowTemplates(prisma);
+  await seedCommercialPermissions(prisma);
+  await seedCommercialRolePermissions(prisma);
+  await seedCommercialWorkflowTemplates(prisma);
+  await seedCommercialNotificationTemplates(prisma);
 
   console.log('✅ Seeding complete.');
 }
