@@ -1,0 +1,139 @@
+'use client';
+
+import { cn } from '@fmksa/ui/lib/utils';
+import {
+  Users,
+  Shield,
+  FolderKanban,
+  Building2,
+  Database,
+  GitBranch,
+  Bell,
+  ScrollText,
+  FileWarning,
+  Activity,
+  ArrowLeftRight,
+} from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+// ---------------------------------------------------------------------------
+// Admin sidebar navigation items
+// ---------------------------------------------------------------------------
+
+type AdminNavItem = {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  stub?: string; // "Coming in Phase X.Y"
+};
+
+const adminNavItems: AdminNavItem[] = [
+  { label: 'Users', href: '/admin/users', icon: Users },
+  { label: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
+  { label: 'Project Assignments', href: '/admin/assignments', icon: FolderKanban },
+  { label: 'Entities', href: '/admin/entities', icon: Building2 },
+  { label: 'Reference Data', href: '/admin/reference-data', icon: Database },
+  {
+    label: 'Workflow Templates',
+    href: '/admin/workflow-templates',
+    icon: GitBranch,
+    stub: 'Coming in Phase 1.5',
+  },
+  {
+    label: 'Notification Templates',
+    href: '/admin/notification-templates',
+    icon: Bell,
+    stub: 'Coming in Phase 1.8',
+  },
+  {
+    label: 'Audit Log',
+    href: '/admin/audit-log',
+    icon: ScrollText,
+    stub: 'Coming in Phase 1.9',
+  },
+  {
+    label: 'Override Log',
+    href: '/admin/override-log',
+    icon: ArrowLeftRight,
+    stub: 'Coming in Phase 1.9',
+  },
+  {
+    label: 'Posting Exceptions',
+    href: '/admin/posting-exceptions',
+    icon: FileWarning,
+    stub: 'Coming in Phase 1.7',
+  },
+  {
+    label: 'System Health',
+    href: '/admin/system-health',
+    icon: Activity,
+    stub: 'Coming in Phase 1.9',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Layout
+// ---------------------------------------------------------------------------
+
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <div className="flex min-h-[calc(100vh-3.5rem)]">
+      {/* Sidebar */}
+      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-border bg-card">
+        <div className="px-4 py-4">
+          <h2 className="text-sm font-semibold text-foreground tracking-tight">
+            Administration
+          </h2>
+        </div>
+        <nav className="flex-1 space-y-0.5 px-2 pb-4">
+          {adminNavItems.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href || pathname.startsWith(item.href + '/');
+
+            if (item.stub) {
+              return (
+                <span
+                  key={item.href}
+                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/50 cursor-default"
+                  title={item.stub}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </span>
+              );
+            }
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                  isActive
+                    ? 'bg-accent text-accent-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8">{children}</div>
+      </div>
+    </div>
+  );
+}
