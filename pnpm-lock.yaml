@@ -230,6 +230,9 @@ importers:
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
     devDependencies:
       '@fmksa/config':
         specifier: workspace:*

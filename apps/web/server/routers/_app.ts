@@ -10,6 +10,7 @@ import { entitiesRouter } from './entities';
 import { referenceDataRouter } from './reference-data';
 import { workflowRouter } from './workflow';
 import { documentsRouter } from './documents';
+import { postingRouter } from './posting';
 
 export const appRouter = router({
   auth: authRouter,
@@ -18,6 +19,7 @@ export const appRouter = router({
   referenceData: referenceDataRouter,
   workflow: workflowRouter,
   documents: documentsRouter,
+  posting: postingRouter,
 });
 
 export type AppRouter = typeof appRouter;
