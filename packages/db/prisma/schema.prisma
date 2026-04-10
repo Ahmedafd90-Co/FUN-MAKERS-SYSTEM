@@ -40,6 +40,9 @@ model Currency {
   symbol        String @map("symbol")
   decimalPlaces Int    @map("decimal_places")
 
+  // Relations
+  projects Project[]
+
   @@map("currencies")
 }
 
@@ -107,8 +110,9 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  sessions  UserSession[]
-  userRoles UserRole[]
+  sessions           UserSession[]
+  userRoles          UserRole[]
+  projectAssignments ProjectAssignment[]
 
   @@map("users")
 }
@@ -139,8 +143,10 @@ model Role {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  rolePermissions RolePermission[]
-  userRoles       UserRole[]
+  rolePermissions    RolePermission[]
+  userRoles          UserRole[]
+  screenPermissions  ScreenPermission[]
+  projectAssignments ProjectAssignment[]
 
   @@map("roles")
 }
@@ -229,5 +235,116 @@ model Entity {
   parent   Entity?  @relation("EntityParent", fields: [parentEntityId], references: [id])
   children Entity[] @relation("EntityParent")
 
+  // Relations
+  projects Project[]
+
   @@map("entities")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Project
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  active    @map("active")
+  on_hold   @map("on_hold")
+  completed @map("completed")
+  archived  @map("archived")
+
+  @@map("project_status")
+}
+
+// ---------------------------------------------------------------------------
+// 4. Projects and scoping
+// ---------------------------------------------------------------------------
+
+model Project {
+  id           String        @id @default(uuid()) @map("id")
+  code         String        @unique @map("code")
+  name         String        @map("name")
+  entityId     String        @map("entity_id")
+  status       ProjectStatus @map("status")
+  currencyCode String        @map("currency_code")
+  startDate    DateTime      @map("start_date")
+  endDate      DateTime?     @map("end_date")
+  createdBy    String        @map("created_by")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  entity            Entity              @relation(fields: [entityId], references: [id])
+  currency          Currency            @relation(fields: [currencyCode], references: [code])
+  assignments       ProjectAssignment[]
+  settings          ProjectSetting[]
+  screenPermissions ScreenPermission[]
+
+  @@index([entityId])
+  @@map("projects")
+}
+
+model ProjectAssignment {
+  id            String    @id @default(uuid()) @map("id")
+  projectId     String    @map("project_id")
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  assignedBy    String    @map("assigned_by")
+  assignedAt    DateTime  @map("assigned_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedBy     String?   @map("revoked_by")
+  reason        String?   @map("reason")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  @@index([projectId, userId, effectiveFrom, effectiveTo])
+  @@map("project_assignments")
+}
+
+/// Composite PK (projectId, key). Keys include workflow_toggles,
+/// material_tracking_flags, procurement_flags, etc.
+model ProjectSetting {
+  projectId String   @map("project_id")
+  key       String   @map("key")
+  valueJson Json     @map("value_json")
+  updatedAt DateTime @map("updated_at")
+  updatedBy String   @map("updated_by")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@id([projectId, key])
+  @@map("project_settings")
+}
+
+// ---------------------------------------------------------------------------
+// 5. Screen permissions (with project overrides)
+// ---------------------------------------------------------------------------
+
+/// Screen-level permission per role. When `projectId` is NULL the row is a
+/// role-level default; a non-null `projectId` is a project-specific override.
+///
+/// SQL note: the composite unique (roleId, screenCode, projectId) allows
+/// multiple rows with projectId=NULL for different (roleId, screenCode) pairs.
+/// SQL UNIQUE treats NULLs as distinct, so a single role-default row per
+/// (roleId, screenCode) is enforced at the service layer.
+model ScreenPermission {
+  id         String   @id @default(uuid()) @map("id")
+  roleId     String   @map("role_id")
+  screenCode String   @map("screen_code")
+  canView    Boolean  @default(false) @map("can_view")
+  canEdit    Boolean  @default(false) @map("can_edit")
+  canApprove Boolean  @default(false) @map("can_approve")
+  projectId  String?  @map("project_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  role    Role     @relation(fields: [roleId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@unique([roleId, screenCode, projectId])
+  @@map("screen_permissions")
 }
