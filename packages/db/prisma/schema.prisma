@@ -1,8 +1,14 @@
-// Fun Makers KSA — Prisma schema
+// Fun Makers KSA — Prisma Schema
 //
-// Placeholder schema for Phase 1.1 scaffolding. The real data model lands in
-// Phase 1.2 (schema design) and is extended by every subsequent phase. Do not
-// add production models here — this file will be rewritten.
+// Module 1: Shared Core Platform
+// Source of truth: docs/superpowers/specs/2026-04-09-module-1-shared-core-platform-design.md §6.2
+//
+// Conventions:
+//   - All UUIDs: String @id @default(uuid())
+//   - camelCase Prisma fields -> snake_case SQL columns via @map / @@map
+//   - Transactional tables: createdAt + updatedAt
+//   - Append-only tables (AuditLog, OverrideLog, WorkflowAction, DocumentSignature): createdAt only
+//   - Enums: PascalCase in TS, snake_case in PostgreSQL via individual variant @map
 
 generator client {
   provider = "prisma-client-js"
@@ -13,8 +19,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Placeholder model so `prisma generate` has something to work with during
-/// scaffolding. Replaced wholesale in Phase 1.2.
-model AppScaffold {
-  id String @id @default(uuid())
+// ---------------------------------------------------------------------------
+// 1. Reference and lookup tables (no FK dependencies)
+// ---------------------------------------------------------------------------
+
+/// ISO 3166-1 alpha-2 country codes.
+model Country {
+  code        String @id @map("code")
+  name        String @map("name")
+  iso3        String @map("iso3")
+  phonePrefix String @map("phone_prefix")
+
+  @@map("countries")
+}
+
+/// ISO 4217 currency codes.
+model Currency {
+  code          String @id @map("code")
+  name          String @map("name")
+  symbol        String @map("symbol")
+  decimalPlaces Int    @map("decimal_places")
+
+  @@map("currencies")
+}
+
+/// Global key-value settings (e.g. default_currency, date_format).
+model AppSetting {
+  key       String   @id @map("key")
+  valueJson Json     @map("value_json")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String   @map("updated_by")
+
+  @@map("app_settings")
+}
+
+/// Extensible status dictionaries for future module status sets
+/// (material statuses, shop drawing statuses, fabrication statuses, etc.).
+model StatusDictionary {
+  id             String  @id @default(uuid()) @map("id")
+  dictionaryCode String  @map("dictionary_code")
+  statusCode     String  @map("status_code")
+  label          String  @map("label")
+  orderIndex     Int     @map("order_index")
+  colorHint      String? @map("color_hint")
+  isTerminal     Boolean @map("is_terminal")
+
+  @@unique([dictionaryCode, statusCode])
+  @@map("status_dictionaries")
 }
