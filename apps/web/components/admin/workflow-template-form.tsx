@@ -83,7 +83,7 @@ export function CreateTemplateDialog({
 
     // Validate steps
     for (let i = 0; i < steps.length; i++) {
-      const s = steps[i];
+      const s = steps[i]!;
       if (!s.name.trim()) {
         toast.error(`Step ${i + 1}: name is required.`);
         return;

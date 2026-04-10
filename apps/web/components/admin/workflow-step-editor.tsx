@@ -131,9 +131,11 @@ type WorkflowStepEditorProps = {
 };
 
 export function WorkflowStepEditor({ steps, onChange }: WorkflowStepEditorProps) {
-  function updateStep(index: number, partial: Partial<StepDraft>) {
+  function updateStep(index: number, patch: Partial<StepDraft>) {
     const updated = [...steps];
-    updated[index] = { ...updated[index], ...partial };
+    const existing = updated[index];
+    if (!existing) return;
+    updated[index] = { ...existing, ...patch } as StepDraft;
     onChange(updated);
   }
 
@@ -149,14 +151,20 @@ export function WorkflowStepEditor({ steps, onChange }: WorkflowStepEditorProps)
   function moveUp(index: number) {
     if (index === 0) return;
     const updated = [...steps];
-    [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+    const a = updated[index - 1]!;
+    const b = updated[index]!;
+    updated[index - 1] = b;
+    updated[index] = a;
     onChange(updated);
   }
 
   function moveDown(index: number) {
     if (index >= steps.length - 1) return;
     const updated = [...steps];
-    [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+    const a = updated[index]!;
+    const b = updated[index + 1]!;
+    updated[index] = b;
+    updated[index + 1] = a;
     onChange(updated);
   }
 

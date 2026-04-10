@@ -90,7 +90,11 @@ const templatesRouter = router({
         .optional(),
     )
     .query(async ({ input }) => {
-      return workflowTemplateService.listTemplates(input ?? undefined);
+      if (!input) return workflowTemplateService.listTemplates();
+      const filters: { recordType?: string; isActive?: boolean } = {};
+      if (input.recordType !== undefined) filters.recordType = input.recordType;
+      if (input.isActive !== undefined) filters.isActive = input.isActive;
+      return workflowTemplateService.listTemplates(filters);
     }),
 
   get: adminProcedure
@@ -210,12 +214,18 @@ const actionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await workflowStepService.approveStep({
+        const args: {
+          instanceId: string;
+          stepId: string;
+          actorUserId: string;
+          comment?: string;
+        } = {
           instanceId: input.instanceId,
           stepId: input.stepId,
           actorUserId: ctx.user.id,
-          comment: input.comment,
-        });
+        };
+        if (input.comment !== undefined) args.comment = input.comment;
+        return await workflowStepService.approveStep(args);
       } catch (err) {
         mapWorkflowError(err);
       }
@@ -255,13 +265,20 @@ const actionsRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await workflowStepService.returnStep({
+        const args: {
+          instanceId: string;
+          stepId: string;
+          actorUserId: string;
+          comment: string;
+          returnToStepId?: string;
+        } = {
           instanceId: input.instanceId,
           stepId: input.stepId,
           actorUserId: ctx.user.id,
           comment: input.comment,
-          returnToStepId: input.returnToStepId,
-        });
+        };
+        if (input.returnToStepId !== undefined) args.returnToStepId = input.returnToStepId;
+        return await workflowStepService.returnStep(args);
       } catch (err) {
         mapWorkflowError(err);
       }
