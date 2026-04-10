@@ -67,3 +67,122 @@ model StatusDictionary {
   @@unique([dictionaryCode, statusCode])
   @@map("status_dictionaries")
 }
+
+// ---------------------------------------------------------------------------
+// Enums — Identity
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  active   @map("active")
+  inactive @map("inactive")
+  locked   @map("locked")
+
+  @@map("user_status")
+}
+
+// ---------------------------------------------------------------------------
+// 2. Identity tables
+// ---------------------------------------------------------------------------
+
+model Department {
+  id          String  @id @default(uuid()) @map("id")
+  code        String  @unique @map("code")
+  name        String  @map("name")
+  description String? @map("description")
+
+  @@map("departments")
+}
+
+model User {
+  id               String     @id @default(uuid()) @map("id")
+  email            String     @unique @map("email")
+  name             String     @map("name")
+  passwordHash     String     @map("password_hash")
+  mfaSecret        String?    @map("mfa_secret")
+  status           UserStatus @map("status")
+  lastLoginAt      DateTime?  @map("last_login_at")
+  failedLoginCount Int        @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?  @map("locked_until")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  sessions  UserSession[]
+  userRoles UserRole[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String    @id @default(uuid()) @map("id")
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  ip        String    @map("ip")
+  userAgent String    @map("user_agent")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+  @@map("user_sessions")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @map("id")
+  code        String   @unique @map("code")
+  name        String   @map("name")
+  description String?  @map("description")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(uuid()) @map("id")
+  code        String @unique @map("code")
+  description String @map("description")
+  resource    String @map("resource")
+  action      String @map("action")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+/// Join table: composite PK (roleId, permissionId).
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id            String    @id @default(uuid()) @map("id")
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  assignedBy    String    @map("assigned_by")
+  assignedAt    DateTime  @map("assigned_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@map("user_roles")
+}
