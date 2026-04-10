@@ -2,9 +2,9 @@
   "extends": "@fmksa/config/tsconfig/node.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "baseUrl": "."
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist", "prisma"]
 }
