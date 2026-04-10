@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-10-module-2-commercial-engine-design.md`
 **Scope lock:** `docs/module-2-scope-lock.md`
+**Addendum A:** `docs/module-2-addendum-a-assessment-analytics.md` — consultant assessment fields, advanced filters, variance analytics
+**Addendum B:** `docs/module-2-addendum-b-future-scope.md` — procurement/cost-control items frozen for M3–M5
 
 ---
 
@@ -146,6 +148,8 @@ apps/web/components/commercial/
   correspondence-list.tsx
   correspondence-detail.tsx
   correspondence-form.tsx     # Subtype-aware form
+  register-filter-bar.tsx     # (Addendum A) Reusable filter/sort/saved-views for all lists
+  document-type-filter.tsx    # (Addendum A) MIME-type filter for document panels
   status-badge.tsx            # Commercial status badge component
   transition-actions.tsx      # Reusable approve/reject/sign/issue buttons
   workflow-timeline.tsx       # Reusable workflow step timeline
@@ -265,6 +269,10 @@ After the last M1 model in schema.prisma, add a new section header and all 7 mod
 - `@@map("table_name")` for snake_case table names
 
 Copy the exact Prisma schema from spec §14 for all 7 models: `Ipa`, `Ipc`, `Variation`, `CostProposal`, `TaxInvoice`, `Correspondence`, `ReferenceCounter`.
+
+**Addendum A fields (must be included):**
+- `Variation`: add `assessedCostImpact Decimal? @map("assessed_cost_impact") @db.Decimal(18, 2)`, `assessedTimeImpactDays Int? @map("assessed_time_impact_days")`, `approvedCostImpact Decimal? @map("approved_cost_impact") @db.Decimal(18, 2)`, `approvedTimeImpactDays Int? @map("approved_time_impact_days")` — placed after `currency`, before VO-specific fields.
+- `CostProposal`: add `assessedCost Decimal? @map("assessed_cost") @db.Decimal(18, 2)`, `assessedTimeDays Int? @map("assessed_time_days")`, `approvedCost Decimal? @map("approved_cost") @db.Decimal(18, 2)`, `approvedTimeDays Int? @map("approved_time_days")` — placed after `currency`, before `createdBy`.
 
 - [ ] **Step 3: Add relation arrays to existing Project model**
 
@@ -822,6 +830,30 @@ Each file defines `Create{Model}InputSchema`, `Update{Model}InputSchema` as Zod 
 
 For `variation.ts` and `correspondence.ts`: use `.refine()` or discriminated union for subtype-specific field validation (e.g., `claimedAmount` required when subtype is `claim`).
 
+**Addendum A — assessment fields in variation.ts and cost-proposal.ts:**
+- `UpdateVariationInputSchema`: add optional `assessedCostImpact` (z.number()), `assessedTimeImpactDays` (z.number().int()), `approvedCostImpact`, `approvedTimeImpactDays`.
+- `UpdateCostProposalInputSchema`: add optional `assessedCost`, `assessedTimeDays`, `approvedCost`, `approvedTimeDays`.
+- These fields are set via the `transition` action (review populates assessed, approve populates approved), but also editable on the update schema for manual correction.
+
+**Addendum A — advanced filter input schema in shared.ts:**
+Add a reusable `ListFilterInputSchema` for all list procedures:
+```typescript
+export const ListFilterInputSchema = z.object({
+  projectId: z.string().uuid(),
+  skip: z.number().int().min(0).default(0),
+  take: z.number().int().min(1).max(100).default(20),
+  sortField: z.string().optional(),
+  sortDirection: z.enum(['asc', 'desc']).default('desc'),
+  statusFilter: z.array(z.string()).optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  amountMin: z.number().optional(),
+  amountMax: z.number().optional(),
+  createdByFilter: z.string().uuid().optional(),
+});
+```
+Each model's `list` procedure extends this base schema with model-specific filters (e.g., Variation adds `subtypeFilter`).
+
 - [ ] **Step 3: Create barrel index.ts and update contracts root**
 
 ```typescript
@@ -1202,6 +1234,9 @@ Test scenarios:
 2. CO cannot transition to `client_pending`
 3. Both posting events fire at correct transitions
 4. Subtype-specific fields validated
+5. **Addendum A:** `review` transition populates `assessedCostImpact`/`assessedTimeImpactDays` from input
+6. **Addendum A:** `approve_internal` transition populates `approvedCostImpact`/`approvedTimeImpactDays` from input
+7. **Addendum A:** Assessment fields remain null when transition input doesn't provide them (small VO skip path)
 
 - [ ] **Step 1: Create transitions.ts with VO_TRANSITIONS and CO_TRANSITIONS**
 - [ ] **Step 2: Write tests**
@@ -1226,6 +1261,11 @@ git commit -m "feat(core): Variation service with vo/change_order subtypes and d
 **Reference:** Spec §4 (Cost Proposal statuses)
 
 Key: No posting events. `linked_to_variation` is a manual status transition, not auto-set. Optional FK to Variation.
+
+**Addendum A — assessment fields:**
+- `review` transition populates `assessedCost`/`assessedTimeDays` from input
+- `approve` transition populates `approvedCost`/`approvedTimeDays` from input
+- Test: assessment fields populated at correct transitions, null when skipped
 
 - [ ] **Step 1-5: Transitions, tests, service, verify, commit**
 
@@ -1348,7 +1388,7 @@ git commit -m "feat(core): barrel export for commercial services"
 
 - [ ] **Step 1: Write test**
 
-Test that `getCommercialDashboard(projectId)` returns the correct structure with counts and aggregates.
+Test that `getCommercialDashboard(projectId)` returns the correct structure with counts, aggregates, and variance analytics. Verify `varianceAnalytics` section computes correct reduction amounts and percentages (Addendum A).
 
 - [ ] **Step 2: Implement service**
 
@@ -1372,7 +1412,14 @@ export async function getCommercialDashboard(projectId: string) {
 
   // recentActivity: last 10 audit log entries for commercial resource types
 
-  return { registerSummary, financialSummary, pendingApprovals, recentActivity, clientSubmissions };
+  // Addendum A — variance analytics
+  const varianceAnalytics = {
+    ipaVariance: computeVariance(ipaAggregates.totalSubmitted, ipcAggregates.totalCertified),
+    variationVariance: computeVariance(variationAggregates.totalSubmitted, variationAggregates.totalApproved),
+    costProposalVariance: computeVariance(cpAggregates.totalEstimated, cpAggregates.totalApproved),
+  };
+
+  return { registerSummary, financialSummary, pendingApprovals, recentActivity, clientSubmissions, varianceAnalytics };
 }
 ```
 
@@ -1408,6 +1455,7 @@ Follow the M1 workflow router pattern (`apps/web/server/routers/workflow.ts`):
 - Input validation: import from `@fmksa/contracts`
 - Error mapping: custom domain errors → TRPCError
 - 6 procedures: `list`, `get`, `create`, `update`, `transition`, `delete`
+- **Addendum A — `list` procedure:** Use `ListFilterInputSchema` (from contracts shared.ts) as the base input. Support: multi-status filter, date range, amount range, creator filter, sortField + sortDirection. Prisma `orderBy` from sortField/sortDirection, `where` from filter params.
 
 - [ ] **Step 2: Create remaining 5 model sub-routers**
 
@@ -1489,6 +1537,8 @@ git commit -m "feat(web): commercial tRPC router with 7 sub-routers"
 - Create: `apps/web/components/commercial/transition-actions.tsx`
 - Create: `apps/web/components/commercial/workflow-timeline.tsx`
 - Create: `apps/web/components/commercial/commercial-sidebar.tsx`
+- Create: `apps/web/components/commercial/register-filter-bar.tsx` *(Addendum A)*
+- Create: `apps/web/components/commercial/document-type-filter.tsx` *(Addendum A)*
 
 These reusable components are used across all 13 commercial screens.
 
@@ -1513,7 +1563,21 @@ Displays the workflow steps for a record with current progress. Fetches from `wo
 
 Project workspace sidebar navigation for Commercial section. Links: Dashboard, IPA, IPC, Variations, Cost Proposals, Invoices, Correspondence. Highlights active route.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create register-filter-bar.tsx (Addendum A)**
+
+Reusable `<RegisterFilterBar>` component for all list screens. Props: `recordType`, `filters` (current filter state), `onFilterChange`, `sortField`, `sortDirection`, `onSortChange`. Features:
+- Multi-select status dropdown (shadcn MultiSelect or Popover + Checkbox pattern)
+- Date range picker (two date inputs)
+- Amount range (min/max number inputs, shown only for financial record types)
+- Creator filter (user select dropdown)
+- Saved views: load/save/delete named filter presets from localStorage (`fmksa:savedViews:{recordType}:{userId}`). Dropdown to select a saved view, button to save current filters as a new view.
+- URL param sync: reads `?status=x&status=y` on mount for dashboard drilldown support.
+
+- [ ] **Step 6: Create document-type-filter.tsx (Addendum A)**
+
+Client-side filter dropdown for the document attachment panel in detail views. Filters by MIME type category: All, Documents (PDF/Word), Images (PNG/JPG/SVG), Spreadsheets (XLS/XLSX/CSV). Pure client-side — filters the already-fetched document list.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/web/components/commercial/
@@ -1549,7 +1613,11 @@ export default function CommercialLayout({ children, params }: { children: React
 
 - [ ] **Step 2: Create dashboard page**
 
-Fetches `trpc.commercial.dashboard.summary` with the project's ID. Renders 9 summary sections using DashboardCards component. Includes client submission history table.
+Fetches `trpc.commercial.dashboard.summary` with the project's ID. Renders 10 summary sections using DashboardCards component. Includes client submission history table.
+
+**Addendum A additions:**
+- Variance analytics card: shows IPA, Variation, and CostProposal submitted-vs-approved variance with reduction amounts and percentages. Color coding: green for positive reduction (savings), red for negative (overrun).
+- Status counts in registerSummary are rendered as clickable links that navigate to the respective list screen pre-filtered by status (e.g., `/commercial/ipa?status=draft` drilldown).
 
 - [ ] **Step 3: Create redirect page.tsx**
 
@@ -1586,11 +1654,11 @@ git commit -m "feat(web): commercial layout, dashboard, and project navigation"
 
 - [ ] **Step 1: Create IPA list page**
 
-Paginated table: Reference, Period, Gross Amount, Net Claimed, Status, Created. Filters: status, period range. Create button gated by `ipa.create` permission.
+Paginated table: Reference, Period, Gross Amount, Net Claimed, Status, Created. Uses `<RegisterFilterBar>` with filters: status (multi-select), period range, date range, amount range, creator. Column sorting. Saved views. Dashboard drilldown via URL params. Create button gated by `ipa.create` permission.
 
 - [ ] **Step 2: Create IPA detail page**
 
-Full record view: header, financial summary, description, workflow timeline, linked IPCs list, documents, audit trail. Transition action buttons.
+Full record view: header, financial summary, description, workflow timeline, linked IPCs list, documents (with `<DocumentTypeFilter>` — Addendum A), audit trail. Transition action buttons.
 
 - [ ] **Step 3: Create IPA form (dialog or sheet)**
 
@@ -1620,9 +1688,16 @@ git commit -m "feat(web): IPA and IPC list/detail screens"
 **Reference:** Spec §11 (Screens 6-9)
 
 - [ ] **Step 1: Create Variation list with subtype tabs (All / VO / Change Order)**
+
+Uses `<RegisterFilterBar>`. Columns include Assessed Cost and Approved Cost (Addendum A). All advanced filter/sort/saved-view features.
+
 - [ ] **Step 2: Create Variation detail with subtype-aware layout**
+
+Detail view shows three-stage value tracking (Addendum A): Submitted (costImpact) → Assessed (assessedCostImpact) → Approved (approvedCostImpact) displayed as a comparison section. Same for time impact. Document panel with `<DocumentTypeFilter>`.
 - [ ] **Step 3: Create Variation form with subtype selection**
 - [ ] **Step 4: Create CostProposal list + detail + form**
+
+List uses `<RegisterFilterBar>`. Columns include Assessed Cost and Approved Cost. Detail shows three-stage value tracking (Addendum A): Estimated → Assessed → Approved. Document panel with `<DocumentTypeFilter>`.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1643,8 +1718,12 @@ git commit -m "feat(web): Variation and CostProposal list/detail screens"
 **Reference:** Spec §11 (Screens 10-13)
 
 - [ ] **Step 1: Create TaxInvoice list + detail**
+
+List uses `<RegisterFilterBar>` with all advanced filter/sort/saved-view features. Detail document panel with `<DocumentTypeFilter>`.
 - [ ] **Step 2: Create TaxInvoice form**
 - [ ] **Step 3: Create Correspondence list with subtype tabs**
+
+Uses `<RegisterFilterBar>` with all advanced filter/sort/saved-view features.
 - [ ] **Step 4: Create Correspondence detail with subtype-aware layout**
 - [ ] **Step 5: Create Correspondence form with subtype-aware fields**
 - [ ] **Step 6: Commit**
@@ -1698,6 +1777,9 @@ Test scenarios (mirrors M1's critical scenario pattern):
 7. Change order cannot enter client_pending
 8. Reference numbers are sequential and unique
 9. Audit log entries generated for all transitions
+10. **Addendum A:** Variation review transition populates assessed fields, approve populates approved fields
+11. **Addendum A:** CostProposal review/approve transitions populate assessment fields
+12. **Addendum A:** Dashboard varianceAnalytics computes correct reduction amounts
 
 - [ ] **Step 2: Run full test suite**
 
@@ -1741,6 +1823,11 @@ Expected: No errors on second run (upserts are idempotent)
 - [ ] TaxInvoice creation gated on signed IPC
 - [ ] Status transitions work with correct button visibility
 - [ ] Permission gating: view-only role cannot see create button
+- [ ] **Addendum A:** Variation detail shows submitted/assessed/approved values
+- [ ] **Addendum A:** List screens have advanced filters, sorting, and saved views
+- [ ] **Addendum A:** Dashboard variance analytics card shows reduction percentages
+- [ ] **Addendum A:** Dashboard status counts drilldown to pre-filtered list
+- [ ] **Addendum A:** Document attachment panels have file-type filter
 
 - [ ] **Step 5: Commit verification results**
 
@@ -1762,7 +1849,7 @@ After all tasks complete, verify against the spec's Definition of Done (§18):
 | 4 | 15 workflow templates seeded | `pnpm db:seed` + DB query |
 | 5 | 50 permission codes with role mappings | Seed + permission deny tests |
 | 6 | 13 screens functional with RBAC | Manual smoke test |
-| 7 | Dashboard shows 9 sections | Manual smoke test |
+| 7 | Dashboard shows 10 sections (including variance analytics) | Manual smoke test |
 | 8 | Reference numbers atomic and sequential | reference-number test |
 | 9 | IPC gated on approved IPA | Integration test |
 | 10 | TaxInvoice gated on signed IPC | Integration test |

@@ -7,6 +7,8 @@
 **Status:** APPROVED — 2026-04-10 (role-permission matrix confirmed)
 **Prerequisite:** Module 1 signed off (`b9de91a`)
 **Scope lock:** `docs/module-2-scope-lock.md` (all 21 decisions resolved)
+**Addendum A:** `docs/module-2-addendum-a-assessment-analytics.md` — consultant assessment fields, advanced filters, variance analytics
+**Addendum B:** `docs/module-2-addendum-b-future-scope.md` — procurement/cost-control items frozen for M3–M5
 
 ---
 
@@ -589,6 +591,11 @@ Module 2's posting events carry all the data Module 4 needs — no schema change
 | `costImpact` | Decimal(18,2) | No | Estimated cost change |
 | `timeImpactDays` | Int | No | Estimated schedule change |
 | `currency` | String | Yes | |
+| **Assessment fields (nullable, populated during review/approve):** | | | |
+| `assessedCostImpact` | Decimal(18,2) | No | Consultant's recommended cost — set at `review` |
+| `assessedTimeImpactDays` | Int | No | Consultant's recommended time — set at `review` |
+| `approvedCostImpact` | Decimal(18,2) | No | Final approved cost — set at `approve_internal` |
+| `approvedTimeImpactDays` | Int | No | Final approved time — set at `approve_internal` |
 | **VO-specific (nullable):** | | | |
 | `initiatedBy` | Enum | No | `contractor` / `client` |
 | `contractClause` | String | No | Relevant clause reference |
@@ -613,6 +620,11 @@ Module 2's posting events carry all the data Module 4 needs — no schema change
 | `methodology` | String | No | Proposed approach |
 | `costBreakdown` | String | No | **Resolved as MINOR OPEN:** Free-form text in M2. Structured breakdown (labor/materials/equipment/overhead) is a future enhancement. |
 | `currency` | String | Yes | |
+| **Assessment fields (nullable, populated during review/approve):** | | | |
+| `assessedCost` | Decimal(18,2) | No | Consultant's assessed cost — set at `review` |
+| `assessedTimeDays` | Int | No | Consultant's assessed time — set at `review` |
+| `approvedCost` | Decimal(18,2) | No | Final approved cost — set at `approve` |
+| `approvedTimeDays` | Int | No | Final approved time — set at `approve` |
 
 ### Tax Invoice Fields
 
@@ -697,37 +709,37 @@ Data: tRPC `commercial.dashboard` procedure fetching aggregates from each model.
 
 #### 2-3. IPA List + Detail
 
-**List** (`/projects/{id}/commercial/ipa`): Paginated table with columns: Reference, Period, Gross Amount, Net Claimed, Status, Created. Filters: status, period range. Create button (if `ipa.create` permission).
+**List** (`/projects/{id}/commercial/ipa`): Paginated table with columns: Reference, Period, Gross Amount, Net Claimed, Status, Created. Filters: status (multi-select), period range, date range, amount range, creator. Column sorting on any column. Saved filter views (localStorage per user). Dashboard drilldown: clicking a status count pre-fills the status filter via URL params. Create button (if `ipa.create` permission).
 
 **Detail** (`/projects/{id}/commercial/ipa/{id}`): Full record view with: header (reference, status badge, period), financial summary, description, workflow timeline, linked IPCs list, attached documents, audit trail. Action buttons: workflow actions (approve/reject/return), sign, issue — shown based on permission and current workflow step.
 
 #### 4-5. IPC List + Detail
 
-**List** (`/projects/{id}/commercial/ipc`): Columns: Reference, IPA Ref, Certified Amount, Net Certified, Status. Filters: status, date range.
+**List** (`/projects/{id}/commercial/ipc`): Columns: Reference, IPA Ref, Certified Amount, Net Certified, Status. Filters: status (multi-select), date range, amount range, creator. Column sorting. Saved filter views (localStorage). Dashboard drilldown support.
 
 **Detail** (`/projects/{id}/commercial/ipc/{id}`): Header, financial summary, linked IPA (clickable), linked Tax Invoices, workflow timeline, documents, audit trail.
 
 #### 6-7. Variation List + Detail
 
-**List** (`/projects/{id}/commercial/variations`): Columns: Reference, Subtype (badge), Title, Cost Impact, Time Impact, Status. Filters: subtype (tabs: All / VO / Change Order), status. Subtype is displayed as a badge — no separate list screens.
+**List** (`/projects/{id}/commercial/variations`): Columns: Reference, Subtype (badge), Title, Cost Impact, Assessed Cost, Approved Cost, Time Impact, Status. Filters: subtype (tabs: All / VO / Change Order), status (multi-select), date range, amount range, creator. Column sorting. Saved filter views (localStorage). Dashboard drilldown support. Subtype is displayed as a badge — no separate list screens.
 
 **Detail** (`/projects/{id}/commercial/variations/{id}`): Subtype-aware layout. VO shows: initiatedBy, contractClause. CO shows: parent VO link, contract value adjustment. Shared: title, description, reason, cost/time impact, workflow timeline, linked cost proposals, documents, client status section (if applicable), audit trail.
 
 #### 8-9. Cost Proposal List + Detail
 
-**List** (`/projects/{id}/commercial/cost-proposals`): Columns: Reference, Linked VO, Revision, Estimated Cost, Status. Filters: status, linked variation.
+**List** (`/projects/{id}/commercial/cost-proposals`): Columns: Reference, Linked VO, Revision, Estimated Cost, Assessed Cost, Approved Cost, Status. Filters: status (multi-select), linked variation, date range, amount range, creator. Column sorting. Saved filter views (localStorage). Dashboard drilldown support.
 
 **Detail** (`/projects/{id}/commercial/cost-proposals/{id}`): Header, linked variation (if any), cost/time estimate, methodology, breakdown, workflow timeline, documents, audit trail.
 
 #### 10-11. Tax Invoice List + Detail
 
-**List** (`/projects/{id}/commercial/invoices`): Columns: Invoice Number, IPC Ref, Gross, VAT, Total, Status. Filters: status, date range.
+**List** (`/projects/{id}/commercial/invoices`): Columns: Invoice Number, IPC Ref, Gross, VAT, Total, Status. Filters: status (multi-select), date range, amount range, creator. Column sorting. Saved filter views (localStorage). Dashboard drilldown support.
 
 **Detail** (`/projects/{id}/commercial/invoices/{id}`): Header, VAT breakdown, linked IPC, due date, payment status, workflow timeline, documents, audit trail.
 
 #### 12-13. Correspondence List + Detail
 
-**List** (`/projects/{id}/commercial/correspondence`): Columns: Reference, Subtype (badge), Subject, Recipient, Status. Filters: subtype (tabs: All / Letter / Notice / Claim / Back Charge), status. One list screen for all subtypes.
+**List** (`/projects/{id}/commercial/correspondence`): Columns: Reference, Subtype (badge), Subject, Recipient, Status. Filters: subtype (tabs: All / Letter / Notice / Claim / Back Charge), status (multi-select), date range, creator. Column sorting. Saved filter views (localStorage). Dashboard drilldown support. One list screen for all subtypes.
 
 **Detail** (`/projects/{id}/commercial/correspondence/{id}`): Subtype-aware layout:
 - **Letter**: subject, body, recipient, reply-to link, letter type
@@ -736,6 +748,16 @@ Data: tRPC `commercial.dashboard` procedure fetching aggregates from each model.
 - **Back Charge**: + target name, category, charged amount, evidence, dispute status
 
 Shared: workflow timeline, documents, audit trail, parent correspondence link (if any).
+
+#### Document Attachment Panel (All Detail Views)
+
+Each detail view has a document attachment panel showing files linked to the record via M1's `recordType` + `recordId` pattern. **Addendum A** adds a client-side file-type filter dropdown:
+- All
+- Documents (PDF, Word)
+- Images (PNG, JPG, SVG)
+- Spreadsheets (XLS, XLSX, CSV)
+
+Filtering is done client-side on the fetched document list (no schema change).
 
 #### 14. Client Submission History
 
@@ -1005,6 +1027,11 @@ model Variation {
   costImpact            Decimal?            @map("cost_impact") @db.Decimal(18, 2)
   timeImpactDays        Int?                @map("time_impact_days")
   currency              String
+  // Assessment fields (Addendum A) — populated during review/approve
+  assessedCostImpact    Decimal?             @map("assessed_cost_impact") @db.Decimal(18, 2)
+  assessedTimeImpactDays Int?                @map("assessed_time_impact_days")
+  approvedCostImpact    Decimal?             @map("approved_cost_impact") @db.Decimal(18, 2)
+  approvedTimeImpactDays Int?                @map("approved_time_impact_days")
   // VO-specific (nullable)
   initiatedBy           VariationInitiatedBy? @map("initiated_by")
   contractClause        String?              @map("contract_clause")
@@ -1040,6 +1067,11 @@ model CostProposal {
   methodology     String?
   costBreakdown   String?     @map("cost_breakdown")
   currency        String
+  // Assessment fields (Addendum A) — populated during review/approve
+  assessedCost    Decimal?    @map("assessed_cost") @db.Decimal(18, 2)
+  assessedTimeDays Int?       @map("assessed_time_days")
+  approvedCost    Decimal?    @map("approved_cost") @db.Decimal(18, 2)
+  approvedTimeDays Int?       @map("approved_time_days")
   createdBy       String      @map("created_by")
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
@@ -1267,6 +1299,26 @@ The `commercial.dashboard.summary` procedure returns:
     items: Array<{ type, referenceNumber, title, amount, issuedAt, status }>,
     total: number,
   },
+  varianceAnalytics: {            // Addendum A — submitted vs approved deltas
+    ipaVariance: {
+      totalSubmitted: Decimal,    // Sum IPA.netClaimed (approved+ status)
+      totalCertified: Decimal,    // Sum IPC.netCertified (signed+ status)
+      reductionAmount: Decimal,   // submitted - certified
+      reductionPercent: number,
+    },
+    variationVariance: {
+      totalSubmitted: Decimal,    // Sum Variation.costImpact (approved+ status)
+      totalApproved: Decimal,     // Sum Variation.approvedCostImpact
+      reductionAmount: Decimal,
+      reductionPercent: number,
+    },
+    costProposalVariance: {
+      totalEstimated: Decimal,    // Sum CostProposal.estimatedCost (approved+ status)
+      totalApproved: Decimal,     // Sum CostProposal.approvedCost
+      reductionAmount: Decimal,
+      reductionPercent: number,
+    },
+  },
 }
 ```
 
@@ -1314,7 +1366,7 @@ Module 2 is **done** when:
 4. All ~12 workflow templates seeded and functional.
 5. All 50 permission codes seeded with correct role mappings.
 6. All 13 screens functional with correct RBAC gating.
-7. Commercial dashboard shows all 9 sections with real data.
+7. Commercial dashboard shows all 10 sections with real data (including variance analytics).
 8. Reference number generation is atomic and sequential per project per type.
 9. IPC creation gated: parent IPA must be in `approved_internal` or later status.
 10. Tax Invoice creation gated: parent IPC must be in `signed` or later status.
@@ -1339,6 +1391,9 @@ Module 2 is **done** when:
 | `ReferenceCounter` | All future modules — shared numbering service |
 | Commercial permission codes | All modules — RBAC grows additively |
 | Commercial workflow templates | All modules — new templates can be added |
+| Variance analytics functions (Addendum A) | Module 4/5 — exported from dashboard service for reuse in cost analytics |
+| Assessment fields on Variation/CostProposal (Addendum A) | Module 4 — three-stage value tracking feeds budget variance reports |
+| Advanced filter/sort infrastructure (Addendum A) | All modules — same `<RegisterFilterBar>` component reusable for M3+ registers |
 
 ---
 
@@ -1362,3 +1417,8 @@ Module 2 is **done** when:
 | Cross-project commercial view | Deferred to Module 5. |
 | Receivable aging | Deferred to Module 4. |
 | Full role-permission matrix | Derived in §12, flagged for Ahmed's confirmation. |
+| Consultant assessment fields | Addendum A — 4 new nullable fields on Variation, 4 on CostProposal. Three-stage value tracking: submitted → assessed → approved. |
+| Advanced register filters | Addendum A — multi-status, date range, amount range, creator, column sorting, localStorage saved views, dashboard drilldown. |
+| Document-type filters | Addendum A — client-side file-type filter on detail view attachment panels. |
+| Variance analytics dashboard section | Addendum A — IPA, Variation, and CostProposal submitted-vs-approved variance with reduction percentages. |
+| Procurement/cost items frozen | Addendum B — 7 items (procurement categories, spend dashboards, vendor analytics, etc.) formally frozen for M3–M5. |
