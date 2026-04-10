@@ -1,0 +1,29 @@
+{
+  "name": "@fmksa/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Prisma schema and singleton client for the Fun Makers KSA platform.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "echo 'seed script lands in Phase 1.2'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "@fmksa/config": "workspace:*",
+    "@types/node": "^20.0.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.6.0"
+  }
+}

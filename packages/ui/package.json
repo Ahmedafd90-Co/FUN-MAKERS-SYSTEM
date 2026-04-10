@@ -1,0 +1,37 @@
+{
+  "name": "@fmksa/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared UI component library for the Fun Makers KSA platform (shadcn/ui host, primitives, patterns, icons).",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/components/*.tsx",
+    "./lib/utils": "./src/lib/utils.ts",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./primitives/*": "./src/primitives/*.tsx",
+    "./patterns/*": "./src/patterns/*.tsx",
+    "./icons/*": "./src/icons/*.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.468.0",
+    "tailwind-merge": "^2.5.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@fmksa/config": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

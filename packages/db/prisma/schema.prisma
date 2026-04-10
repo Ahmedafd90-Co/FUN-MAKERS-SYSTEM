@@ -1,0 +1,20 @@
+// Fun Makers KSA — Prisma schema
+//
+// Placeholder schema for Phase 1.1 scaffolding. The real data model lands in
+// Phase 1.2 (schema design) and is extended by every subsequent phase. Do not
+// add production models here — this file will be rewritten.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Placeholder model so `prisma generate` has something to work with during
+/// scaffolding. Replaced wholesale in Phase 1.2.
+model AppScaffold {
+  id String @id @default(uuid())
+}
