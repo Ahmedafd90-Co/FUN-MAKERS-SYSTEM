@@ -1,102 +1,143 @@
 # Module 2 — Commercial / Contracts Engine — Scope Lock
 
 **Date:** 2026-04-10
-**Status:** DECISION DOCUMENT — awaiting Ahmed's answers
+**Status:** 7 critical decisions LOCKED — remaining decisions open for review
 **Prerequisite:** Module 1 signed off (`b9de91a`)
 
 ---
 
 ## How to Read This Document
 
-Every section uses three tiers:
-
-- **CONFIRMED** — locked by frozen spec, Ahmed's explicit statements, or M1 architecture. Not up for debate.
-- **PROPOSED** — my suggestion based on the confirmed facts. Labeled as a proposal. May be wrong.
-- **NEEDS DECISION** — I don't have enough information to propose. Ahmed must answer.
-
-Ahmed's job: scan each section, confirm/correct proposals, answer decisions. Then this document becomes the input to the Module 2 design spec.
+- **LOCKED** — decided by Ahmed. Not open for change.
+- **CONFIRMED** — from frozen spec or M1 architecture.
+- **PROPOSED** — my suggestion. May be wrong. Ahmed corrects.
+- **NEEDS DECISION** — Ahmed must answer.
 
 ---
 
-## 1. Included Record Types
+## Locked Critical Decisions
 
-### CONFIRMED
+These 7 decisions were locked by Ahmed on 2026-04-10. They govern the entire Module 2 data model and architecture.
 
-The frozen spec (line 104) lists Module 2 as:
-> Commercial engine (IPA, IPC, VO, letters, claims, back charges, tax invoices)
+### LCD-1: IPA vs IPC — Separate Records
 
-Ahmed's message adds:
-> VO / change orders, notices, cost proposals, receivable linkage, client submission history, posting hooks to receivables / inflow
+> IPA = our commercial application / claim / submission record prepared internally and issued from our side.
+> IPC = our certified / validated commercial certificate record after internal review and finance check, used as the certified value basis.
+> They are separate record types and must remain separate in Module 2.
 
-This gives us a candidate set of **10 record types**:
+**Implication:** Two separate Prisma models, two separate tRPC sub-routers, two separate workflow templates, two separate screen pairs (list + detail).
 
-| # | Record Type | Source |
-|---|-------------|--------|
-| 1 | IPA (Interim Payment Application) | Frozen spec |
-| 2 | IPC (Interim Payment Certificate) | Frozen spec |
-| 3 | Variation Order (VO) | Frozen spec |
-| 4 | Change Order | Ahmed's message |
-| 5 | Cost Proposal | Ahmed's message |
-| 6 | Tax Invoice | Frozen spec |
-| 7 | Letter | Frozen spec |
-| 8 | Notice | Ahmed's message |
-| 9 | Claim | Frozen spec |
-| 10 | Back Charge | Frozen spec |
+### LCD-2: Tax Invoice Trigger
 
-### NEEDS DECISION
+> Tax invoice is not triggered from draft IPA.
+> Tax invoice should be created after the relevant certified/commercial trigger.
+> Default trigger: after IPC reaches the approved/signed certified state.
+> Tax invoice remains a separate record type, but linkable to the relevant IPC and contract.
 
-**D-1.1: Are all 10 above confirmed in M2?** Or should any be deferred?
+**Implication:** Tax Invoice has `ipcId` FK. Tax Invoice creation is gated: an IPC must be in certified/signed state before a Tax Invoice can be drafted from it.
 
-**D-1.2: VO vs Change Order — what's the relationship?**
-Options I can see (not proposing one — this is your process):
-- A) VO and Change Order are the same thing at different lifecycle stages (one record, one table)
-- B) VO is the proposal, Change Order is the executed contract amendment (two separate records, VO → CO link)
-- C) They're independent — a Change Order can exist without a prior VO
-- D) Something else
+### LCD-3: VO + Change Order = One Family with Subtypes
 
-**D-1.3: Cost Proposal — what is it?**
-Options:
-- A) A standalone record type linked to a VO (separate table, separate workflow, can have multiple revisions per VO)
-- B) A set of fields on the VO itself (cost estimate is part of the VO, not a separate record)
-- C) A document attachment on the VO (no separate record, just an uploaded file with metadata)
+> Treat VO and Change Order as one commercial family with subtype.
+> Use one engine/register family with subtype values: VO, Change Order.
+> Keeps the model cleaner while allowing different statuses or rules later.
 
-**D-1.4: Letter vs Notice — one thing or two?**
-Options:
-- A) Two separate record types with separate tables (letters are general correspondence, notices are contractual with deadlines and legal significance)
-- B) One record type with a `kind` field distinguishing general correspondence from contractual notices
-- C) Something else
+**Implication:** One Prisma model (`Variation`) with a `subtype` enum (`vo`, `change_order`). One tRPC sub-router with subtype-aware queries. Shared workflow logic, subtype-specific rules layered on top.
 
-**D-1.5: IPA vs IPC — what's the exact relationship?**
-Options:
-- A) One IPA always produces exactly one IPC (1:1)
-- B) One IPA can produce multiple partial IPCs (1:N)
-- C) One IPC can consolidate multiple IPAs (N:1)
-- D) It's flexible (M:N, though unusual)
+### LCD-4: Cost Proposal = Standalone Record
 
-**D-1.6: IPC vs Tax Invoice — what's the relationship?**
-Options:
+> Cost Proposal is a standalone supporting commercial record in the pre-VO / pre-Change Order stage.
+> It is not the same as VO approval.
+> It may later link to a VO / Change Order, but it should remain its own record type.
+
+**Implication:** Separate Prisma model. Optional `variationId` FK (nullable — can exist without a linked VO/CO). Own workflow. Own screens.
+
+### LCD-5: Correspondence = One Shared Engine with Subtypes
+
+> Use one shared correspondence engine with subtype, not separate engines.
+> Subtypes: Letter, Notice, Claim, Back Charge.
+> Share common numbering, versioning, workflow, sign, issue, and history logic.
+> Allow subtype-specific statuses and rules.
+
+**Implication:** One Prisma model (`Correspondence`) with a `subtype` enum (`letter`, `notice`, `claim`, `back_charge`). Shared base fields + subtype-specific fields (nullable or JSON). One tRPC sub-router with subtype filtering. Shared workflow template structure with subtype-specific variants.
+
+### LCD-6: Posting Trigger Points
+
+> Locked baseline posting triggers:
+> - IPA → post on internal approval (claimed exposure)
+> - IPC → post on sign (certified receivable value)
+> - VO/CO internal approval → post pending commercial exposure
+> - VO/CO client-approved → post approved contract/revenue uplift
+> - Tax Invoice → post on issue (receivable due bucket)
+> - Claim → post on issue (claim exposure)
+> - Back Charge → post on issue (recovery exposure)
+> - Cost Proposal → no financial posting by default
+> - General Letter / Notice → no financial posting by default
+
+**Implication:** 8 posting event types to register. Each event has a Zod payload schema. Events carry exposure/receivable classification for downstream M4 consumption.
+
+### LCD-7: Linear Workflows First
+
+> Keep workflows primarily linear for Module 2.
+> Do not introduce heavy conditional branching.
+> Allowed: different templates by record type, value-threshold variations, finance-check required/not-required by rule.
+> Linear-first is locked.
+
+**Implication:** M1 workflow engine is used as-is. Multiple templates per record type (e.g., standard vs high-value) to handle threshold variations. No engine extension needed.
+
+---
+
+## 1. Record Model (Post-Decisions)
+
+### LOCKED — 6 Data Models
+
+Ahmed's decisions collapse 10 logical record types into 6 Prisma models:
+
+| # | Model Name | Subtypes | Description |
+|---|------------|----------|-------------|
+| 1 | **IPA** | — | Interim Payment Application |
+| 2 | **IPC** | — | Interim Payment Certificate (linked to IPA) |
+| 3 | **Variation** | `vo`, `change_order` | VO + Change Order family |
+| 4 | **CostProposal** | — | Standalone costing record (optionally linked to Variation) |
+| 5 | **TaxInvoice** | — | VAT invoice (linked to IPC) |
+| 6 | **Correspondence** | `letter`, `notice`, `claim`, `back_charge` | Shared correspondence engine |
+
+### LOCKED — Record Relationships
+
+```
+IPA ──────→ IPC (IPA must exist and be approved before IPC is drafted)
+IPC ──────→ TaxInvoice (IPC must be certified/signed before Tax Invoice is drafted)
+CostProposal ──→ Variation (optional link — may exist independently)
+Correspondence (notice) ──→ Correspondence (claim) (optional link — claims may reference a prior notice)
+```
+
+### NEEDS DECISION (remaining)
+
+**D-1.1: IPA → IPC cardinality**
+- A) One IPA produces exactly one IPC (1:1)
+- B) One IPA can produce multiple IPCs (1:N)
+- C) Other
+
+**D-1.2: IPC → Tax Invoice cardinality**
 - A) One IPC produces exactly one Tax Invoice (1:1)
-- B) One IPC can produce multiple Tax Invoices (1:N, e.g., split billing)
-- C) One Tax Invoice can cover multiple IPCs (N:1)
-- D) Tax Invoices are not necessarily linked to IPCs (standalone)
+- B) One IPC can produce multiple Tax Invoices (1:N)
+- C) Other
 
-**D-1.7: Notice vs Claim — dependency?**
-Options:
-- A) A Claim must originate from a Notice (notice is a prerequisite)
-- B) Claims can be created independently, but optionally linked to a notice
-- C) No formal link between notices and claims in the system
+**D-1.3: Correspondence cross-subtype linking**
+Should claims be linkable to a prior notice within the correspondence model?
+- A) Yes — optional `parentCorrespondenceId` FK for linking notice → claim
+- B) No — they're independent records even within the shared model
 
-**D-1.8: Back Charge — who is it against?**
-In M2, subcontractor management doesn't exist yet (that's Module 3). Options:
-- A) Free-text subcontractor name on the back charge record
-- B) Introduce a minimal subcontractor reference table in M2 (just name + code)
-- C) Back charges deferred to M3 when subcontractor model exists
+**D-1.4: Back Charge target in M2**
+Subcontractor management is Module 3. For M2 back charges:
+- A) Free-text `targetName` field on the correspondence record
+- B) Minimal reference table (just name + code)
 
 ---
 
 ## 2. Excluded / Deferred
 
-### CONFIRMED (from frozen spec)
+### CONFIRMED
 
 | Excluded from M2 | Goes to |
 |---|---|
@@ -110,40 +151,28 @@ In M2, subcontractor management doesn't exist yet (that's Module 3). Options:
 | Visual workflow designer | Module 7+ |
 | Real e-signature provider (DocuSign, Adobe Sign) | Post-M2 |
 | Arabic/RTL | Post-M3 |
-
-### CONFIRMED (from M1 architecture)
-
-| Also excluded from M2 | Reason |
-|---|---|
-| Client portal / external access | Internal-only system (M1 principle #1) |
-| OAuth/SSO | Hardening phase, not commercial-specific |
+| Client portal / external access | Never (internal-only system) |
+| Conditional workflow branching | Locked out of M2 (LCD-7) |
 
 ### NEEDS DECISION
 
-**D-2.1: ZATCA e-invoicing**
-Saudi Arabia requires e-invoicing (ZATCA). Two phases:
-- Phase 1: Invoice with required fields (straightforward)
-- Phase 2: Real-time XML submission to ZATCA with cryptographic stamp + QR code (complex)
-
-What scope for M2?
-- A) Include ZATCA Phase 1 fields on Tax Invoice (minimum compliance)
-- B) Include full Phase 2 integration (significant scope addition)
-- C) Tax Invoices are internal records only in M2 — all ZATCA compliance deferred
+**D-2.1: ZATCA e-invoicing scope**
+- A) ZATCA Phase 1 fields on Tax Invoice (minimum compliance)
+- B) Full Phase 2 integration (complex — XML submission + QR code)
+- C) Internal records only — all ZATCA compliance deferred
 
 **D-2.2: PDF generation**
-Should M2 generate printable PDF documents (for IPAs, IPCs, invoices, letters, notices)?
-- A) Yes — PDF export for all issued documents
-- B) Yes — but only for Tax Invoices (may be required for ZATCA)
-- C) No — M2 is screens only, PDF generation deferred
+- A) PDF export for all issued commercial documents
+- B) PDF for Tax Invoices only
+- C) Screens only — PDF deferred
 
 **D-2.3: Staging/production CDK stacks**
-Frozen spec says "stamped during Module 2." Confirm this is still in M2 scope.
+Frozen spec says "stamped during Module 2." Confirm still in scope.
 
-**D-2.4: Payment receipt tracking**
-When a client pays a Tax Invoice, should M2 record that?
-- A) Yes — M2 allows marking invoices as paid (basic tracking)
-- B) No — payment tracking is entirely Module 4
-- C) M2 records payment date/amount as metadata, but full payment ledger is M4
+**D-2.4: Payment tracking**
+- A) M2 allows marking invoices as paid (basic)
+- B) All payment tracking is Module 4
+- C) M2 records payment date as metadata only
 
 ---
 
@@ -151,198 +180,154 @@ When a client pays a Tax Invoice, should M2 record that?
 
 ### CONFIRMED
 
-The 14 roles are fixed from M1. The following is confirmed from the frozen spec and Ahmed's architecture decisions:
-- Business modules register against M1 core services (workflow, posting, audit, RBAC)
-- Every commercial record is project-scoped
+- 14 roles fixed from M1
+- All records project-scoped
 - All mutations write audit logs
 
 ### NEEDS DECISION
 
 **D-3.1: Who creates each record type?**
 
-I need to know the **primary creator** (the role that drafts the record) for each type. This determines who gets `create` and `edit` permissions.
-
-| Record Type | Who creates the draft? |
+| Record / Subtype | Primary Creator(s)? |
 |---|---|
 | IPA | ? |
 | IPC | ? |
-| VO | ? |
-| Change Order | ? |
+| Variation (vo) | ? |
+| Variation (change_order) | ? |
 | Cost Proposal | ? |
 | Tax Invoice | ? |
-| Letter | ? |
-| Notice | ? |
-| Claim | ? |
-| Back Charge | ? |
-
-For each, tell me the role code(s) from the 14-role list. If multiple roles can create, list all.
+| Correspondence (letter) | ? |
+| Correspondence (notice) | ? |
+| Correspondence (claim) | ? |
+| Correspondence (back_charge) | ? |
 
 ---
 
-## 4. Record-by-Record Lifecycle Statuses
+## 4. Lifecycle Statuses
 
 ### CONFIRMED
 
-- All records have a status field
-- Terminal statuses cannot be reopened (M1 pattern from workflow engine)
-- Status transitions trigger workflow steps, posting events, and audit entries
+- All records have a `status` field
+- Terminal statuses cannot be reopened (M1 pattern)
 - Signed/issued records are immutable (M1 invariant)
+- Posting fires at specific status transitions (LCD-6)
 
 ### NEEDS DECISION
 
-I need Ahmed to define or confirm the lifecycle for each record type. This is the most critical section — statuses drive dashboards, filters, posting eligibility, and audit clarity.
+For each model, confirm or correct the proposed statuses. Note: the Variation and Correspondence families may have **shared base statuses** with **subtype-specific additions**.
 
 **D-4.1: IPA lifecycle**
 
-Proposed candidate statuses (correct, add, or remove):
-
-`draft` → `submitted` → `under_review` → `finance_check` → `approved` → `issued` → (terminal)
+Proposed: `draft` → `submitted` → `under_review` → `finance_check` → `approved` → `issued`
 
 Questions:
-- Is `finance_check` a separate status, or does it happen within `under_review`?
-- Is `issued` terminal? Or can an issued IPA be revised/superseded?
-- When a revised IPA is needed for the same period: is the old one `superseded`, `cancelled`, or edited in place?
+- Is `finance_check` a separate status or part of `under_review`?
+- Is `issued` terminal, or can an issued IPA be superseded?
+- Revised IPA for same period: superseded status, cancelled, or edit-in-place?
 
 **D-4.2: IPC lifecycle**
 
-Proposed candidate statuses:
-
-`draft` → `under_review` → `finance_check` → `certified` → `issued` → (terminal)
+Proposed: `draft` → `under_review` → `finance_check` → `certified` → `issued`
 
 Questions:
-- Is `certified` and `issued` two separate steps, or is certification the same as issuance?
+- Are `certified` and `issued` two separate steps?
 - Can an IPC be rejected back to IPA revision?
 
-**D-4.3: VO lifecycle**
+**D-4.3: Variation lifecycle**
 
-Proposed candidate statuses:
+This model has subtypes (vo, change_order). Statuses may differ.
 
-`draft` → `submitted` → `under_review` → `costing` → `approved_internal` → `submitted_to_client` → `approved_client` → `executed` → (terminal)
+Proposed for **vo** subtype:
+`draft` → `submitted` → `under_review` → `costing` → `approved_internal` → `submitted_to_client` → `approved_client` → `executed`
 
-Questions:
-- Is `costing` a VO status (paused while cost proposal is prepared)? Or does costing happen outside the VO lifecycle?
-- Are `approved_internal` and `approved_client` two distinct stages? Or is there just one approval?
-- Is `executed` the terminal state, meaning a Change Order was issued?
-
-**D-4.4: Change Order lifecycle** (if separate from VO per D-1.2)
-
-Proposed candidate statuses:
-
-`draft` → `under_review` → `approved` → `executed` → (terminal)
-
-**D-4.5: Cost Proposal lifecycle** (if standalone per D-1.3)
-
-Proposed candidate statuses:
-
-`draft` → `submitted` → `under_review` → `approved` → `submitted_to_client` → `accepted` → (terminal)
+Proposed for **change_order** subtype:
+`draft` → `under_review` → `approved` → `executed`
 
 Questions:
-- When a cost proposal is rejected, does a new revision replace it (`superseded` status)?
+- Is `costing` a VO status, or does costing happen outside the VO lifecycle?
+- Are internal and client approval two distinct stages?
+- Does `executed` mean the variation is contractually binding?
+- Do both subtypes share the same status set with some statuses unused by one subtype? Or distinct status sets?
 
-**D-4.6: Tax Invoice lifecycle**
+**D-4.4: Cost Proposal lifecycle**
 
-Proposed candidate statuses:
-
-`draft` → `under_review` → `approved` → `issued` → (terminal)
-
-Questions:
-- Should there be a `paid` status in M2? Or is that Module 4?
-- Should there be a `void` status for cancelled-after-issue (credit note scenario)?
-
-**D-4.7: Letter lifecycle**
-
-Proposed candidate statuses:
-
-`draft` → `under_review` → `approved` → `issued` → (terminal)
+Proposed: `draft` → `submitted` → `under_review` → `approved` → `submitted_to_client` → `accepted`
 
 Questions:
-- Do all letters require approval? Or can some be sent directly (informal)?
+- When rejected, does a revision replace it (`superseded` status)?
 
-**D-4.8: Notice lifecycle**
+**D-4.5: Tax Invoice lifecycle**
 
-Proposed candidate statuses:
-
-`draft` → `under_review` → `approved` → `issued` → (terminal)
+Proposed: `draft` → `under_review` → `approved` → `issued`
 
 Questions:
-- Should the system track recipient acknowledgment (`acknowledged` status)?
-- Should there be an `expired` status for response deadlines that pass?
-- Or is the notice terminal at `issued` with response tracking deferred?
+- `paid` status in M2? Or Module 4?
+- `void` status for cancelled-after-issue (credit note)?
 
-**D-4.9: Claim lifecycle**
+**D-4.6: Correspondence lifecycle**
 
-Proposed candidate statuses:
+This model has subtypes (letter, notice, claim, back_charge). The shared engine should have a base status set, with subtype-specific extensions.
 
-`draft` → `submitted` → `under_review` → `approved_internal` → `submitted_to_client` → `under_negotiation` → `settled` → (terminal)
+Proposed **shared base** statuses:
+`draft` → `submitted` → `under_review` → `approved` → `issued`
+
+Proposed **subtype-specific additions**:
+
+| Subtype | Additional Statuses? |
+|---|---|
+| letter | None — base set may be sufficient |
+| notice | `acknowledged`, `expired`? Or terminal at `issued`? |
+| claim | `submitted_to_client`, `under_negotiation`, `settled`? (extends past `issued`) |
+| back_charge | `disputed`, `resolved`? |
 
 Questions:
-- When settled for a partial amount, does the record store both claimed and settled amounts?
-- Or does partial settlement create a separate linked record?
-
-**D-4.10: Back Charge lifecycle**
-
-Proposed candidate statuses:
-
-`draft` → `submitted` → `under_review` → `approved` → `issued` → (terminal)
-
-Questions:
-- Should there be a dispute flow (`disputed` → `resolved`)?
-- Or are disputes handled outside the system in M2?
+- Does the shared engine use one status set with some statuses only valid for certain subtypes?
+- Or does each subtype get its own full status list?
+- Claims have a negotiation lifecycle after issuance — how does that fit the shared model?
 
 ---
 
-## 5. Record-by-Record Workflow Path
+## 5. Workflow Paths
 
-### CONFIRMED
+### LOCKED
 
-- M1 workflow engine is **linear multi-step** (Step 1 → Step 2 → Step 3 → done)
-- Each step has an approver resolved by role within the project
-- Workflow templates use a `recordType` string (e.g., `"ipa"`)
-- Steps support: approve, reject, return (to prior step), cancel
+- Linear workflows only (LCD-7)
+- Different templates per record type allowed
+- Value-threshold template variations allowed
+- Finance-check required/not-required by rule
 
 ### NEEDS DECISION
 
-**D-5.1: Linear vs conditional workflows**
-The M1 engine is linear. Does any M2 record type need conditional routing? Examples of conditional routing:
-- "If VO value > $100K, add Executive Approver step"
-- "If claim type is time-only, skip finance check"
+**D-5.1: Workflow path per record type**
 
-If yes, the M1 engine needs extension before M2 implementation. If no, we proceed with linear.
-
-**D-5.2: Workflow path per record type**
-
-For each record type, I need:
-1. The ordered approval steps (who reviews, in what sequence)
-2. Whether a finance check step is included
-3. Who signs the record
-4. Who issues the record (marks it as formally transmitted)
-
-Please fill in or correct:
-
-| Record Type | Approval Steps (in order) | Finance Check? | Signatory | Issue Controller |
+| Record / Subtype | Approval Steps (in order)? | Finance Check? | Signatory? | Issue Controller? |
 |---|---|---|---|---|
 | IPA | ? | ? | ? | ? |
 | IPC | ? | ? | ? | ? |
-| VO | ? | ? | ? | ? |
-| Change Order | ? | ? | ? | ? |
+| Variation (vo) | ? | ? | ? | ? |
+| Variation (change_order) | ? | ? | ? | ? |
 | Cost Proposal | ? | ? | ? | ? |
 | Tax Invoice | ? | ? | ? | ? |
-| Letter | ? | ? | ? | ? |
-| Notice | ? | ? | ? | ? |
-| Claim | ? | ? | ? | ? |
-| Back Charge | ? | ? | ? | ? |
+| Correspondence (letter) | ? | ? | ? | ? |
+| Correspondence (notice) | ? | ? | ? | ? |
+| Correspondence (claim) | ? | ? | ? | ? |
+| Correspondence (back_charge) | ? | ? | ? | ? |
+
+**D-5.2: VO — one workflow or two?**
+- A) One continuous workflow covering internal approval through client submission
+- B) Two separate workflows (internal approval → then separate client submission workflow)
 
 **D-5.3: Executive Approver involvement**
-When does the Executive Approver enter a workflow?
-- A) Only for records above a value threshold (what threshold?)
+- A) Only above a value threshold (what threshold?)
 - B) Only for specific record types (which?)
-- C) Not used in standard workflows — available via override only
+- C) Available via override only, not in standard workflows
 - D) Other
 
-**D-5.4: VO — one workflow or two?**
-If VO has both internal approval and client submission, is that:
-- A) One continuous workflow (internal steps → client-facing steps)
-- B) Two separate workflows (internal approval workflow → then a separate client submission workflow)
+**D-5.4: Correspondence workflow sharing**
+Given the shared correspondence engine (LCD-5):
+- A) One workflow template for all subtypes, same steps
+- B) Separate workflow template per subtype (letter template, notice template, claim template, back charge template)
+- C) Shared base template with subtype-specific step additions
 
 ---
 
@@ -351,28 +336,28 @@ If VO has both internal approval and client submission, is that:
 ### CONFIRMED
 
 - Finance and Cost Controller are separate roles (M1)
-- Finance checks are a workflow step, not a separate process
+- Finance-check required/not-required by rule is allowed (LCD-7)
 
 ### PROPOSED
 
-| Record Type | Finance Check Needed? | Proposed Checker |
+| Record / Subtype | Finance Check? | Proposed Checker |
 |---|---|---|
 | IPA | Likely yes | Finance |
 | IPC | Likely yes | Finance |
-| VO | Uncertain — costing may be separate | — |
-| Change Order | Uncertain | — |
+| Variation (vo) | Uncertain | — |
+| Variation (change_order) | Uncertain | — |
 | Cost Proposal | Likely yes | Cost Controller |
 | Tax Invoice | Likely yes | Finance |
-| Letter | Likely no | — |
-| Notice | Likely no | — |
-| Claim | Likely yes | Cost Controller |
-| Back Charge | Likely yes | Finance |
+| Correspondence (letter) | Likely no | — |
+| Correspondence (notice) | Likely no | — |
+| Correspondence (claim) | Likely yes | Cost Controller |
+| Correspondence (back_charge) | Likely yes | Finance |
 
 ### NEEDS DECISION
 
-**D-6.1: Confirm or correct** the table above.
+**D-6.1:** Confirm or correct the table above.
 
-**D-6.2: Finance vs Cost Controller split** — is the rule "Finance checks payment-related records, Cost Controller checks costing and claims"? Or different?
+**D-6.2:** Finance vs Cost Controller split — is the rule "Finance checks payment-related records, Cost Controller checks costing and claims"? Or different?
 
 ---
 
@@ -380,212 +365,214 @@ If VO has both internal approval and client submission, is that:
 
 ### CONFIRMED
 
-- M1 digital signing service exists (internal SHA-256 hash capture)
-- Signed records are immutable (Prisma middleware enforced)
-- All M1 issued documents get locked after issuance
+- M1 digital signing service (internal SHA-256 hash capture)
+- Signed records are immutable (Prisma middleware)
+- Issued records are locked
 
 ### NEEDS DECISION
 
-**D-7.1: Is signing required before issuance for all record types?** Or can some types (e.g., informal letters) be issued without a signature?
+**D-7.1:** Is signing required before issuance for all record types? Or can some types (e.g., informal letters) be issued without a signature?
 
 **D-7.2: Reference number format**
-What format does Pico Play use for issued commercial documents?
 - A) `{ProjectCode}-{TypeCode}-{NNN}` (e.g., PROJ01-IPA-001)
 - B) Different format (specify)
-- C) Manual entry, not auto-generated
+- C) Manual entry
+
+Note: With the correspondence shared engine, subtypes would use their own type code (LTR, NTC, CLM, BC).
 
 **D-7.3: Client acknowledgment tracking**
-For records issued to the client (IPA, IPC, VO, Tax Invoice, Notice, Claim):
-- A) System tracks client acknowledgment/response as a status
-- B) Client interaction is external — system just records the issue date
-- C) Some records track client response, others don't (which ones?)
+- A) System tracks client acknowledgment as a status
+- B) Client interaction is external — system records issue date only
+- C) Some record types track client response, others don't (which ones?)
 
 ---
 
 ## 8. Posting Trigger Rules
 
-### CONFIRMED
+### LOCKED (LCD-6)
 
-- All posting goes through M1 posting engine (`postingService.post()`)
-- Each event type has a Zod-validated payload schema
-- Events are idempotent (idempotency key unique constraint)
-- Reversals are additive (never destructive)
-- Business modules never write financial tables directly
-
-### NEEDS DECISION
-
-**D-8.1: Which status transitions fire posting events?**
-
-This is one of the decisions Ahmed explicitly flagged. For each record type, I need to know **if** and **when** a posting event fires.
-
-| Record Type | Does it post? | At which status transition? |
+| Event | Fires When | Exposure Type |
 |---|---|---|
-| IPA | ? | ? |
-| IPC | ? | ? |
-| VO (internal approval) | ? | ? |
-| VO (client approval) | ? | ? |
-| Change Order | ? | ? |
-| Cost Proposal | ? | ? |
-| Tax Invoice | ? | ? |
-| Letter | ? | ? |
-| Notice | ? | ? |
-| Claim (submission) | ? | ? |
-| Claim (settlement) | ? | ? |
-| Back Charge | ? | ? |
+| `IPA_APPROVED` | IPA → internal approval | Claimed exposure |
+| `IPC_SIGNED` | IPC → sign/certification | Certified receivable |
+| `VARIATION_APPROVED_INTERNAL` | VO/CO → internal approval | Pending commercial exposure |
+| `VARIATION_APPROVED_CLIENT` | VO/CO → client-approved | Approved contract/revenue uplift |
+| `TAX_INVOICE_ISSUED` | Tax Invoice → issued | Receivable due |
+| `CLAIM_ISSUED` | Claim → issued | Claim exposure |
+| `BACK_CHARGE_ISSUED` | Back Charge → issued | Recovery exposure |
+| *(Cost Proposal)* | No posting | — |
+| *(Letter)* | No posting | — |
+| *(Notice)* | No posting | — |
 
-**D-8.2: Does IPA approval have a financial posting effect?** Or is IPA just a claim with no financial effect until IPC certification?
+### NEEDS DECISION (remaining)
 
-**D-8.3: Contract value tracking**
-When a VO or Change Order is approved/executed, the project's contract value changes. Should M2:
-- A) Store a `contractValue` field on Project that posting events update
-- B) Calculate contract value on-the-fly from VO/CO event history
-- C) Defer contract value tracking to Module 4
+**D-8.1: Contract value tracking**
+When a VO/CO is approved, contract value changes. Should M2:
+- A) Store a `contractValue` field on Project, updated by posting events
+- B) Calculate on-the-fly from VO/CO event history
+- C) Defer to Module 4
 
-**D-8.4: Any posting events for non-financial records (letters, notices)?**
-- A) No — letters and notices don't post
-- B) Yes — informational events logged but with no financial effect
-- C) Other
+**D-8.2: Posting event naming**
+The locked triggers above use proposed event type names. Confirm or rename:
+- `IPA_APPROVED`, `IPC_SIGNED`, `VARIATION_APPROVED_INTERNAL`, `VARIATION_APPROVED_CLIENT`, `TAX_INVOICE_ISSUED`, `CLAIM_ISSUED`, `BACK_CHARGE_ISSUED`
+
+Note: Since VO and Change Order share the `Variation` model, the posting event carries `subtype` in its payload to distinguish them.
 
 ---
 
-## 9. Receivable / Inflow Linkage Rules
+## 9. Receivable / Inflow Linkage
 
 ### CONFIRMED
 
-- Ahmed listed "receivable linkage" and "posting hooks to receivables / inflow" in M2 scope
-- Module 4 handles budget, cost, cashflow
+- "Receivable linkage" and "posting hooks to receivables / inflow" are in M2 scope (Ahmed's message)
 - Posting is the only path to financial state (M1 principle)
+- Module 4 handles full budget/cost/cashflow
 
 ### NEEDS DECISION
 
 **D-9.1: Does M2 introduce a receivable table?**
-- A) Yes — M2 creates a receivable model. Posting events create entries. M2 tracks basic status. M4 extends with full payment/cashflow tracking.
-- B) No — M2 only fires posting events. The receivable ledger is built entirely in Module 4 from M2's posting events.
-- C) Minimal — M2 creates receivable entries but only tracks basic state (outstanding/invoiced). No payment, aging, or write-off until M4.
+- A) Yes — posting events create receivable entries. M2 tracks basic status (outstanding/invoiced). M4 extends with payment/cashflow.
+- B) No — M2 fires posting events only. M4 builds receivable ledger from events.
+- C) Minimal — receivable entries created but read-only summary view. No status management until M4.
 
-**D-9.2: If receivable table exists, what creates a receivable entry?**
+**D-9.2:** If receivable table exists, which events create entries?
 
 | Event | Creates receivable? |
 |---|---|
-| IPC certified | ? |
-| Tax Invoice issued | ? |
-| Claim settled | ? |
-| Back Charge issued | ? |
+| IPC_SIGNED | ? |
+| TAX_INVOICE_ISSUED | ? |
+| CLAIM_ISSUED | ? |
+| BACK_CHARGE_ISSUED | ? |
 
-**D-9.3: Payment tracking in M2**
-- A) M2 allows manually marking a receivable/invoice as paid
+**D-9.3: Payment tracking boundary**
+- A) M2 allows marking receivables/invoices as paid
 - B) All payment tracking is Module 4
-- C) M2 records payment date as metadata but no payment ledger
+- C) M2 records payment date as metadata only
 
 ---
 
-## 10. Required Forms and Key Fields
+## 10. Forms and Key Fields
 
 ### CONFIRMED
 
-- All records are project-scoped (`projectId` FK, M1 isolation)
-- All records get standard audit fields (createdBy, createdAt, updatedAt)
-- All records get a `status` field
-- All money fields use Decimal type
-- Currency comes from M1 reference data
+- All records project-scoped (`projectId` FK)
+- Standard audit fields on all records
+- Decimal for money, currency from M1 reference data
+- Variation model has `subtype` enum (`vo`, `change_order`)
+- Correspondence model has `subtype` enum (`letter`, `notice`, `claim`, `back_charge`)
 
-### PROPOSED
-
-For each record type, I've listed the **key business fields** (not system/audit fields). These are proposals — correct or extend.
+### PROPOSED — Model-Specific Fields
 
 **IPA:** periodNumber, periodFrom, periodTo, grossAmount, retentionRate, retentionAmount, previousCertified, currentClaim, advanceRecovery, otherDeductions, netClaimed, currency, description
 
 **IPC:** ipaId (FK), certifiedAmount, retentionAmount, adjustments, netCertified, certificationDate, currency, remarks
 
-**VO:** title, description, reason, initiatedBy, costImpact, timeImpactDays, contractClause, currency
+**Variation (shared):** subtype, title, description, reason, costImpact, timeImpactDays, currency
+**Variation (vo-specific):** initiatedBy, contractClause
+**Variation (change_order-specific):** variationId (FK to parent VO, optional per D-1.3 decision), originalContractValue, adjustmentAmount, newContractValue
 
-**Change Order:** voId (FK?), originalContractValue, adjustmentAmount, newContractValue, timeAdjustmentDays, description, currency
+**CostProposal:** variationId (FK, nullable), revisionNumber, estimatedCost, estimatedTimeDays, methodology, costBreakdown, currency
 
-**Cost Proposal:** voId (FK?), revisionNumber, estimatedCost, estimatedTimeDays, methodology, costBreakdown, currency
+**TaxInvoice:** ipcId (FK), invoiceNumber, invoiceDate, grossAmount, vatRate, vatAmount, totalAmount, dueDate, currency, buyerName, buyerTaxId, sellerTaxId
 
-**Tax Invoice:** ipcId (FK?), invoiceNumber, invoiceDate, grossAmount, vatRate, vatAmount, totalAmount, dueDate, currency, buyerName, buyerTaxId, sellerTaxId
-
-**Letter:** letterType(?), subject, body, recipientName, recipientOrg, inReplyTo (FK?)
-
-**Notice:** noticeType(?), subject, body, contractClause, responseDeadline, recipientName, recipientOrg
-
-**Claim:** claimType(?), title, description, claimedAmount, claimedTimeDays, settledAmount, settledTimeDays, contractClause, noticeId (FK?), currency
-
-**Back Charge:** subcontractorName, reason, category(?), chargedAmount, evidenceDescription, currency
+**Correspondence (shared):** subtype, subject, body, recipientName, recipientOrg, currency (nullable — only for financial subtypes)
+**Correspondence (notice-specific):** noticeType, contractClause, responseDeadline
+**Correspondence (claim-specific):** claimType, claimedAmount, claimedTimeDays, settledAmount, settledTimeDays, contractClause
+**Correspondence (back_charge-specific):** targetName (free text subcontractor), category, chargedAmount, evidenceDescription
+**Correspondence (letter-specific):** letterType, inReplyToId (FK, nullable)
 
 ### NEEDS DECISION
 
-**D-10.1: IPA line items** — Does IPA have itemized breakdown (table of work items with quantities and amounts)? Or is it a single summary record?
+**D-10.1: IPA line items** — Itemized breakdown table? Or single summary record?
 
-**D-10.2: VO line items** — Same question. Does VO have individual scope items with separate costs? Or single summary?
+**D-10.2: VO line items** — Individual scope items with costs? Or single summary?
 
-**D-10.3: Cost breakdown structure** — Is cost proposal breakdown structured (labor/materials/equipment/overhead) or free-form text?
+**D-10.3: Cost breakdown structure** — Structured JSON (labor/materials/equipment/overhead) or free-form?
 
-**D-10.4: VAT rate** — Always 15% (Saudi standard)? Or configurable per project or entity?
+**D-10.4: VAT rate** — Always 15% or configurable per project/entity?
 
-**D-10.5: Enum values** — For any enum fields (letterType, noticeType, claimType, backChargeCategory, initiatedBy), what are the exact values? I can propose if you'd prefer.
+**D-10.5: Subtype-specific fields for Correspondence** — The shared model needs subtype-specific fields. Options:
+- A) Nullable columns on the shared table (simple, some columns unused per subtype)
+- B) JSON `metadata` column for subtype-specific data
+- C) Separate extension tables per subtype (normalized but more complex)
 
-**D-10.6: Document attachments** — Should all commercial records support linking to M1 documents? (M1 Document model already has nullable `recordType` + `recordId` fields for this.)
+**D-10.6: Subtype-specific fields for Variation** — Same question as D-10.5 but for VO vs Change Order.
 
-**D-10.7: Internal notes/comments** — Should records have a comments thread for internal discussion during review? Or is the workflow step's comment field enough?
+**D-10.7: Enum values** — Exact values needed for: letterType, noticeType, claimType, backChargeCategory, initiatedBy. I can propose if preferred.
+
+**D-10.8: Document attachments** — All commercial records support linking to M1 documents via `recordType` + `recordId`?
+
+**D-10.9: Internal comments** — Comments thread per record? Or workflow step comments sufficient?
 
 ---
 
-## 11. Required Screens
+## 11. Screens
 
 ### CONFIRMED
 
-- All commercial screens are inside the project workspace (project-scoped)
-- M1 project sidebar gets a new "Commercial" section (replacing the placeholder)
-- M1 patterns: list view (paginated table) + detail view per record type
-- No new admin screens — M2 uses existing M1 admin (workflow templates, roles & permissions)
+- All commercial screens are project-scoped
+- M1 sidebar "Commercial" placeholder becomes active
+- M1 list + detail pattern per record type
+- No new admin screens (M2 uses existing M1 admin)
 
 ### PROPOSED
 
-**22 project-scoped screens:**
-- Commercial Dashboard (summary for the project)
-- List + Detail for each of the 10 record types = 20 screens
-- Receivable Summary (if D-9.1 = A or C) = 1 screen
+Given the 6-model structure, proposed screens:
+
+| Screen | Count |
+|---|---|
+| Commercial Dashboard | 1 |
+| IPA List + Detail | 2 |
+| IPC List + Detail | 2 |
+| Variation List + Detail (filtered by subtype) | 2 |
+| Cost Proposal List + Detail | 2 |
+| Tax Invoice List + Detail | 2 |
+| Correspondence List + Detail (filtered by subtype) | 2 |
+| Receivable Summary (if D-9.1 = A or C) | 1 |
+| **Total** | **14–15** |
+
+Note: Variation and Correspondence list screens can filter by subtype (tabs or dropdown), so you get focused views (e.g., "VOs only" or "Claims only") without separate screens.
 
 ### NEEDS DECISION
 
 **D-11.1: Client submission history**
-Ahmed listed "client submission history" in M2 scope. Is this:
-- A) A separate screen showing all records ever issued to the client across all commercial types
-- B) A filter/view within each list screen
+Ahmed listed this in M2 scope. Is it:
+- A) A separate screen showing all issued records across all types
+- B) A filter/view mode on each list screen
 - C) A section on the commercial dashboard
 - D) Something else
 
 **D-11.2: Cross-project commercial view**
-Should there be a portfolio-level commercial summary (across all projects)?
-- A) Yes — accessible to roles with `cross_project.read`
-- B) No — all commercial data is strictly project-scoped in M2
-- C) Deferred to Module 5 (KPI/PMO)
+- A) Yes — accessible to `cross_project.read` roles
+- B) No — strictly project-scoped in M2
+- C) Deferred to Module 5
+
+**D-11.3: Subtype navigation**
+For Variation and Correspondence models, should the sidebar show:
+- A) One "Variations" link + one "Correspondence" link (with subtype tabs inside)
+- B) Separate sidebar links per subtype (VO, Change Orders, Letters, Notices, Claims, Back Charges)
+- C) Grouped sections (e.g., "Variations" section with VO + CO sub-links)
 
 ---
 
-## 12. Module 2 Reports / Dashboards
-
-### CONFIRMED
-
-- Ahmed listed "client submission history" and "posting hooks to receivables / inflow" as M2 scope
-- M1 has a home dashboard with summary cards — M2 can extend it
+## 12. Reports / Dashboards
 
 ### PROPOSED
 
-**Project commercial dashboard cards:**
-- Payment summary (total certified, total invoiced, total outstanding)
-- Active IPAs count + total claimed
-- Pending VOs count + total cost impact
-- Open claims count + total claimed
+**Commercial dashboard cards:**
+- Payment summary (certified total, invoiced total, outstanding)
+- Active IPAs (count + total claimed)
+- Pending variations (count + total cost impact)
+- Open claims (count + total claimed)
+- Recent commercial activity (last 10 audit entries)
 
 ### NEEDS DECISION
 
-**D-12.1: Receivable aging** — Should the dashboard show receivable aging (0-30 / 31-60 / 61-90 / 90+ days)? Or is aging a Module 4 concept?
+**D-12.1:** Receivable aging (0-30 / 31-60 / 61-90 / 90+ days) — M2 dashboard or Module 4 concept?
 
-**D-12.2: Any other dashboard cards or views needed?**
+**D-12.2:** Client submission history — dashboard section or separate screen? (Related to D-11.1)
 
-**D-12.3: Does "client submission history"** appear here as a dashboard view, or as a separate screen (see D-11.1)?
+**D-12.3:** Any other dashboard cards needed?
 
 ---
 
@@ -593,55 +580,62 @@ Should there be a portfolio-level commercial summary (across all projects)?
 
 ### CONFIRMED
 
-- 14 roles from M1 (fixed list)
-- `master_admin` gets all permissions (wildcard)
+- 14 roles from M1 (fixed)
+- `master_admin` gets all permissions
+- PMO is view-only + `cross_project.read`
 - Permission code pattern: `{resource}.{action}`
-- PMO is view-only + `cross_project.read` (M1 principle #3)
-- M1 non-admin roles are stub-mapped — M2 is where they get real permissions
+
+### PROPOSED — Permission Codes
+
+With the 6-model structure:
+
+| Resource | Actions |
+|---|---|
+| `ipa` | `view`, `create`, `edit`, `submit`, `approve`, `sign`, `issue` |
+| `ipc` | `view`, `create`, `edit`, `certify`, `sign`, `issue` |
+| `variation` | `view`, `create`, `edit`, `submit`, `approve`, `sign`, `issue` |
+| `cost_proposal` | `view`, `create`, `edit`, `submit`, `approve` |
+| `tax_invoice` | `view`, `create`, `edit`, `approve`, `sign`, `issue` |
+| `correspondence` | `view`, `create`, `edit`, `submit`, `approve`, `sign`, `issue` |
+| `receivable` | `view` (if table exists) |
+| `commercial` | `dashboard` |
+
+Note: Subtype-level permissions may be needed (e.g., "can create claims but not letters"). Options:
+- A) Permissions are per-model only (`correspondence.create` covers all subtypes)
+- B) Permissions are per-subtype (`correspondence.claim.create` vs `correspondence.letter.create`)
 
 ### NEEDS DECISION
 
-**D-13.1: Full matrix**
+**D-13.1: Permission granularity** — per-model or per-subtype?
 
-I need Ahmed to define who can do what with each commercial record type. The operations are:
+**D-13.2: Full role matrix**
 
-| Code | Meaning |
-|---|---|
-| **C** | Create (draft a new record) |
-| **E** | Edit (modify a draft) |
-| **S** | Submit (send for review) |
-| **R** | Review / Approve (act in workflow) |
-| **F** | Finance check (validate amounts) |
-| **G** | Sign (digital signature) |
-| **I** | Issue (formally transmit, assign reference number) |
-| **V** | View only |
+Operations: **C** = create, **E** = edit draft, **S** = submit, **R** = review/approve, **F** = finance check, **G** = sign, **I** = issue, **V** = view only
 
-Fill in or correct:
+| Role | IPA | IPC | Variation | CostProposal | TaxInvoice | Correspondence |
+|------|-----|-----|-----------|-------------|-----------|----------------|
+| master_admin | All | All | All | All | All | All |
+| project_director | ? | ? | ? | ? | ? | ? |
+| project_manager | ? | ? | ? | ? | ? | ? |
+| contracts_manager | ? | ? | ? | ? | ? | ? |
+| qs_commercial | ? | ? | ? | ? | ? | ? |
+| finance | ? | ? | ? | ? | ? | ? |
+| cost_controller | ? | ? | ? | ? | ? | ? |
+| site_team | ? | ? | ? | ? | ? | ? |
+| design | ? | ? | ? | ? | ? | ? |
+| qa_qc | ? | ? | ? | ? | ? | ? |
+| procurement | ? | ? | ? | ? | ? | ? |
+| document_controller | ? | ? | ? | ? | ? | ? |
+| pmo | V | V | V | V | V | V |
+| executive_approver | ? | ? | ? | ? | ? | ? |
 
-| Role | IPA | IPC | VO | CO | CP | Invoice | Letter | Notice | Claim | Back Charge |
-|------|-----|-----|----|----|----|---------|---------|---------|---------|----|
-| master_admin | All | All | All | All | All | All | All | All | All | All |
-| project_director | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| project_manager | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| contracts_manager | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| qs_commercial | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| finance | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| cost_controller | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| site_team | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| design | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| qa_qc | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| procurement | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| document_controller | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-| pmo | V | V | V | V | V | V | V | V | V | V |
-| executive_approver | ? | ? | ? | ? | ? | ? | ? | ? | ? | ? |
-
-If this is too much to fill at once, we can do it in two passes:
+If this is too much at once, we can do it in passes:
 1. First confirm which roles are view-only across all commercial types
-2. Then detail the active roles one at a time
+2. Then detail active roles one at a time
 
 ---
 
-## 14. Module 2 Risks and Non-Goals
+## 14. Risks and Non-Goals
 
 ### CONFIRMED NON-GOALS
 
@@ -650,67 +644,67 @@ If this is too much to fill at once, we can do it in two passes:
 | Procurement workflows | Module 3 |
 | Budget/cost/cashflow | Module 4 |
 | KPI dashboards | Module 5 |
-| Client portal | Internal-only system |
+| Client portal | Internal-only |
+| Conditional workflow branching | Locked out (LCD-7) |
 | Multi-currency conversion | M2 stores currency; conversion is M4 |
-| Approval delegation | Enhancement, not core M2 |
-| Batch operations | Enhancement |
-| Historical data import | One-time operation, outside platform |
 | AI/OCR features | Module 6-7 |
+| Approval delegation | Enhancement |
+| Batch operations | Enhancement |
+| Historical data import | Outside platform |
 
 ### RISKS
 
-| # | Risk | Impact |
-|---|------|--------|
-| 1 | Domain model wrong — record relationships, statuses, or workflows don't match Pico Play's actual process | High — rework after build |
-| 2 | Workflow engine needs conditional branching — D-5.1 determines this | Medium — engine extension before M2 build |
-| 3 | ZATCA scope creep — Phase 2 is complex and could dominate M2 | Medium — lock D-2.1 early |
-| 4 | Receivable boundary with M4 unclear — leads to rework or gaps | Medium — lock D-9.1 early |
-| 5 | Permission matrix errors — wrong RBAC = security/usability issues | Medium — Ahmed confirms matrix |
-| 6 | Too many record types for one module — 10 types is a lot | Medium — Ahmed may want to split M2 into M2a/M2b |
-
-### NEEDS DECISION
-
-**D-14.1: Module size** — 10 record types with workflows, screens, posting, and permissions is significant scope. Should M2 be split into sub-phases (e.g., M2a = IPA/IPC/VO/CO/CP/Invoice, M2b = Letters/Notices/Claims/Back Charges)? Or keep as one module?
+| # | Risk | Severity | Mitigation |
+|---|------|----------|------------|
+| 1 | Shared model complexity — Variation and Correspondence families need clean subtype handling | Medium | Lock D-10.5 / D-10.6 (field strategy) early |
+| 2 | ZATCA scope creep | Medium | Lock D-2.1 before spec |
+| 3 | Receivable boundary with M4 | Medium | Lock D-9.1 before spec |
+| 4 | Permission matrix errors | Medium | Ahmed confirms D-13.2 |
+| 5 | Status model complexity in shared Correspondence engine | Medium | Lock D-4.6 (shared vs per-subtype statuses) |
+| 6 | Claim post-issuance lifecycle (negotiation/settlement) doesn't fit simple linear workflow | Medium | May need a second workflow or manual status transitions post-issue |
 
 ---
 
 ## Decision Index
 
-### Critical — blocks spec writing
+### Resolved (7 critical — LOCKED)
 
-| ID | Question | Quick Reference |
-|----|----------|-----------------|
-| D-1.2 | VO vs Change Order model | §1 |
-| D-1.3 | Cost Proposal role | §1 |
-| D-1.4 | Letter vs Notice model | §1 |
-| D-1.5 | IPA vs IPC relationship | §1 |
-| D-1.6 | IPC vs Tax Invoice relationship | §1 |
+| ID | Decision | Answer |
+|----|----------|--------|
+| LCD-1 | IPA vs IPC | Separate records, separate models |
+| LCD-2 | Tax Invoice trigger | After IPC certified/signed |
+| LCD-3 | VO vs Change Order | One family, subtype enum |
+| LCD-4 | Cost Proposal | Standalone record, optionally linked to Variation |
+| LCD-5 | Correspondence model | One shared engine, subtypes: letter, notice, claim, back_charge |
+| LCD-6 | Posting triggers | 8 events locked (see §LCD-6) |
+| LCD-7 | Workflow model | Linear-first, no conditional branching |
+
+### Open — Blocks Spec Writing
+
+| ID | Question | Section |
+|----|----------|---------|
+| D-1.1 | IPA → IPC cardinality | §1 |
+| D-1.2 | IPC → Tax Invoice cardinality | §1 |
 | D-2.1 | ZATCA scope | §2 |
-| D-5.1 | Linear vs conditional workflows | §5 |
-| D-8.1 | Posting trigger points | §8 |
+| D-4.1–4.6 | Status models per record type | §4 |
+| D-5.1 | Workflow steps per record type | §5 |
 | D-9.1 | Receivable table in M2 or M4 | §9 |
+| D-10.5–10.6 | Subtype field strategy (nullable columns vs JSON vs extension tables) | §10 |
+| D-13.1 | Permission granularity (per-model or per-subtype) | §13 |
+| D-13.2 | Full role-permission matrix | §13 |
 
-### Important — affects design quality
+### Open — Important But Won't Block
 
-| ID | Question | Quick Reference |
-|----|----------|-----------------|
+| ID | Question | Section |
+|----|----------|---------|
+| D-1.3 | Correspondence cross-subtype linking | §1 |
+| D-1.4 | Back charge target model | §1 |
+| D-2.2–2.4 | PDF, CDK, payment tracking | §2 |
 | D-3.1 | Record creators by role | §3 |
-| D-4.1–4.10 | Status models | §4 |
-| D-5.2 | Workflow steps per record type | §5 |
-| D-7.2 | Reference number format | §7 |
-| D-8.2 | IPA financial posting effect | §8 |
-| D-8.3 | Contract value tracking | §8 |
-| D-10.1–10.7 | Field details | §10 |
-| D-13.1 | Full role-permission matrix | §13 |
-| D-14.1 | Module size / split decision | §14 |
-
-### Nice-to-have — can be decided during spec
-
-| ID | Question | Quick Reference |
-|----|----------|-----------------|
-| D-2.2 | PDF generation | §2 |
-| D-2.4 | Payment receipt tracking | §2 |
-| D-7.3 | Client acknowledgment tracking | §7 |
-| D-10.5 | Enum values | §10 |
-| D-11.1 | Client submission history format | §11 |
+| D-5.2–5.4 | VO workflow split, Executive Approver, correspondence workflow sharing | §5 |
+| D-6.1–6.2 | Finance-check details | §6 |
+| D-7.1–7.3 | Sign/issue/reference format | §7 |
+| D-8.1–8.2 | Contract value tracking, event naming | §8 |
+| D-10.1–10.4, 10.7–10.9 | Field details, enums, attachments, comments | §10 |
+| D-11.1–11.3 | Screen navigation details | §11 |
 | D-12.1–12.3 | Dashboard details | §12 |
