@@ -1,12 +1,30 @@
 /**
- * Override policy scaffold — Learning Pause #3.
+ * Override Policy — Pico Play Fun Makers KSA
  *
- * This file defines WHICH override actions are allowed, which require a
- * second approver, and which are never overridable.  The lists below are
- * pre-filled with sensible defaults derived from spec §3 and §7.5.
+ * Approved by Ahmed Al-Dossary on 2026-04-10 (Pause #3).
  *
- * Ahmed: review the three lists and confirm / edit before Phase 1.7
- * (withOverride helper) is implemented.
+ * Rules governing ALL override actions:
+ *
+ * 1. Every override must be exceptional, visible, and auditable.
+ * 2. No override may violate these non-negotiable principles:
+ *    - signed document immutability
+ *    - no hard delete of critical records
+ *    - additive reversal only for posting
+ *    - project isolation rules
+ * 3. If a future override action is not explicitly classified, treat it as
+ *    DENIED by default until classified and added to this policy.
+ * 4. Override actions must never silently mutate history.
+ * 5. Override actions must never bypass audit logging.
+ * 6. If an override affects access, workflow ownership, or record lifecycle,
+ *    capture both: operator and business reason.
+ * 7. For requiresSecondApprover actions, the initiator CANNOT be the second
+ *    approver (self-approval is prohibited).
+ * 8. For requiresSecondApprover actions, execution happens ONLY after explicit
+ *    secondary approval is recorded.
+ * 9. Override logs should be easy to review separately from general audit logs.
+ *
+ * Implementation: Phase 1.7 Task 1.7.6 builds the withOverride() helper that
+ * enforces these rules. This file defines the classification only.
  */
 
 // ---------------------------------------------------------------------------
@@ -38,11 +56,14 @@ export type OverridePolicy = {
 // Policy constant
 // ---------------------------------------------------------------------------
 
-// TODO(ahmed): Review and confirm the classification of each override action.
-// Move items between the three lists as needed. Every OverrideActionType must
-// appear in exactly one list.
 export const OVERRIDE_POLICY: OverridePolicy = {
-  // TODO(ahmed): Confirm — these can be executed solo by an override-permitted user.
+  /**
+   * Category 1: allowed (solo)
+   * Master Admin may perform alone, always with:
+   * - mandatory reason note
+   * - audit log
+   * - before/after capture where applicable
+   */
   allowed: [
     'workflow.force_progress',
     'workflow.reassign_approver',
@@ -50,14 +71,29 @@ export const OVERRIDE_POLICY: OverridePolicy = {
     'user.force_password_reset',
   ],
 
-  // TODO(ahmed): Confirm — these require a second approver before execution.
+  /**
+   * Category 2: requiresSecondApprover
+   * Requires a second Master Admin approval before execution, plus:
+   * - mandatory reason note
+   * - audit log
+   * - explicit approval record
+   * - before/after capture where applicable
+   * - initiator CANNOT be the second approver
+   * - execution only after secondary approval is recorded
+   */
   requiresSecondApprover: [
     'workflow.force_close',
     'project_assignment.revoke_immediately',
     'reference_data.bulk_edit',
   ],
 
-  // TODO(ahmed): Confirm — these are permanently blocked from override.
+  /**
+   * Category 3: never
+   * Never allowed, even by Master Admin. These would violate:
+   * - signed document immutability (document.unsign)
+   * - no hard delete of critical records (document.delete)
+   * - additive reversal only for posting (posting.reverse_silently)
+   */
   never: [
     'document.unsign',
     'document.delete',
@@ -71,7 +107,8 @@ export const OVERRIDE_POLICY: OverridePolicy = {
 
 /**
  * Returns `true` if the action can be overridden (either solo or with a
- * second approver).
+ * second approver). Unclassified actions return `false` (denied by default
+ * per override rule #3).
  */
 export function isOverrideAllowed(action: OverrideActionType): boolean {
   return (
