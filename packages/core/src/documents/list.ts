@@ -1,0 +1,75 @@
+import { prisma } from '@fmksa/db';
+
+// ---------------------------------------------------------------------------
+// Task 1.6.4 — listDocuments
+// ---------------------------------------------------------------------------
+
+export interface ListDocumentsInput {
+  projectId: string;
+  category?: string;
+  status?: string;
+  search?: string;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * List documents for a project with optional filters and pagination.
+ *
+ * - Filters by projectId (required), category, status, and title search (ilike).
+ * - Includes current version metadata (fileSize, mimeType, uploadedAt).
+ * - Returns paginated result { items, total }.
+ */
+export async function listDocuments(input: ListDocumentsInput) {
+  const {
+    projectId,
+    category,
+    status,
+    search,
+    skip = 0,
+    take = 20,
+  } = input;
+
+  // Build where clause
+  const where: any = { projectId };
+
+  if (category) {
+    where.category = category;
+  }
+
+  if (status) {
+    where.status = status;
+  }
+
+  if (search) {
+    where.title = {
+      contains: search,
+      mode: 'insensitive',
+    };
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.document.findMany({
+      where,
+      include: {
+        currentVersion: {
+          select: {
+            id: true,
+            versionNo: true,
+            fileSize: true,
+            mimeType: true,
+            uploadedAt: true,
+            isSigned: true,
+            signedAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    }),
+    prisma.document.count({ where }),
+  ]);
+
+  return { items, total };
+}
