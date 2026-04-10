@@ -11,6 +11,7 @@ import { referenceDataRouter } from './reference-data';
 import { workflowRouter } from './workflow';
 import { documentsRouter } from './documents';
 import { postingRouter } from './posting';
+import { notificationsRouter } from './notifications';
 
 export const appRouter = router({
   auth: authRouter,
@@ -20,6 +21,7 @@ export const appRouter = router({
   workflow: workflowRouter,
   documents: documentsRouter,
   posting: postingRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;
