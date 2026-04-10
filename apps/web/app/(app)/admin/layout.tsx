@@ -50,7 +50,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Audit Log',
     href: '/admin/audit-log',
     icon: ScrollText,
-    stub: 'Coming in Phase 1.9',
   },
   {
     label: 'Override Log',

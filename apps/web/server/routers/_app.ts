@@ -13,6 +13,7 @@ import { documentsRouter } from './documents';
 import { postingRouter } from './posting';
 import { notificationsRouter } from './notifications';
 import { dashboardRouter } from './dashboard';
+import { auditRouter } from './audit';
 
 export const appRouter = router({
   auth: authRouter,
@@ -24,6 +25,7 @@ export const appRouter = router({
   posting: postingRouter,
   notifications: notificationsRouter,
   dashboard: dashboardRouter,
+  audit: auditRouter,
 });
 
 export type AppRouter = typeof appRouter;
