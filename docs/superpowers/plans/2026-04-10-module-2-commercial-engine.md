@@ -48,7 +48,7 @@ packages/db/prisma/
 packages/db/src/seed/
   commercial-permissions.ts         # 50 new permission codes
   commercial-role-permissions.ts    # Role-permission mappings per confirmed matrix
-  commercial-workflow-templates.ts  # 12 workflow templates
+  commercial-workflow-templates.ts  # 15 workflow templates
   commercial-notification-templates.ts  # 7 notification templates
 
 packages/contracts/src/commercial/
@@ -652,7 +652,7 @@ git commit -m "feat(db): seed commercial role-permission mappings for 14 roles"
 
 ---
 
-## Task 5: Seed — Commercial Workflow Templates (12 templates)
+## Task 5: Seed — Commercial Workflow Templates (15 templates)
 
 **Files:**
 - Create: `packages/db/src/seed/commercial-workflow-templates.ts`
@@ -662,7 +662,7 @@ git commit -m "feat(db): seed commercial role-permission mappings for 14 roles"
 
 - [ ] **Step 1: Create commercial-workflow-templates.ts**
 
-Define all 12 templates from spec §5. Each template follows the M1 pattern from `packages/db/src/seed/workflow-templates.ts`:
+Define all 15 templates from spec §5. Each template follows the M1 pattern from `packages/db/src/seed/workflow-templates.ts`:
 - `code`, `name`, `recordType`, `config` (allowComment/Return/Override all true), `steps[]`
 - Steps use `orderIndex` in increments of 10, `approverRule` with `type: 'project_role'`, SLA hours
 - Use `findFirst` by code to skip if already exists, then `create` with nested `steps`
@@ -1759,7 +1759,7 @@ After all tasks complete, verify against the spec's Definition of Done (§18):
 | 1 | 6 Prisma models with correct fields/enums/indexes/relations | `prisma validate` + migration applied |
 | 2 | Status transitions validated — invalid rejected | Integration tests |
 | 3 | 7 posting events registered and firing | posting-hooks test + lifecycle tests |
-| 4 | ~12 workflow templates seeded | `pnpm db:seed` + DB query |
+| 4 | 15 workflow templates seeded | `pnpm db:seed` + DB query |
 | 5 | 50 permission codes with role mappings | Seed + permission deny tests |
 | 6 | 13 screens functional with RBAC | Manual smoke test |
 | 7 | Dashboard shows 9 sections | Manual smoke test |
