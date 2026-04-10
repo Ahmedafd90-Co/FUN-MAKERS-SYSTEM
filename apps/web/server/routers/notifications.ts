@@ -19,6 +19,7 @@ import { z } from 'zod';
 import {
   listForUser,
   markAsRead,
+  markAllAsRead,
   getUnreadCount,
   getPreferences,
   setPreference,
@@ -156,17 +157,8 @@ export const notificationsRouter = router({
     }),
 
   markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
-    await prisma.notification.updateMany({
-      where: {
-        userId: ctx.user.id,
-        readAt: null,
-        status: { not: 'read' },
-      },
-      data: {
-        readAt: new Date(),
-        status: 'read',
-      },
-    });
+    const count = await markAllAsRead(ctx.user.id);
+    return { count };
   }),
 
   unreadCount: protectedProcedure.query(async ({ ctx }) => {

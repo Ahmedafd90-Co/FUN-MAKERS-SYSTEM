@@ -17,6 +17,7 @@ export {
 export {
   notify,
   markAsRead,
+  markAllAsRead,
   listForUser,
   getUnreadCount,
   NotificationNotFoundError,

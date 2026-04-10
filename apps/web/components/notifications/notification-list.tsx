@@ -15,7 +15,7 @@ import { Button } from '@fmksa/ui/components/button';
 import { cn } from '@fmksa/ui/lib/utils';
 import { BellOff, CheckCheck, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 
@@ -113,12 +113,29 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
     setCursor(data.nextCursor ?? undefined);
   }, [data]);
 
+  const [markingIds, setMarkingIds] = useState<Set<string>>(new Set());
   const markRead = trpc.notifications.markRead.useMutation({
     onSuccess: () => {
       utils.notifications.list.invalidate();
       utils.notifications.unreadCount.invalidate();
     },
   });
+
+  const handleMarkRead = useCallback(
+    (notificationId: string) => {
+      setMarkingIds((prev) => new Set(prev).add(notificationId));
+      markRead
+        .mutateAsync({ notificationId })
+        .finally(() => {
+          setMarkingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(notificationId);
+            return next;
+          });
+        });
+    },
+    [markRead],
+  );
 
   const markAllRead = trpc.notifications.markAllRead.useMutation({
     onSuccess: () => {
@@ -192,7 +209,7 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
             return (
               <div
                 key={notification.id}
-                role={resourceUrl ? 'link' : undefined}
+                role={resourceUrl ? 'button' : undefined}
                 tabIndex={resourceUrl ? 0 : undefined}
                 className={cn(
                   'flex items-start gap-4 px-4 py-4 transition-colors',
@@ -204,7 +221,7 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
                 onClick={() => {
                   if (!resourceUrl) return;
                   if (isUnread) {
-                    markRead.mutate({ notificationId: notification.id });
+                    handleMarkRead(notification.id);
                   }
                   router.push(resourceUrl);
                 }}
@@ -212,7 +229,7 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
                   if (resourceUrl && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
                     if (isUnread) {
-                      markRead.mutate({ notificationId: notification.id });
+                      handleMarkRead(notification.id);
                     }
                     router.push(resourceUrl);
                   }
@@ -268,9 +285,9 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
                       className="h-7 text-xs"
                       onClick={(e) => {
                         e.stopPropagation();
-                        markRead.mutate({ notificationId: notification.id });
+                        handleMarkRead(notification.id);
                       }}
-                      disabled={markRead.isPending}
+                      disabled={markingIds.has(notification.id)}
                     >
                       Mark read
                     </Button>
@@ -283,7 +300,7 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isUnread) {
-                          markRead.mutate({ notificationId: notification.id });
+                          handleMarkRead(notification.id);
                         }
                         router.push(resourceUrl);
                       }}

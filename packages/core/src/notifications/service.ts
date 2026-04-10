@@ -370,6 +370,52 @@ export async function listForUser(
 }
 
 // ---------------------------------------------------------------------------
+// markAllAsRead()
+// ---------------------------------------------------------------------------
+
+/**
+ * Mark all unread notifications as read for a user.
+ *
+ * Returns the count of notifications that were marked read.
+ */
+export async function markAllAsRead(userId: string): Promise<number> {
+  const now = new Date();
+
+  const result = await (prisma as any).$transaction(async (tx: any) => {
+    const { count } = await tx.notification.updateMany({
+      where: {
+        userId,
+        readAt: null,
+        status: { not: 'read' },
+      },
+      data: {
+        readAt: now,
+        status: 'read',
+      },
+    });
+
+    if (count > 0) {
+      await auditService.log(
+        {
+          actorUserId: userId,
+          actorSource: 'user',
+          action: 'notifications_mark_all_read',
+          resourceType: 'notification',
+          resourceId: userId,
+          beforeJson: { unreadCount: count },
+          afterJson: { markedReadCount: count, readAt: now.toISOString() },
+        },
+        tx,
+      );
+    }
+
+    return count;
+  });
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // getUnreadCount() — Task 1.8.4
 // ---------------------------------------------------------------------------
 
