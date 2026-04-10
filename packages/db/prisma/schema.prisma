@@ -113,6 +113,7 @@ model User {
   sessions           UserSession[]
   userRoles          UserRole[]
   projectAssignments ProjectAssignment[]
+  documentSignatures DocumentSignature[]
 
   @@map("users")
 }
@@ -278,6 +279,7 @@ model Project {
   settings          ProjectSetting[]
   screenPermissions ScreenPermission[]
   workflowInstances WorkflowInstance[]
+  documents         Document[]
 
   @@index([entityId])
   @@map("projects")
@@ -445,4 +447,107 @@ model WorkflowAction {
 
   @@index([instanceId, actedAt])
   @@map("workflow_actions")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Document
+// ---------------------------------------------------------------------------
+
+enum DocumentCategory {
+  shop_drawing        @map("shop_drawing")
+  material_submittal  @map("material_submittal")
+  test_certificate    @map("test_certificate")
+  contract_attachment @map("contract_attachment")
+  vendor_document     @map("vendor_document")
+  letter              @map("letter")
+  drawing             @map("drawing")
+  specification       @map("specification")
+  general             @map("general")
+
+  @@map("document_category")
+}
+
+enum DocumentStatus {
+  draft      @map("draft")
+  in_review  @map("in_review")
+  approved   @map("approved")
+  signed     @map("signed")
+  superseded @map("superseded")
+  archived   @map("archived")
+
+  @@map("document_status")
+}
+
+// ---------------------------------------------------------------------------
+// 7. Documents, versions, signatures
+// ---------------------------------------------------------------------------
+
+model Document {
+  id               String           @id @default(uuid()) @map("id")
+  projectId        String           @map("project_id")
+  recordType       String?          @map("record_type")
+  recordId         String?          @map("record_id")
+  title            String           @map("title")
+  category         DocumentCategory @map("category")
+  status           DocumentStatus   @map("status")
+  currentVersionId String?          @unique @map("current_version_id")
+  createdBy        String           @map("created_by")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  // Relations — circular FK with DocumentVersion
+  currentVersion DocumentVersion?  @relation("CurrentDocVersion", fields: [currentVersionId], references: [id])
+  versions       DocumentVersion[] @relation("DocumentVersions")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, category])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id                    String    @id @default(uuid()) @map("id")
+  documentId            String    @map("document_id")
+  versionNo             Int       @map("version_no")
+  fileKey               String    @map("file_key")
+  fileHash              String    @map("file_hash")
+  fileSize              Int       @map("file_size")
+  mimeType              String    @map("mime_type")
+  uploadedBy            String    @map("uploaded_by")
+  uploadedAt            DateTime  @map("uploaded_at")
+  isSigned              Boolean   @default(false) @map("is_signed")
+  signedAt              DateTime? @map("signed_at")
+  signedBy              String?   @map("signed_by")
+  supersededAt          DateTime? @map("superseded_at")
+  supersededByVersionId String?   @map("superseded_by_version_id")
+
+  // Relations — circular FK with Document
+  document  Document  @relation("DocumentVersions", fields: [documentId], references: [id])
+  currentOf Document? @relation("CurrentDocVersion")
+
+  // Relations
+  signatures DocumentSignature[]
+
+  @@unique([documentId, versionNo])
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+/// APPEND-ONLY: no updatedAt; inserts only, deletes rejected by middleware.
+model DocumentSignature {
+  id            String   @id @default(uuid()) @map("id")
+  versionId     String   @map("version_id")
+  signerUserId  String   @map("signer_user_id")
+  signatureType String   @default("internal_hash") @map("signature_type")
+  signedAt      DateTime @map("signed_at")
+  ip            String   @map("ip")
+  userAgent     String   @map("user_agent")
+  hashAtSign    String   @map("hash_at_sign")
+
+  // Relations
+  version    DocumentVersion @relation(fields: [versionId], references: [id])
+  signerUser User            @relation(fields: [signerUserId], references: [id])
+
+  @@map("document_signatures")
 }
