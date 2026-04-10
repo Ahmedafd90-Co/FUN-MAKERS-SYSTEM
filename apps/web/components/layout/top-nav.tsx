@@ -32,7 +32,6 @@ function getNavItems(
       label: 'My Approvals',
       href: '/approvals',
       active: pathname.startsWith('/approvals'),
-      placeholder: 'Coming in Module 1.4',
     },
     {
       label: 'Projects',

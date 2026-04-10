@@ -29,8 +29,7 @@ async function main() {
   await seedSampleEntity(prisma);
   await seedSampleProject(prisma);
   await seedMasterAdmin(prisma);
-  // Workflow templates seed is optional until Phase 1.5 Pause #2
-  // await seedWorkflowTemplates(prisma);
+  await seedWorkflowTemplates(prisma);
 
   console.log('✅ Seeding complete.');
 }

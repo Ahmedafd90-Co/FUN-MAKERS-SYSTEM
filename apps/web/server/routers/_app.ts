@@ -8,12 +8,14 @@ import { authRouter } from './auth';
 import { projectsRouter } from './projects';
 import { entitiesRouter } from './entities';
 import { referenceDataRouter } from './reference-data';
+import { workflowRouter } from './workflow';
 
 export const appRouter = router({
   auth: authRouter,
   projects: projectsRouter,
   entities: entitiesRouter,
   referenceData: referenceDataRouter,
+  workflow: workflowRouter,
 });
 
 export type AppRouter = typeof appRouter;

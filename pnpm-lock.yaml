@@ -215,6 +215,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@fmksa/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@fmksa/db':
         specifier: workspace:*
         version: link:../db

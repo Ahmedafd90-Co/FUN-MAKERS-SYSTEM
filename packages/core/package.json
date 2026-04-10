@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fmksa/contracts": "workspace:*",
     "@fmksa/db": "workspace:*",
     "bcryptjs": "^3.0.3"
   },
