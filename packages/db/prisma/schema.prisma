@@ -186,3 +186,48 @@ model UserRole {
 
   @@map("user_roles")
 }
+
+// ---------------------------------------------------------------------------
+// Enums — Entity
+// ---------------------------------------------------------------------------
+
+enum EntityType {
+  parent                @map("parent")
+  subsidiary            @map("subsidiary")
+  sister_company        @map("sister_company")
+  branch                @map("branch")
+  operating_unit        @map("operating_unit")
+  shared_service_entity @map("shared_service_entity")
+
+  @@map("entity_type")
+}
+
+enum EntityStatus {
+  active   @map("active")
+  inactive @map("inactive")
+  archived @map("archived")
+
+  @@map("entity_status")
+}
+
+// ---------------------------------------------------------------------------
+// 3. Multi-entity (self-referencing hierarchy)
+// ---------------------------------------------------------------------------
+
+model Entity {
+  id             String       @id @default(uuid()) @map("id")
+  code           String       @unique @map("code")
+  name           String       @map("name")
+  type           EntityType   @map("type")
+  parentEntityId String?      @map("parent_entity_id")
+  status         EntityStatus @map("status")
+  metadataJson   Json?        @map("metadata_json")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Self-relation
+  parent   Entity?  @relation("EntityParent", fields: [parentEntityId], references: [id])
+  children Entity[] @relation("EntityParent")
+
+  @@map("entities")
+}
