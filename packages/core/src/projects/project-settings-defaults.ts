@@ -1,5 +1,7 @@
 /**
- * Project settings defaults — scaffold (Pause #4).
+ * Project settings defaults — Pico Play Fun Makers KSA
+ *
+ * Approved by Ahmed Al-Dossary on 2026-04-10 (Pause #4).
  *
  * Each key maps to a default JSON value used when no project-level override
  * exists. Call `getDefaultSetting(key)` to retrieve a single default or use
@@ -10,6 +12,9 @@
  *  - Material tracking flags
  *  - Document categories enabled
  *  - Notification toggles
+ *
+ * These defaults are applied to every new project at creation time.
+ * Individual projects can override any setting via the project settings admin.
  */
 
 // ---------------------------------------------------------------------------
@@ -24,36 +29,23 @@ export type ProjectSettingValue = string | number | boolean | string[] | null;
 // Defaults
 // ---------------------------------------------------------------------------
 
-// TODO(ahmed): Review every default value below and adjust for Fun Makers KSA
-// operational requirements. Each value is a best-guess starting point.
-
 export const PROJECT_SETTINGS_DEFAULTS = {
   // ---- Workflow toggles ----
-  // TODO(ahmed): confirm whether document approval workflows should be on by
-  // default for new projects.
+  // On by default: this system is control-first.
   requireDocumentApprovalWorkflow: true,
-
-  // TODO(ahmed): confirm whether material submittal workflow is mandatory.
   requireMaterialSubmittalWorkflow: true,
-
-  // TODO(ahmed): confirm whether shop drawing workflow is mandatory.
   requireShopDrawingWorkflow: true,
-
-  // TODO(ahmed): confirm if procurement requires workflow approval by default.
   requireProcurementWorkflow: true,
 
   // ---- Material tracking flags ----
-  // TODO(ahmed): confirm PM review is required by default for materials.
+  // PM + QA/QC review on by default: safer operationally.
   defaultRequiresPmReview: true,
-
-  // TODO(ahmed): confirm QA/QC review flag default.
   defaultRequiresQaqcReview: true,
-
-  // TODO(ahmed): confirm whether test certificates are mandatory by default.
+  // Test certificates off by default: avoids noise. Toggle on per project/package/category.
   defaultRequiresTestCertificate: false,
 
   // ---- Document categories enabled ----
-  // TODO(ahmed): confirm which document categories are enabled by default.
+  // All categories available by default.
   enabledDocumentCategories: [
     'shop_drawing',
     'material_submittal',
@@ -67,10 +59,11 @@ export const PROJECT_SETTINGS_DEFAULTS = {
   ] as string[],
 
   // ---- Notification toggles ----
-  // TODO(ahmed): confirm notification defaults.
   notifyOnWorkflowStepAssignment: true,
   notifyOnWorkflowCompletion: true,
+  // Document upload notifications off by default: avoids notification fatigue.
   notifyOnDocumentUpload: false,
+  // Posting exception notifications on by default: operationally important.
   notifyOnPostingException: true,
 } as const satisfies Record<string, ProjectSettingValue>;
 
