@@ -1,6 +1,4 @@
 import { prisma } from '@fmksa/db';
-import { Prisma } from '@prisma/client';
-
 // ---------------------------------------------------------------------------
 // Status sets for financial aggregates
 // ---------------------------------------------------------------------------
@@ -15,7 +13,7 @@ const CP_APPROVED_PLUS = ['approved_internal', 'issued', 'linked_to_variation', 
 // Helpers
 // ---------------------------------------------------------------------------
 
-function decimalToString(val: Prisma.Decimal | null | undefined): string {
+function decimalToString(val: { toString(): string } | null | undefined): string {
   if (val == null) return '0';
   return val.toString();
 }
