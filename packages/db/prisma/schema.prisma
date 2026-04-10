@@ -277,6 +277,7 @@ model Project {
   assignments       ProjectAssignment[]
   settings          ProjectSetting[]
   screenPermissions ScreenPermission[]
+  workflowInstances WorkflowInstance[]
 
   @@index([entityId])
   @@map("projects")
@@ -347,4 +348,101 @@ model ScreenPermission {
 
   @@unique([roleId, screenCode, projectId])
   @@map("screen_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Workflow
+// ---------------------------------------------------------------------------
+
+enum WorkflowStatus {
+  draft       @map("draft")
+  in_progress @map("in_progress")
+  returned    @map("returned")
+  approved    @map("approved")
+  rejected    @map("rejected")
+  cancelled   @map("cancelled")
+  completed   @map("completed")
+  on_hold     @map("on_hold")
+
+  @@map("workflow_status")
+}
+
+// ---------------------------------------------------------------------------
+// 6. Workflow engine (generic, record-type agnostic)
+// ---------------------------------------------------------------------------
+
+model WorkflowTemplate {
+  id         String   @id @default(uuid()) @map("id")
+  code       String   @unique @map("code")
+  name       String   @map("name")
+  recordType String   @map("record_type")
+  version    Int      @map("version")
+  isActive   Boolean  @default(true) @map("is_active")
+  configJson Json     @map("config_json")
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  steps     WorkflowStep[]
+  instances WorkflowInstance[]
+
+  @@map("workflow_templates")
+}
+
+model WorkflowStep {
+  id                   String  @id @default(uuid()) @map("id")
+  templateId           String  @map("template_id")
+  orderIndex           Int     @map("order_index")
+  name                 String  @map("name")
+  approverRuleJson     Json    @map("approver_rule_json")
+  slaHours             Int?    @map("sla_hours")
+  isOptional           Boolean @default(false) @map("is_optional")
+  requirementFlagsJson Json    @default("{}") @map("requirement_flags_json")
+
+  // Relations
+  template        WorkflowTemplate @relation(fields: [templateId], references: [id])
+  workflowActions WorkflowAction[]
+
+  @@map("workflow_steps")
+}
+
+model WorkflowInstance {
+  id            String         @id @default(uuid()) @map("id")
+  templateId    String         @map("template_id")
+  recordType    String         @map("record_type")
+  recordId      String         @map("record_id")
+  projectId     String         @map("project_id")
+  status        WorkflowStatus @map("status")
+  currentStepId String?        @map("current_step_id")
+  startedBy     String         @map("started_by")
+  startedAt     DateTime       @map("started_at")
+  completedAt   DateTime?      @map("completed_at")
+
+  // Relations
+  template WorkflowTemplate @relation(fields: [templateId], references: [id])
+  project  Project          @relation(fields: [projectId], references: [id])
+  actions  WorkflowAction[]
+
+  @@index([projectId, status])
+  @@index([currentStepId])
+  @@map("workflow_instances")
+}
+
+/// APPEND-ONLY: no updatedAt; updates and deletes rejected by middleware.
+model WorkflowAction {
+  id           String   @id @default(uuid()) @map("id")
+  instanceId   String   @map("instance_id")
+  stepId       String   @map("step_id")
+  actorUserId  String   @map("actor_user_id")
+  action       String   @map("action")
+  comment      String?  @map("comment")
+  actedAt      DateTime @map("acted_at")
+  metadataJson Json?    @map("metadata_json")
+
+  // Relations
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id])
+  step     WorkflowStep     @relation(fields: [stepId], references: [id])
+
+  @@index([instanceId, actedAt])
+  @@map("workflow_actions")
 }
