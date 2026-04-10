@@ -15,3 +15,4 @@ export * from './documents';
 export * from './posting';
 export * from './audit';
 export * from './notifications';
+export * from './health';

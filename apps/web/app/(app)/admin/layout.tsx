@@ -27,7 +27,6 @@ type AdminNavItem = {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  stub?: string; // "Coming in Phase X.Y"
 };
 
 const adminNavItems: AdminNavItem[] = [
@@ -65,7 +64,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'System Health',
     href: '/admin/system-health',
     icon: Activity,
-    stub: 'Coming in Phase 1.9',
   },
 ];
 
@@ -94,19 +92,6 @@ export default function AdminLayout({
             const Icon = item.icon;
             const isActive =
               pathname === item.href || pathname.startsWith(item.href + '/');
-
-            if (item.stub) {
-              return (
-                <span
-                  key={item.href}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground/50 cursor-default"
-                  title={item.stub}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </span>
-              );
-            }
 
             return (
               <Link

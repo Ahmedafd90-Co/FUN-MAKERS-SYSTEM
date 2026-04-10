@@ -38,7 +38,7 @@ const adminNavItems = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ScrollText },
   { label: 'Override Log', href: '/admin/override-log', icon: ArrowLeftRight },
   { label: 'Posting Exceptions', href: '/admin/posting-exceptions', icon: FileWarning },
-  { label: 'System Health', href: '/admin/system-health', icon: Activity, stub: true },
+  { label: 'System Health', href: '/admin/system-health', icon: Activity },
 ];
 
 export function AdminMobileSidebar() {
@@ -65,18 +65,6 @@ export function AdminMobileSidebar() {
               const Icon = item.icon;
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + '/');
-
-              if (item.stub) {
-                return (
-                  <span
-                    key={item.href}
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground/50 cursor-default"
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </span>
-                );
-              }
 
               return (
                 <Link
