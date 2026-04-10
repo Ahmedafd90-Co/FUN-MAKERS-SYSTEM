@@ -22,6 +22,7 @@ import { trpc } from '@/lib/trpc-client';
 import { statusBadgeStyle } from '@/lib/badge-variants';
 
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,16 +110,10 @@ export function PostingExceptionList({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">
-          Posting Exceptions
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Monitor and manage posting pipeline failures. Open exceptions
-          require attention.
-        </p>
-      </div>
+      <PageHeader
+        title="Posting Exceptions"
+        description="Monitor and manage posting pipeline failures. Open exceptions require attention."
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">

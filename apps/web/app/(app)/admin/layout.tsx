@@ -17,6 +17,8 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { AdminMobileSidebar } from '@/components/layout/admin-mobile-sidebar';
+
 // ---------------------------------------------------------------------------
 // Admin sidebar navigation items
 // ---------------------------------------------------------------------------
@@ -129,6 +131,7 @@ export default function AdminLayout({
 
       {/* Main content */}
       <div className="flex-1 overflow-auto">
+        <AdminMobileSidebar />
         <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8">{children}</div>
       </div>
     </div>

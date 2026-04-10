@@ -16,6 +16,7 @@ import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 import { statusBadgeStyle } from '@/lib/badge-variants';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -50,19 +51,16 @@ export function UserList({ onCreateClick }: UserListProps) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage system users, their status, and role assignments.
-          </p>
-        </div>
-        <Button onClick={onCreateClick} size="sm">
-          <Plus className="h-4 w-4" />
-          Create User
-        </Button>
-      </div>
+      <PageHeader
+        title="Users"
+        description="Manage system users, their status, and role assignments."
+        actions={
+          <Button onClick={onCreateClick} size="sm">
+            <Plus className="h-4 w-4" />
+            Create User
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">

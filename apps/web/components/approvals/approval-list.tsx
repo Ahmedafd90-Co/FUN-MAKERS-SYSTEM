@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { trpc } from '@/lib/trpc-client';
 
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/layout/page-header';
 
 import {
   ApproveDialog,
@@ -121,13 +122,10 @@ export function ApprovalList() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">My Approvals</h1>
-        <p className="text-sm text-muted-foreground">
-          Workflow steps waiting for your approval across all assigned projects.
-        </p>
-      </div>
+      <PageHeader
+        title="My Approvals"
+        description="Workflow steps waiting for your approval across all assigned projects."
+      />
 
       {/* Loading */}
       {isLoading && (
