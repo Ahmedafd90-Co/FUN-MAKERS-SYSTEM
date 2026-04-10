@@ -9,6 +9,7 @@ import { projectsRouter } from './projects';
 import { entitiesRouter } from './entities';
 import { referenceDataRouter } from './reference-data';
 import { workflowRouter } from './workflow';
+import { documentsRouter } from './documents';
 
 export const appRouter = router({
   auth: authRouter,
@@ -16,6 +17,7 @@ export const appRouter = router({
   entities: entitiesRouter,
   referenceData: referenceDataRouter,
   workflow: workflowRouter,
+  documents: documentsRouter,
 });
 
 export type AppRouter = typeof appRouter;
