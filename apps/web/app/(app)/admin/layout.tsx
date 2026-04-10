@@ -61,7 +61,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Posting Exceptions',
     href: '/admin/posting-exceptions',
     icon: FileWarning,
-    stub: 'Coming in Phase 1.7',
   },
   {
     label: 'System Health',
