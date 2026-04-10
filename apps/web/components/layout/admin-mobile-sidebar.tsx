@@ -36,7 +36,7 @@ const adminNavItems = [
   { label: 'Workflow Templates', href: '/admin/workflow-templates', icon: GitBranch },
   { label: 'Notification Templates', href: '/admin/notification-templates', icon: Bell },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ScrollText },
-  { label: 'Override Log', href: '/admin/override-log', icon: ArrowLeftRight, stub: true },
+  { label: 'Override Log', href: '/admin/override-log', icon: ArrowLeftRight },
   { label: 'Posting Exceptions', href: '/admin/posting-exceptions', icon: FileWarning },
   { label: 'System Health', href: '/admin/system-health', icon: Activity, stub: true },
 ];

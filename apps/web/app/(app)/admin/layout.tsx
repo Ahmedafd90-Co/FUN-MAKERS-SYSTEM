@@ -55,7 +55,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Override Log',
     href: '/admin/override-log',
     icon: ArrowLeftRight,
-    stub: 'Coming in Phase 1.9',
   },
   {
     label: 'Posting Exceptions',
