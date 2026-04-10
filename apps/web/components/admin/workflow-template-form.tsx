@@ -22,12 +22,15 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+
 import {
   WorkflowStepEditor,
   createEmptyStep,
   stepsToPayload,
   type StepDraft,
 } from './workflow-step-editor';
+
+import type { WorkflowStepDefInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Create Template Dialog
@@ -103,7 +106,7 @@ export function CreateTemplateDialog({
       name,
       recordType,
       config: { allowComment, allowReturn, allowOverride },
-      steps: payload as any,
+      steps: payload as unknown as WorkflowStepDefInput[],
     });
   }
 

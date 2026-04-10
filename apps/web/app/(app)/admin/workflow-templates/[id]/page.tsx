@@ -141,8 +141,8 @@ export default function WorkflowTemplateDetailPage() {
           <h2 className="text-sm font-semibold mb-3">Approval Steps</h2>
           {template.steps && template.steps.length > 0 ? (
             <div className="space-y-2">
-              {template.steps.map((step: any, idx: number) => {
-                const rule = step.approverRuleJson as Record<string, unknown>;
+              {template.steps.map((step, idx: number) => {
+                const rule = (step as { approverRuleJson: Record<string, unknown> }).approverRuleJson;
                 return (
                   <div
                     key={step.id}
