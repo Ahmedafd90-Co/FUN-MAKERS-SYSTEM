@@ -14,6 +14,15 @@ export const SignInSchema = z.object({
 
 export type SignInInput = z.infer<typeof SignInSchema>;
 
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required.'),
+  newPassword: z
+    .string()
+    .min(12, 'New password must be at least 12 characters.'),
+});
+
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
+
 // ---------------------------------------------------------------------------
 // Output schemas
 // ---------------------------------------------------------------------------
