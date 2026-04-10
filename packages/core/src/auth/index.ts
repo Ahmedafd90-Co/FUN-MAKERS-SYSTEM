@@ -1,2 +1,8 @@
-// TODO(phase 1.3): implement auth service
-export const authService = {};
+export { hashPassword, verifyPassword } from './password';
+export { authService } from './service';
+export {
+  InvalidCredentialsError,
+  AccountLockedError,
+  sessionService,
+} from './session';
+export type { AuthUser, SignInResult } from './session';
