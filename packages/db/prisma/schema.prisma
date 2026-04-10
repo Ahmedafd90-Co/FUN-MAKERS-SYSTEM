@@ -114,6 +114,8 @@ model User {
   userRoles          UserRole[]
   projectAssignments ProjectAssignment[]
   documentSignatures DocumentSignature[]
+  notifications      Notification[]
+  notificationPrefs  NotificationPreference[]
 
   @@map("users")
 }
@@ -672,4 +674,73 @@ model OverrideLog {
   auditLog AuditLog @relation(fields: [auditLogId], references: [id])
 
   @@map("override_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Notification
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  in_app @map("in_app")
+  email  @map("email")
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  pending @map("pending")
+  sent    @map("sent")
+  failed  @map("failed")
+  read    @map("read")
+
+  @@map("notification_status")
+}
+
+// ---------------------------------------------------------------------------
+// 10. Notifications
+// ---------------------------------------------------------------------------
+
+model NotificationTemplate {
+  id              String              @id @default(uuid()) @map("id")
+  code            String              @unique @map("code")
+  channel         NotificationChannel @map("channel")
+  subjectTemplate String              @map("subject_template")
+  bodyTemplate    String              @map("body_template")
+  defaultEnabled  Boolean             @default(true) @map("default_enabled")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@map("notification_templates")
+}
+
+model Notification {
+  id           String              @id @default(uuid()) @map("id")
+  userId       String              @map("user_id")
+  templateCode String              @map("template_code")
+  payloadJson  Json                @map("payload_json")
+  channel      NotificationChannel @map("channel")
+  status       NotificationStatus  @map("status")
+  sentAt       DateTime?           @map("sent_at")
+  readAt       DateTime?           @map("read_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, status, createdAt])
+  @@map("notifications")
+}
+
+/// Composite PK (userId, templateCode, channel).
+model NotificationPreference {
+  userId       String              @map("user_id")
+  templateCode String              @map("template_code")
+  channel      NotificationChannel @map("channel")
+  enabled      Boolean             @map("enabled")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, templateCode, channel])
+  @@map("notification_preferences")
 }
