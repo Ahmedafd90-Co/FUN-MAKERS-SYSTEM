@@ -4,7 +4,7 @@
 **Module:** 2 of 7 — Commercial / Contracts Engine
 **Date:** 2026-04-10
 **Owner:** Ahmed Al-Dossary (Project Director, Pico Play)
-**Status:** Draft — pending spec review and approval
+**Status:** APPROVED — 2026-04-10 (role-permission matrix confirmed)
 **Prerequisite:** Module 1 signed off (`b9de91a`)
 **Scope lock:** `docs/module-2-scope-lock.md` (all 21 decisions resolved)
 
@@ -780,30 +780,26 @@ Legend: **C** = create, **E** = edit, **S** = submit, **R** = review, **A** = ap
 | **contracts_manager** | V,R,I | V,R,I | V,C,E,S,R,I | V,R | V,R | V,C,E,S,R,I | V | V |
 | **qs_commercial** | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V,C,E,S | V | V |
 | **finance** | V,R | V,R | V | V | V,C,E,R,G,I | V | V | V |
-| **cost_controller** | V | V | V | V,C,E,R | V | V,R | V | V |
-
-> **Note on Cost Controller permissions:** Cost Controller has `review` on Correspondence because they serve as the finance checker for Claim and Cost Proposal records per the finance-check rules in §6.
+| **cost_controller** | V | V | V | V,R | V | V,R | V | V |
 | **site_team** | V | V | V,C,E | V | V | V,C,E | V | V |
 | **design** | V | V | V,C,E | V | V | V,C,E | V | V |
-| **qa_qc** | V | V | V | V | V | V,C,E | V | V |
+| **qa_qc** | V | V | V | V | V | V | V | V |
 | **procurement** | V | V | V | V | V | V | V | V |
 | **document_controller** | V,I | V,I | V,I | V | V | V,I | V | V |
 | **pmo** | V | V | V | V | V | V | V | V |
 | **executive_approver** | V,R,A,G | V,R,A,G | V,R,A,G | V,R,A | V,R,A | V,R,A,G | V | V |
 
 **Notes:**
-- Document Controller gets `issue` permission — they handle controlled copy distribution per the locked workflow paths.
+- Document Controller gets `issue` permission on IPA, IPC, and Variation — they handle controlled copy distribution. No approve/sign authority. (Confirmed by Ahmed.)
 - QS/Commercial gets `create`, `edit`, `submit` on most types — they are the primary operational role.
 - Contracts Manager gets `create`, `edit`, `submit`, `review`, `issue` on Variation and Correspondence — they control commercial workflows.
 - Finance has full control over Tax Invoices and review-only on other financial records.
+- Cost Controller has `view` and `review` on Cost Proposal (no `create`/`edit`) — financial input role only. Has `review` on Correspondence for finance-check duty on Claims per §6. (Confirmed by Ahmed.)
 - Site Team and Design can create Variations (they see scope changes on-site) and Correspondence (letters from their department).
-- QA/QC can create Correspondence (back charges originate from quality findings).
+- QA/QC is view-only across all commercial records. They may contribute to back charges when configured by project policy, but are not default submitters. (Confirmed by Ahmed.)
 - PMO and Procurement are view-only across all commercial records in M2.
 
-**FLAG FOR AHMED:** This matrix is derived from the locked ownership and workflow paths. Ahmed should confirm before implementation, particularly:
-- Does Document Controller need `issue` permission on IPA, IPC, and Variation?
-- Should QA/QC have `submit` permission on Correspondence (to submit back charges)?
-- Should Cost Controller have `create` on Cost Proposal?
+**Role-permission matrix confirmed by Ahmed on 2026-04-10.**
 
 ---
 
@@ -1328,7 +1324,7 @@ Module 2 is **done** when:
 14. TypeScript clean: 0 errors across all packages.
 15. Test coverage: critical E2E scenarios for each record type lifecycle, permission deny suite for commercial procedures, posting event verification.
 16. CDK staging/production stacks stamped (if confirmed in scope).
-17. Ahmed has confirmed the role-permission matrix.
+17. Role-permission matrix matches the confirmed matrix in §12.
 
 ---
 
