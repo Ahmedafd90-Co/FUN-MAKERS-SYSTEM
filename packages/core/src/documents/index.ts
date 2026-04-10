@@ -1,2 +1,4 @@
-// TODO(phase 1.3): implement documents service
-export const documentsService = {};
+export { documentService } from './service';
+export { createStorageAdapter } from './storage';
+export type { StorageAdapter } from './storage';
+export { IntegrityError } from './signatures';
