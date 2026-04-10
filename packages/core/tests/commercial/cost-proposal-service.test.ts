@@ -148,6 +148,7 @@ describe('CostProposal Service', () => {
     const drafts = await listCostProposals({
       projectId: testProject.id,
       statusFilter: ['draft'],
+      skip: 0, take: 20, sortDirection: 'desc',
     });
     expect(drafts.items.length).toBeGreaterThan(0);
     expect(drafts.items.every((item: any) => item.status === 'draft')).toBe(true);
@@ -157,6 +158,7 @@ describe('CostProposal Service', () => {
       projectId: testProject.id,
       amountMin: 150000,
       amountMax: 250000,
+      skip: 0, take: 20, sortDirection: 'desc',
     });
     expect(filtered.items.some((item: any) => item.id === cp2.id)).toBe(true);
     expect(filtered.items.every((item: any) => Number(item.estimatedCost) >= 150000)).toBe(true);

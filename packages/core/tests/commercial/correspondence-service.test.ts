@@ -255,7 +255,7 @@ describe('Correspondence Service', () => {
     await createCorrespondence(makeInput('claim', { subject: 'List claim' }), 'test-user');
 
     const result = await listCorrespondences(
-      { projectId: testProject.id },
+      { projectId: testProject.id, skip: 0, take: 20, sortDirection: 'desc' },
       { subtypeFilter: 'letter' },
     );
     expect(result.items.length).toBeGreaterThanOrEqual(1);
@@ -263,7 +263,7 @@ describe('Correspondence Service', () => {
       expect(item.subtype).toBe('letter');
     }
 
-    const allResult = await listCorrespondences({ projectId: testProject.id });
+    const allResult = await listCorrespondences({ projectId: testProject.id, skip: 0, take: 50, sortDirection: 'desc' });
     expect(allResult.total).toBeGreaterThanOrEqual(3);
   });
 

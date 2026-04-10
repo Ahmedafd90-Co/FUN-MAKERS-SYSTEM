@@ -203,6 +203,7 @@ describe('TaxInvoice Service', () => {
     const result = await listTaxInvoices({
       projectId: testProject.id,
       statusFilter: ['draft'],
+      skip: 0, take: 20, sortDirection: 'desc',
     });
     expect(result.items.length).toBeGreaterThanOrEqual(1);
     expect(result.total).toBeGreaterThanOrEqual(1);
