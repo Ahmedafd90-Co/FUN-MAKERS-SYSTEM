@@ -145,8 +145,8 @@ export function DocumentList({ projectId, onUploadClick }: DocumentListProps) {
 
   const { data, isLoading, error } = trpc.documents.list.useQuery({
     projectId,
-    ...(categoryFilter !== 'all' ? { category: categoryFilter as any } : {}),
-    ...(statusFilter !== 'all' ? { status: statusFilter as any } : {}),
+    ...(categoryFilter !== 'all' ? { category: categoryFilter as typeof CATEGORIES[number]['value'] } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter as typeof STATUSES[number]['value'] } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
     skip: page * PAGE_SIZE,
     take: PAGE_SIZE,
@@ -298,6 +298,19 @@ export function DocumentList({ projectId, onUploadClick }: DocumentListProps) {
 // Table body
 // ---------------------------------------------------------------------------
 
+type DocumentItem = {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  createdAt: Date | string;
+  currentVersion: {
+    versionNo: number;
+    fileSize: number;
+    uploadedAt: Date | string;
+  } | null;
+};
+
 function DocumentTableBody({
   projectId,
   items,
@@ -305,9 +318,9 @@ function DocumentTableBody({
   error,
 }: {
   projectId: string;
-  items: any[] | undefined;
+  items: DocumentItem[] | undefined;
   isLoading: boolean;
-  error: any;
+  error: { message: string } | null;
 }) {
   if (isLoading) {
     return (
@@ -342,7 +355,7 @@ function DocumentTableBody({
 
   return (
     <>
-      {items.map((doc: any) => (
+      {items.map((doc) => (
         <tr
           key={doc.id}
           className="border-b last:border-0 hover:bg-muted/30 transition-colors"

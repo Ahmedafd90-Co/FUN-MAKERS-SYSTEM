@@ -68,7 +68,6 @@ export function SignaturePanel({
   onSignComplete,
 }: SignaturePanelProps) {
   const [signing, setSigning] = useState(false);
-  const utils = trpc.useUtils();
 
   const signMutation = trpc.documents.sign.useMutation({
     onSuccess: () => {

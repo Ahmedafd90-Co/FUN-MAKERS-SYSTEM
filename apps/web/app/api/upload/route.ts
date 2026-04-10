@@ -16,13 +16,15 @@
  * Storage: File goes to MinIO via the storage adapter.
  * Integrity: SHA-256 hash is computed and stored with the version.
  */
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import {
   documentService,
   accessControlService,
-  authService,
 } from '@fmksa/core';
+import { NextResponse } from 'next/server';
+
+import { auth } from '@/lib/auth';
+
+import type { NextRequest } from 'next/server';
 
 /** Max file size: 50 MB */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;

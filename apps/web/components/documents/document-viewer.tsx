@@ -22,9 +22,10 @@ import { useState } from 'react';
 import { Toaster } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+
 import { SignaturePanel } from './signature-panel';
-import { VersionHistory } from './version-history';
 import { UploadWidget } from './upload-widget';
+import { VersionHistory } from './version-history';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -245,18 +246,20 @@ export function DocumentViewer({ projectId, documentId }: DocumentViewerProps) {
         {/* Right: Version history + Signature + Actions */}
         <div className="space-y-6">
           {/* Signature Panel */}
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- tRPC inferred type is compatible at runtime */}
           <SignaturePanel
             projectId={projectId}
-            currentVersion={currentVersion as any}
+            currentVersion={currentVersion as Parameters<typeof SignaturePanel>[0]['currentVersion']}
             onSignComplete={() => refetch()}
           />
 
           <Separator />
 
           {/* Version History */}
+          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- tRPC inferred type is compatible at runtime */}
           <VersionHistory
             projectId={projectId}
-            versions={(doc.versions ?? []) as any}
+            versions={(doc.versions ?? []) as Parameters<typeof VersionHistory>[0]['versions']}
             currentVersionId={doc.currentVersionId}
           />
 

@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { DocumentList } from '@/components/documents/document-list';
 import { UploadWidget } from '@/components/documents/upload-widget';
+
 import { ProjectSettingsTab } from './project-settings-tab';
 import { ProjectTeamTab } from './project-team-tab';
 
