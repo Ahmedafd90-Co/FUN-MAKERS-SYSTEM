@@ -82,8 +82,8 @@ export async function renderTemplate(
   }
 
   try {
-    const compiledSubject = Handlebars.compile(template.subjectTemplate);
-    const compiledBody = Handlebars.compile(template.bodyTemplate);
+    const compiledSubject = Handlebars.compile(template.subjectTemplate, { strict: true });
+    const compiledBody = Handlebars.compile(template.bodyTemplate, { strict: true });
 
     const subject = compiledSubject(payload);
     const body = compiledBody(payload);

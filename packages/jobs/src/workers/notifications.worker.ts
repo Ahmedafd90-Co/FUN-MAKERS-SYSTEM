@@ -13,6 +13,7 @@
 import { Worker, type Job } from 'bullmq';
 import { prisma } from '@fmksa/db';
 import { sendEmail } from '@fmksa/core/notifications/delivery';
+import { renderTemplate } from '@fmksa/core/notifications/templates';
 import { getRedisConnection } from '../queue';
 
 export const NOTIFICATIONS_EMAIL_QUEUE = 'notifications-email';
@@ -59,12 +60,24 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
     );
   }
 
+  // Render template if not pre-rendered (fallback safety net)
+  let subject = notification.subject as string;
+  let body = notification.body as string;
+  if (!subject || !body) {
+    const rendered = await renderTemplate(
+      notification.templateCode as string,
+      (notification.payloadJson ?? {}) as Record<string, unknown>,
+    );
+    subject = rendered.subject;
+    body = rendered.body;
+  }
+
   // Send the email
   await sendEmail({
     to: userEmail,
-    subject: notification.subject as string,
-    text: notification.body as string,
-    html: notification.body as string,
+    subject,
+    text: body,
+    html: body,
   });
 
   // Update status to sent

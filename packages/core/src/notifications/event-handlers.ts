@@ -130,6 +130,8 @@ async function handleWorkflowApproved(payload: WorkflowEventPayload): Promise<vo
     payload: {
       recordType,
       recordRef: recordId,
+      actorName: payload.actorUserId,
+      projectName: payload.projectId,
     },
     idempotencyKey: `workflow.approved:${instanceId}:final`,
     channels: ['in_app', 'email'],
@@ -156,6 +158,8 @@ async function handleWorkflowRejected(payload: WorkflowEventPayload): Promise<vo
     payload: {
       recordType,
       recordRef: recordId,
+      actorName: payload.actorUserId,
+      projectName: payload.projectId,
       comment: comment ?? '',
     },
     idempotencyKey: `workflow.rejected:${instanceId}:final`,
@@ -186,6 +190,8 @@ async function handleWorkflowReturned(payload: WorkflowEventPayload): Promise<vo
     payload: {
       recordType,
       recordRef: recordId,
+      actorName: actorUserId,
+      projectName: payload.projectId,
       comment: comment ?? '',
     },
     idempotencyKey: `workflow.returned:${instanceId}:final`,
@@ -206,6 +212,8 @@ async function handleWorkflowReturned(payload: WorkflowEventPayload): Promise<vo
 export async function notifyPostingException(
   eventType: string,
   eventId: string,
+  projectId?: string,
+  reason?: string,
 ): Promise<void> {
   // Find all master_admin users (active UserRole → active User)
   const now = new Date();
@@ -240,7 +248,11 @@ export async function notifyPostingException(
   await notify({
     templateCode: 'posting_exception',
     recipients,
-    payload: { eventType },
+    payload: {
+      eventType,
+      projectName: projectId ?? 'Unknown',
+      reason: reason ?? 'See posting exceptions queue',
+    },
     idempotencyKey: `posting.exception:${eventId}`,
     channels: ['in_app', 'email'],
   });

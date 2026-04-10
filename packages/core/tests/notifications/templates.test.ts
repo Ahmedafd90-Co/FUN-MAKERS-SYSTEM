@@ -82,10 +82,11 @@ describe('renderTemplate', () => {
       expect(result.subject).toBe('Welcome to Fun Makers KSA');
     });
 
-    it('handles missing payload variables gracefully (Handlebars renders empty string)', async () => {
-      const result = await renderTemplate('workflow_step_assigned', {});
-      // Handlebars renders undefined vars as empty string
-      expect(result.subject).toBe('New approval waiting: ');
+    it('throws TemplateRenderError when required payload fields are missing', async () => {
+      // With strict: true, Handlebars throws on missing variables
+      await expect(
+        renderTemplate('workflow_step_assigned', {}),
+      ).rejects.toThrow(TemplateRenderError);
     });
   });
 
