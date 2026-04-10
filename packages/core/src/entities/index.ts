@@ -1,2 +1,4 @@
-// TODO(phase 1.3): implement entities service
-export const entitiesService = {};
+export { entitiesService } from './service';
+export type { CreateEntityInput, UpdateEntityInput } from './service';
+
+export { getAncestors, getDescendants, getSiblings } from './hierarchy';

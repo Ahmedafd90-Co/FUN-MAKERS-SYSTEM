@@ -5,9 +5,15 @@
  */
 import { router } from '../trpc';
 import { authRouter } from './auth';
+import { projectsRouter } from './projects';
+import { entitiesRouter } from './entities';
+import { referenceDataRouter } from './reference-data';
 
 export const appRouter = router({
   auth: authRouter,
+  projects: projectsRouter,
+  entities: entitiesRouter,
+  referenceData: referenceDataRouter,
 });
 
 export type AppRouter = typeof appRouter;

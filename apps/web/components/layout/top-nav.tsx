@@ -38,7 +38,6 @@ function getNavItems(
       label: 'Projects',
       href: '/projects',
       active: pathname.startsWith('/projects'),
-      placeholder: 'Coming in Module 1.4',
     },
     {
       label: 'Documents',
@@ -52,9 +51,8 @@ function getNavItems(
   if (isAdmin) {
     items.push({
       label: 'Admin',
-      href: '/admin',
+      href: '/admin/users',
       active: pathname.startsWith('/admin'),
-      placeholder: 'Coming in Module 1.4',
     });
   }
 
