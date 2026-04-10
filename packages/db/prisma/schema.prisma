@@ -280,6 +280,7 @@ model Project {
   screenPermissions ScreenPermission[]
   workflowInstances WorkflowInstance[]
   documents         Document[]
+  postingEvents     PostingEvent[]
 
   @@index([entityId])
   @@map("projects")
@@ -550,4 +551,65 @@ model DocumentSignature {
   signerUser User            @relation(fields: [signerUserId], references: [id])
 
   @@map("document_signatures")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Posting
+// ---------------------------------------------------------------------------
+
+enum PostingStatus {
+  pending  @map("pending")
+  posted   @map("posted")
+  reversed @map("reversed")
+  failed   @map("failed")
+
+  @@map("posting_status")
+}
+
+// ---------------------------------------------------------------------------
+// 8. Posting (centralized)
+// ---------------------------------------------------------------------------
+
+model PostingEvent {
+  id                String        @id @default(uuid()) @map("id")
+  eventType         String        @map("event_type")
+  sourceService     String        @map("source_service")
+  sourceRecordType  String        @map("source_record_type")
+  sourceRecordId    String        @map("source_record_id")
+  projectId         String        @map("project_id")
+  entityId          String?       @map("entity_id")
+  idempotencyKey    String        @unique @map("idempotency_key")
+  payloadJson       Json          @map("payload_json")
+  status            PostingStatus @map("status")
+  postedAt          DateTime?     @map("posted_at")
+  reversedByEventId String?       @map("reversed_by_event_id")
+  failureReason     String?       @map("failure_reason")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Self-relation for reversals
+  reversedByEvent PostingEvent?  @relation("PostingReversal", fields: [reversedByEventId], references: [id])
+  reversals       PostingEvent[] @relation("PostingReversal")
+
+  // Relations
+  project    Project            @relation(fields: [projectId], references: [id])
+  exceptions PostingException[]
+
+  @@index([projectId, eventType, status])
+  @@map("posting_events")
+}
+
+model PostingException {
+  id             String    @id @default(uuid()) @map("id")
+  eventId        String    @map("event_id")
+  reason         String    @map("reason")
+  assignedTo     String?   @map("assigned_to")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?   @map("resolved_by")
+  resolutionNote String?   @map("resolution_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  event PostingEvent @relation(fields: [eventId], references: [id])
+
+  @@map("posting_exceptions")
 }
