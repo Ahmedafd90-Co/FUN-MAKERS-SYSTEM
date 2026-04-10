@@ -17,9 +17,11 @@ type StatusDictEntry = {
  * now means later modules read from one source of truth instead of
  * hardcoding strings.
  *
- * The example below (material_request_review) is fully worked. The
- * remaining dictionaries are marked with TODO(ahmed) for Ahmed to fill
- * in with the canonical status vocabularies from his domain knowledge.
+ * All four dictionaries filled by Ahmed Al-Dossary on 2026-04-10 (Pause #5).
+ * Intent notes applied:
+ *   - approved_with_comments is distinct from clean approved (both exist)
+ *   - not_required is terminal for shop_drawing and testing_certification only
+ *   - received_and_inspected is NOT the same as closed (both exist in fabrication)
  */
 export const STATUS_DICTIONARIES: StatusDictEntry[] = [
   // === material_request_review (fully worked example) ===
@@ -34,24 +36,48 @@ export const STATUS_DICTIONARIES: StatusDictEntry[] = [
   { dictionaryCode: 'material_request_review', statusCode: 'approved', label: 'Approved', orderIndex: 90, colorHint: 'green', isTerminal: true },
   { dictionaryCode: 'material_request_review', statusCode: 'approved_with_comments', label: 'Approved with Comments', orderIndex: 95, colorHint: 'green', isTerminal: true },
 
-  // TODO(ahmed): shop_drawing
-  // Suggested statuses: Not Required, Required, Uploaded, Under Review,
-  //   Rejected, Approved, Approved with Comments, Resubmitted
-  // Copy the pattern above. Each entry needs:
-  //   dictionaryCode: 'shop_drawing'
-  //   statusCode, label, orderIndex (10, 20, 30...), colorHint, isTerminal
+  // === shop_drawing (filled by Ahmed, 2026-04-10, Pause #5) ===
+  // Note: not_required IS terminal for shop drawings. approved_with_comments is distinct from approved.
+  { dictionaryCode: 'shop_drawing', statusCode: 'not_required', label: 'Not Required', orderIndex: 10, colorHint: 'gray', isTerminal: true },
+  { dictionaryCode: 'shop_drawing', statusCode: 'required', label: 'Required', orderIndex: 20, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'shop_drawing', statusCode: 'uploaded', label: 'Uploaded', orderIndex: 30, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'shop_drawing', statusCode: 'under_review', label: 'Under Review', orderIndex: 40, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'shop_drawing', statusCode: 'rejected', label: 'Rejected', orderIndex: 50, colorHint: 'red', isTerminal: false },
+  { dictionaryCode: 'shop_drawing', statusCode: 'approved', label: 'Approved', orderIndex: 60, colorHint: 'green', isTerminal: true },
+  { dictionaryCode: 'shop_drawing', statusCode: 'approved_with_comments', label: 'Approved with Comments', orderIndex: 65, colorHint: 'green', isTerminal: true },
+  { dictionaryCode: 'shop_drawing', statusCode: 'resubmitted', label: 'Resubmitted', orderIndex: 70, colorHint: 'amber', isTerminal: false },
 
-  // TODO(ahmed): fabrication_delivery
-  // Suggested statuses: Material Request Raised, PO Issued, In Fabrication,
-  //   Ready for Dispatch, In Transit, Delivered to Site, Inspected, Rejected,
-  //   Accepted, Closed
-  // dictionaryCode: 'fabrication_delivery'
+  // === fabrication_delivery (filled by Ahmed, 2026-04-10, Pause #5) ===
+  // Note: received_and_inspected is NOT the same as closed. Both exist separately.
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'material_request_raised', label: 'Material Request Raised', orderIndex: 10, colorHint: 'gray', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'quotation_requested', label: 'Quotation Requested', orderIndex: 20, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'vendor_identified', label: 'Vendor Identified', orderIndex: 30, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'technical_review_complete', label: 'Technical Review Complete', orderIndex: 40, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'commercial_review_complete', label: 'Commercial Review Complete', orderIndex: 50, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'po_award_ready', label: 'PO / Award Ready', orderIndex: 60, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'fabrication_not_started', label: 'Fabrication Not Started', orderIndex: 70, colorHint: 'gray', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'fabrication_in_progress', label: 'Fabrication In Progress', orderIndex: 80, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'fabrication_complete', label: 'Fabrication Complete', orderIndex: 90, colorHint: 'green', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'delivery_scheduled', label: 'Delivery Scheduled', orderIndex: 100, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'in_transit', label: 'In Transit', orderIndex: 110, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'delivered_to_site', label: 'Delivered to Site', orderIndex: 120, colorHint: 'green', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'partially_delivered', label: 'Partially Delivered', orderIndex: 125, colorHint: 'amber', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'received_and_inspected', label: 'Received and Inspected', orderIndex: 130, colorHint: 'green', isTerminal: false },
+  { dictionaryCode: 'fabrication_delivery', statusCode: 'closed', label: 'Closed', orderIndex: 140, colorHint: 'darkgreen', isTerminal: true },
 
-  // TODO(ahmed): testing_certification
-  // Suggested statuses: Not Required, Required, Sample Submitted,
-  //   Testing in Progress, Test Failed, Test Passed,
-  //   Certification Requested, Certification Received
-  // dictionaryCode: 'testing_certification'
+  // === testing_certification (filled by Ahmed, 2026-04-10, Pause #5) ===
+  // Note: not_required IS terminal for testing. test_failed is not terminal (retest path exists).
+  { dictionaryCode: 'testing_certification', statusCode: 'not_required', label: 'Not Required', orderIndex: 10, colorHint: 'gray', isTerminal: true },
+  { dictionaryCode: 'testing_certification', statusCode: 'required', label: 'Required', orderIndex: 20, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'testing_requested', label: 'Testing Requested', orderIndex: 30, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'lab_appointment_scheduled', label: 'Lab Appointment Scheduled', orderIndex: 40, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'sample_submitted', label: 'Sample Submitted', orderIndex: 50, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'test_in_progress', label: 'Test In Progress', orderIndex: 60, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'test_passed', label: 'Test Passed', orderIndex: 70, colorHint: 'green', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'test_failed', label: 'Test Failed', orderIndex: 75, colorHint: 'red', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'retest_required', label: 'Retest Required', orderIndex: 80, colorHint: 'amber', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'certification_pending', label: 'Certification Pending', orderIndex: 90, colorHint: 'blue', isTerminal: false },
+  { dictionaryCode: 'testing_certification', statusCode: 'certification_received', label: 'Certification Received', orderIndex: 100, colorHint: 'darkgreen', isTerminal: true },
 ];
 
 export async function seedStatusDictionaries(prisma: PrismaClient) {

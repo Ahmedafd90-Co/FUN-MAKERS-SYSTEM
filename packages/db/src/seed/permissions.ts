@@ -25,10 +25,9 @@ import type { PrismaClient } from '@prisma/client';
  *  13. PMO                — read-only KPI rollups
  *  14. Executive Approver  — high-authority approvals
  *
- * // TODO(ahmed): Fill the PERMISSIONS array below.
- * // List the permission codes you want for Module 1.
- * // One example is provided. Add the rest (typically 20-40 codes).
- * // You can always add more in later modules.
+ * Filled by Ahmed Al-Dossary on 2026-04-10 (Pause #1).
+ * 47 permission codes across 14 resources.
+ * Additional permissions can be added in later modules.
  */
 
 export type PermissionDef = {
@@ -39,62 +38,79 @@ export type PermissionDef = {
 };
 
 export const PERMISSIONS: PermissionDef[] = [
-  // Example — copy this pattern:
-  { code: 'project.view', description: 'View project workspace and metadata', resource: 'project', action: 'view' },
+  // --- Project ---
+  { code: 'project.view', description: 'View assigned project workspaces and project-level data', resource: 'project', action: 'view' },
+  { code: 'project.create', description: 'Create new projects', resource: 'project', action: 'create' },
+  { code: 'project.edit', description: 'Edit project master data and settings', resource: 'project', action: 'edit' },
+  { code: 'project.archive', description: 'Archive or deactivate projects', resource: 'project', action: 'archive' },
 
-  // TODO(ahmed): Add the rest of the permission codes here.
-  // Suggested minimum set for Module 1:
-  //
-  // project.edit          — Edit project metadata and settings
-  // project.create        — Create new projects (Master Admin only)
-  // project.archive       — Archive a project
-  //
-  // document.view         — View documents in assigned projects
-  // document.upload       — Upload new documents
-  // document.sign         — Sign a document version
-  // document.supersede    — Upload a new version superseding a signed one
-  //
-  // workflow.view         — View workflow instances and history
-  // workflow.start        — Start a workflow instance
-  // workflow.approve      — Approve a workflow step assigned to you
-  // workflow.reject       — Reject a workflow step
-  // workflow.return       — Return a workflow step for correction
-  // workflow.override     — Force-progress a workflow (Master Admin only)
-  //
-  // posting.view          — View posting events and exceptions
-  // posting.retry         — Retry a failed posting event
-  // posting.resolve       — Resolve a posting exception with a note
-  //
-  // audit.view            — View audit logs
-  // audit.export          — Export audit logs
-  //
-  // user.view             — View user profiles
-  // user.edit             — Edit user profiles
-  // user.create           — Create new users
-  // user.admin            — Activate/deactivate/reset users
-  //
-  // role.view             — View roles and permissions
-  // role.edit             — Edit role-permission assignments
-  //
-  // entity.view           — View entities
-  // entity.edit           — Edit entities
-  //
-  // reference_data.view   — View reference data (countries, currencies, etc.)
-  // reference_data.edit   — Edit app settings and status dictionaries
-  //
-  // notification.view     — View notification templates
-  // notification.edit     — Edit notification templates
-  //
-  // system.health         — View system health and job queues
-  // system.admin          — Full system administration
-  //
-  // override.execute      — Execute override actions (Master Admin only)
-  // cross_project.read    — Read data across projects (PMO, Master Admin)
-  //
-  // screen.admin_users    — Access Admin > Users screen
-  // screen.admin_roles    — Access Admin > Roles screen
-  // screen.admin_entities — Access Admin > Entities screen
-  // ... (add screen-level codes as needed)
+  // --- Document ---
+  { code: 'document.view', description: 'View project documents and document metadata', resource: 'document', action: 'view' },
+  { code: 'document.upload', description: 'Upload new documents and attachments', resource: 'document', action: 'upload' },
+  { code: 'document.sign', description: 'Apply internal digital signature to authorized documents', resource: 'document', action: 'sign' },
+  { code: 'document.supersede', description: 'Supersede a current document version with a new version', resource: 'document', action: 'supersede' },
+
+  // --- Workflow ---
+  { code: 'workflow.view', description: 'View workflow templates, instances, and actions', resource: 'workflow', action: 'view' },
+  { code: 'workflow.start', description: 'Start workflow instances on records', resource: 'workflow', action: 'start' },
+  { code: 'workflow.approve', description: 'Approve workflow steps assigned to the user', resource: 'workflow', action: 'approve' },
+  { code: 'workflow.reject', description: 'Reject workflow steps with comment', resource: 'workflow', action: 'reject' },
+  { code: 'workflow.return', description: 'Return workflow steps for correction with comment', resource: 'workflow', action: 'return' },
+  { code: 'workflow.override', description: 'Force-progress, reopen, or remediate workflow under controlled override', resource: 'workflow', action: 'override' },
+
+  // --- Posting ---
+  { code: 'posting.view', description: 'View posting events and posting status', resource: 'posting', action: 'view' },
+  { code: 'posting.retry', description: 'Retry failed posting events from the exception queue', resource: 'posting', action: 'retry' },
+  { code: 'posting.resolve', description: 'Resolve posting exceptions with resolution note', resource: 'posting', action: 'resolve' },
+
+  // --- Audit ---
+  { code: 'audit.view', description: 'View audit logs', resource: 'audit', action: 'view' },
+  { code: 'audit.export', description: 'Export audit logs and audit reports', resource: 'audit', action: 'export' },
+
+  // --- User ---
+  { code: 'user.view', description: 'View users and user profile records', resource: 'user', action: 'view' },
+  { code: 'user.create', description: 'Create new users', resource: 'user', action: 'create' },
+  { code: 'user.edit', description: 'Edit user records and assignments', resource: 'user', action: 'edit' },
+  { code: 'user.admin', description: 'Activate, deactivate, reset password, and administer user access', resource: 'user', action: 'admin' },
+
+  // --- Role ---
+  { code: 'role.view', description: 'View roles and role-permission structures', resource: 'role', action: 'view' },
+  { code: 'role.edit', description: 'Create or edit roles and role-permission mappings', resource: 'role', action: 'edit' },
+
+  // --- Entity ---
+  { code: 'entity.view', description: 'View entities and entity hierarchy', resource: 'entity', action: 'view' },
+  { code: 'entity.edit', description: 'Create or edit entities and entity structure', resource: 'entity', action: 'edit' },
+
+  // --- Reference Data ---
+  { code: 'reference_data.view', description: 'View reference data and application dictionaries', resource: 'reference_data', action: 'view' },
+  { code: 'reference_data.edit', description: 'Create or edit reference data, settings, and dictionaries', resource: 'reference_data', action: 'edit' },
+
+  // --- Notification ---
+  { code: 'notification.view', description: 'View notifications and notification templates', resource: 'notification', action: 'view' },
+  { code: 'notification.edit', description: 'Manage notification templates and notification settings', resource: 'notification', action: 'edit' },
+
+  // --- System ---
+  { code: 'system.health', description: 'View system health, jobs, queue status, and background processing state', resource: 'system', action: 'health' },
+  { code: 'system.admin', description: 'Administer global system configuration and sensitive platform controls', resource: 'system', action: 'admin' },
+
+  // --- Override ---
+  { code: 'override.execute', description: 'Execute controlled override actions with mandatory reason and audit logging', resource: 'override', action: 'execute' },
+
+  // --- Cross-Project ---
+  { code: 'cross_project.read', description: 'Read approved data across multiple projects where authorized', resource: 'cross_project', action: 'read' },
+
+  // --- Screen-level access ---
+  { code: 'screen.admin_users', description: 'Access the Admin Users screen', resource: 'screen', action: 'admin_users' },
+  { code: 'screen.admin_roles_permissions', description: 'Access the Admin Roles and Permissions screen', resource: 'screen', action: 'admin_roles_permissions' },
+  { code: 'screen.admin_project_assignments', description: 'Access the Admin Project Assignments screen', resource: 'screen', action: 'admin_project_assignments' },
+  { code: 'screen.admin_entities', description: 'Access the Admin Entities screen', resource: 'screen', action: 'admin_entities' },
+  { code: 'screen.admin_workflow_templates', description: 'Access the Admin Workflow Templates screen', resource: 'screen', action: 'admin_workflow_templates' },
+  { code: 'screen.admin_reference_data', description: 'Access the Admin Reference Data screen', resource: 'screen', action: 'admin_reference_data' },
+  { code: 'screen.admin_notification_templates', description: 'Access the Admin Notification Templates screen', resource: 'screen', action: 'admin_notification_templates' },
+  { code: 'screen.admin_audit_log', description: 'Access the Admin Audit Log screen', resource: 'screen', action: 'admin_audit_log' },
+  { code: 'screen.admin_posting_exceptions', description: 'Access the Admin Posting Exceptions screen', resource: 'screen', action: 'admin_posting_exceptions' },
+  { code: 'screen.admin_system_health', description: 'Access the Admin System Health and Jobs screen', resource: 'screen', action: 'admin_system_health' },
+  { code: 'screen.admin_override_log', description: 'Access the Admin Override Log screen', resource: 'screen', action: 'admin_override_log' },
 ];
 
 export async function seedPermissions(prisma: PrismaClient) {
