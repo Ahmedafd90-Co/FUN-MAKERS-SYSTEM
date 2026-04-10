@@ -851,6 +851,7 @@ model Ipa {
   project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
   ipcs    Ipc[]
 
+  @@unique([projectId, periodNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@map("ipas")
@@ -960,7 +961,7 @@ model TaxInvoice {
   ipcId           String    @map("ipc_id")
   status          String    @default("draft") @map("status")
   referenceNumber String?   @unique @map("reference_number")
-  invoiceNumber   String    @unique @map("invoice_number")
+  invoiceNumber   String    @map("invoice_number")
   invoiceDate     DateTime  @map("invoice_date")
   grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
   vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
@@ -978,6 +979,7 @@ model TaxInvoice {
   project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
   ipc     Ipc     @relation(fields: [ipcId], references: [id], onDelete: Restrict)
 
+  @@unique([projectId, invoiceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([ipcId])
@@ -1027,6 +1029,8 @@ model Correspondence {
   @@index([projectId, subtype, status])
   @@index([projectId, status])
   @@index([projectId, createdAt])
+  @@index([parentCorrespondenceId])
+  @@index([inReplyToId])
   @@map("correspondences")
 }
 
