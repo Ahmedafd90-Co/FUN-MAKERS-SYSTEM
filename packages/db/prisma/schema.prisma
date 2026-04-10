@@ -1,8 +1,14 @@
-// Fun Makers KSA — Prisma schema
+// Fun Makers KSA — Prisma Schema
 //
-// Placeholder schema for Phase 1.1 scaffolding. The real data model lands in
-// Phase 1.2 (schema design) and is extended by every subsequent phase. Do not
-// add production models here — this file will be rewritten.
+// Module 1: Shared Core Platform
+// Source of truth: docs/superpowers/specs/2026-04-09-module-1-shared-core-platform-design.md §6.2
+//
+// Conventions:
+//   - All UUIDs: String @id @default(uuid())
+//   - camelCase Prisma fields -> snake_case SQL columns via @map / @@map
+//   - Transactional tables: createdAt + updatedAt
+//   - Append-only tables (AuditLog, OverrideLog, WorkflowAction, DocumentSignature): createdAt only
+//   - Enums: PascalCase in TS, snake_case in PostgreSQL via individual variant @map
 
 generator client {
   provider = "prisma-client-js"
@@ -13,8 +19,728 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Placeholder model so `prisma generate` has something to work with during
-/// scaffolding. Replaced wholesale in Phase 1.2.
-model AppScaffold {
-  id String @id @default(uuid())
+// ---------------------------------------------------------------------------
+// 1. Reference and lookup tables (no FK dependencies)
+// ---------------------------------------------------------------------------
+
+/// ISO 3166-1 alpha-2 country codes.
+model Country {
+  code        String @id @map("code")
+  name        String @map("name")
+  iso3        String @map("iso3")
+  phonePrefix String @map("phone_prefix")
+
+  @@map("countries")
+}
+
+/// ISO 4217 currency codes.
+model Currency {
+  code          String @id @map("code")
+  name          String @map("name")
+  symbol        String @map("symbol")
+  decimalPlaces Int    @map("decimal_places")
+
+  // Relations
+  projects Project[]
+
+  @@map("currencies")
+}
+
+/// Global key-value settings (e.g. default_currency, date_format).
+model AppSetting {
+  key       String   @id @map("key")
+  valueJson Json     @map("value_json")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String   @map("updated_by")
+
+  @@map("app_settings")
+}
+
+/// Extensible status dictionaries for future module status sets
+/// (material statuses, shop drawing statuses, fabrication statuses, etc.).
+model StatusDictionary {
+  id             String  @id @default(uuid()) @map("id")
+  dictionaryCode String  @map("dictionary_code")
+  statusCode     String  @map("status_code")
+  label          String  @map("label")
+  orderIndex     Int     @map("order_index")
+  colorHint      String? @map("color_hint")
+  isTerminal     Boolean @map("is_terminal")
+
+  @@unique([dictionaryCode, statusCode])
+  @@map("status_dictionaries")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Identity
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  active   @map("active")
+  inactive @map("inactive")
+  locked   @map("locked")
+
+  @@map("user_status")
+}
+
+// ---------------------------------------------------------------------------
+// 2. Identity tables
+// ---------------------------------------------------------------------------
+
+model Department {
+  id          String  @id @default(uuid()) @map("id")
+  code        String  @unique @map("code")
+  name        String  @map("name")
+  description String? @map("description")
+
+  @@map("departments")
+}
+
+model User {
+  id               String     @id @default(uuid()) @map("id")
+  email            String     @unique @map("email")
+  name             String     @map("name")
+  passwordHash     String     @map("password_hash")
+  mfaSecret        String?    @map("mfa_secret")
+  status           UserStatus @map("status")
+  lastLoginAt      DateTime?  @map("last_login_at")
+  failedLoginCount Int        @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?  @map("locked_until")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  sessions           UserSession[]
+  userRoles          UserRole[]
+  projectAssignments ProjectAssignment[]
+  documentSignatures DocumentSignature[]
+  notifications      Notification[]
+  notificationPrefs  NotificationPreference[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String    @id @default(uuid()) @map("id")
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  ip        String    @map("ip")
+  userAgent String    @map("user_agent")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+  @@map("user_sessions")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @map("id")
+  code        String   @unique @map("code")
+  name        String   @map("name")
+  description String?  @map("description")
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  rolePermissions    RolePermission[]
+  userRoles          UserRole[]
+  screenPermissions  ScreenPermission[]
+  projectAssignments ProjectAssignment[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(uuid()) @map("id")
+  code        String @unique @map("code")
+  description String @map("description")
+  resource    String @map("resource")
+  action      String @map("action")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+/// Join table: composite PK (roleId, permissionId).
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id            String    @id @default(uuid()) @map("id")
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  assignedBy    String    @map("assigned_by")
+  assignedAt    DateTime  @map("assigned_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@map("user_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Entity
+// ---------------------------------------------------------------------------
+
+enum EntityType {
+  parent                @map("parent")
+  subsidiary            @map("subsidiary")
+  sister_company        @map("sister_company")
+  branch                @map("branch")
+  operating_unit        @map("operating_unit")
+  shared_service_entity @map("shared_service_entity")
+
+  @@map("entity_type")
+}
+
+enum EntityStatus {
+  active   @map("active")
+  inactive @map("inactive")
+  archived @map("archived")
+
+  @@map("entity_status")
+}
+
+// ---------------------------------------------------------------------------
+// 3. Multi-entity (self-referencing hierarchy)
+// ---------------------------------------------------------------------------
+
+model Entity {
+  id             String       @id @default(uuid()) @map("id")
+  code           String       @unique @map("code")
+  name           String       @map("name")
+  type           EntityType   @map("type")
+  parentEntityId String?      @map("parent_entity_id")
+  status         EntityStatus @map("status")
+  metadataJson   Json?        @map("metadata_json")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Self-relation
+  parent   Entity?  @relation("EntityParent", fields: [parentEntityId], references: [id])
+  children Entity[] @relation("EntityParent")
+
+  // Relations
+  projects Project[]
+
+  @@map("entities")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Project
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  active    @map("active")
+  on_hold   @map("on_hold")
+  completed @map("completed")
+  archived  @map("archived")
+
+  @@map("project_status")
+}
+
+// ---------------------------------------------------------------------------
+// 4. Projects and scoping
+// ---------------------------------------------------------------------------
+
+model Project {
+  id           String        @id @default(uuid()) @map("id")
+  code         String        @unique @map("code")
+  name         String        @map("name")
+  entityId     String        @map("entity_id")
+  status       ProjectStatus @map("status")
+  currencyCode String        @map("currency_code")
+  startDate    DateTime      @map("start_date")
+  endDate      DateTime?     @map("end_date")
+  createdBy    String        @map("created_by")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  entity            Entity              @relation(fields: [entityId], references: [id])
+  currency          Currency            @relation(fields: [currencyCode], references: [code])
+  assignments       ProjectAssignment[]
+  settings          ProjectSetting[]
+  screenPermissions ScreenPermission[]
+  workflowInstances WorkflowInstance[]
+  documents         Document[]
+  postingEvents     PostingEvent[]
+
+  @@index([entityId])
+  @@map("projects")
+}
+
+model ProjectAssignment {
+  id            String    @id @default(uuid()) @map("id")
+  projectId     String    @map("project_id")
+  userId        String    @map("user_id")
+  roleId        String    @map("role_id")
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  assignedBy    String    @map("assigned_by")
+  assignedAt    DateTime  @map("assigned_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedBy     String?   @map("revoked_by")
+  reason        String?   @map("reason")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
+
+  @@index([projectId, userId, effectiveFrom, effectiveTo])
+  @@map("project_assignments")
+}
+
+/// Composite PK (projectId, key). Keys include workflow_toggles,
+/// material_tracking_flags, procurement_flags, etc.
+model ProjectSetting {
+  projectId String   @map("project_id")
+  key       String   @map("key")
+  valueJson Json     @map("value_json")
+  updatedAt DateTime @map("updated_at")
+  updatedBy String   @map("updated_by")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@id([projectId, key])
+  @@map("project_settings")
+}
+
+// ---------------------------------------------------------------------------
+// 5. Screen permissions (with project overrides)
+// ---------------------------------------------------------------------------
+
+/// Screen-level permission per role. When `projectId` is NULL the row is a
+/// role-level default; a non-null `projectId` is a project-specific override.
+///
+/// SQL note: the composite unique (roleId, screenCode, projectId) allows
+/// multiple rows with projectId=NULL for different (roleId, screenCode) pairs.
+/// SQL UNIQUE treats NULLs as distinct, so a single role-default row per
+/// (roleId, screenCode) is enforced at the service layer.
+model ScreenPermission {
+  id         String   @id @default(uuid()) @map("id")
+  roleId     String   @map("role_id")
+  screenCode String   @map("screen_code")
+  canView    Boolean  @default(false) @map("can_view")
+  canEdit    Boolean  @default(false) @map("can_edit")
+  canApprove Boolean  @default(false) @map("can_approve")
+  projectId  String?  @map("project_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  role    Role     @relation(fields: [roleId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@unique([roleId, screenCode, projectId])
+  @@map("screen_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Workflow
+// ---------------------------------------------------------------------------
+
+enum WorkflowStatus {
+  draft       @map("draft")
+  in_progress @map("in_progress")
+  returned    @map("returned")
+  approved    @map("approved")
+  rejected    @map("rejected")
+  cancelled   @map("cancelled")
+  completed   @map("completed")
+  on_hold     @map("on_hold")
+
+  @@map("workflow_status")
+}
+
+// ---------------------------------------------------------------------------
+// 6. Workflow engine (generic, record-type agnostic)
+// ---------------------------------------------------------------------------
+
+model WorkflowTemplate {
+  id         String   @id @default(uuid()) @map("id")
+  code       String   @unique @map("code")
+  name       String   @map("name")
+  recordType String   @map("record_type")
+  version    Int      @map("version")
+  isActive   Boolean  @default(true) @map("is_active")
+  configJson Json     @map("config_json")
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  steps     WorkflowStep[]
+  instances WorkflowInstance[]
+
+  @@map("workflow_templates")
+}
+
+model WorkflowStep {
+  id                   String  @id @default(uuid()) @map("id")
+  templateId           String  @map("template_id")
+  orderIndex           Int     @map("order_index")
+  name                 String  @map("name")
+  approverRuleJson     Json    @map("approver_rule_json")
+  slaHours             Int?    @map("sla_hours")
+  isOptional           Boolean @default(false) @map("is_optional")
+  requirementFlagsJson Json    @default("{}") @map("requirement_flags_json")
+
+  // Relations
+  template        WorkflowTemplate @relation(fields: [templateId], references: [id])
+  workflowActions WorkflowAction[]
+
+  @@map("workflow_steps")
+}
+
+model WorkflowInstance {
+  id            String         @id @default(uuid()) @map("id")
+  templateId    String         @map("template_id")
+  recordType    String         @map("record_type")
+  recordId      String         @map("record_id")
+  projectId     String         @map("project_id")
+  status        WorkflowStatus @map("status")
+  currentStepId String?        @map("current_step_id")
+  startedBy     String         @map("started_by")
+  startedAt     DateTime       @map("started_at")
+  completedAt   DateTime?      @map("completed_at")
+
+  // Relations
+  template WorkflowTemplate @relation(fields: [templateId], references: [id])
+  project  Project          @relation(fields: [projectId], references: [id])
+  actions  WorkflowAction[]
+
+  @@index([projectId, status])
+  @@index([currentStepId])
+  @@map("workflow_instances")
+}
+
+/// APPEND-ONLY: no updatedAt; updates and deletes rejected by middleware.
+model WorkflowAction {
+  id           String   @id @default(uuid()) @map("id")
+  instanceId   String   @map("instance_id")
+  stepId       String   @map("step_id")
+  actorUserId  String   @map("actor_user_id")
+  action       String   @map("action")
+  comment      String?  @map("comment")
+  actedAt      DateTime @map("acted_at")
+  metadataJson Json?    @map("metadata_json")
+
+  // Relations
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id])
+  step     WorkflowStep     @relation(fields: [stepId], references: [id])
+
+  @@index([instanceId, actedAt])
+  @@map("workflow_actions")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Document
+// ---------------------------------------------------------------------------
+
+enum DocumentCategory {
+  shop_drawing        @map("shop_drawing")
+  material_submittal  @map("material_submittal")
+  test_certificate    @map("test_certificate")
+  contract_attachment @map("contract_attachment")
+  vendor_document     @map("vendor_document")
+  letter              @map("letter")
+  drawing             @map("drawing")
+  specification       @map("specification")
+  general             @map("general")
+
+  @@map("document_category")
+}
+
+enum DocumentStatus {
+  draft      @map("draft")
+  in_review  @map("in_review")
+  approved   @map("approved")
+  signed     @map("signed")
+  superseded @map("superseded")
+  archived   @map("archived")
+
+  @@map("document_status")
+}
+
+// ---------------------------------------------------------------------------
+// 7. Documents, versions, signatures
+// ---------------------------------------------------------------------------
+
+model Document {
+  id               String           @id @default(uuid()) @map("id")
+  projectId        String           @map("project_id")
+  recordType       String?          @map("record_type")
+  recordId         String?          @map("record_id")
+  title            String           @map("title")
+  category         DocumentCategory @map("category")
+  status           DocumentStatus   @map("status")
+  currentVersionId String?          @unique @map("current_version_id")
+  createdBy        String           @map("created_by")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  // Relations — circular FK with DocumentVersion
+  currentVersion DocumentVersion?  @relation("CurrentDocVersion", fields: [currentVersionId], references: [id])
+  versions       DocumentVersion[] @relation("DocumentVersions")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, category])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id                    String    @id @default(uuid()) @map("id")
+  documentId            String    @map("document_id")
+  versionNo             Int       @map("version_no")
+  fileKey               String    @map("file_key")
+  fileHash              String    @map("file_hash")
+  fileSize              Int       @map("file_size")
+  mimeType              String    @map("mime_type")
+  uploadedBy            String    @map("uploaded_by")
+  uploadedAt            DateTime  @map("uploaded_at")
+  isSigned              Boolean   @default(false) @map("is_signed")
+  signedAt              DateTime? @map("signed_at")
+  signedBy              String?   @map("signed_by")
+  supersededAt          DateTime? @map("superseded_at")
+  supersededByVersionId String?   @map("superseded_by_version_id")
+
+  // Relations — circular FK with Document
+  document  Document  @relation("DocumentVersions", fields: [documentId], references: [id])
+  currentOf Document? @relation("CurrentDocVersion")
+
+  // Relations
+  signatures DocumentSignature[]
+
+  @@unique([documentId, versionNo])
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+/// APPEND-ONLY: no updatedAt; inserts only, deletes rejected by middleware.
+model DocumentSignature {
+  id            String   @id @default(uuid()) @map("id")
+  versionId     String   @map("version_id")
+  signerUserId  String   @map("signer_user_id")
+  signatureType String   @default("internal_hash") @map("signature_type")
+  signedAt      DateTime @map("signed_at")
+  ip            String   @map("ip")
+  userAgent     String   @map("user_agent")
+  hashAtSign    String   @map("hash_at_sign")
+
+  // Relations
+  version    DocumentVersion @relation(fields: [versionId], references: [id])
+  signerUser User            @relation(fields: [signerUserId], references: [id])
+
+  @@map("document_signatures")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Posting
+// ---------------------------------------------------------------------------
+
+enum PostingStatus {
+  pending  @map("pending")
+  posted   @map("posted")
+  reversed @map("reversed")
+  failed   @map("failed")
+
+  @@map("posting_status")
+}
+
+// ---------------------------------------------------------------------------
+// 8. Posting (centralized)
+// ---------------------------------------------------------------------------
+
+model PostingEvent {
+  id                String        @id @default(uuid()) @map("id")
+  eventType         String        @map("event_type")
+  sourceService     String        @map("source_service")
+  sourceRecordType  String        @map("source_record_type")
+  sourceRecordId    String        @map("source_record_id")
+  projectId         String        @map("project_id")
+  entityId          String?       @map("entity_id")
+  idempotencyKey    String        @unique @map("idempotency_key")
+  payloadJson       Json          @map("payload_json")
+  status            PostingStatus @map("status")
+  postedAt          DateTime?     @map("posted_at")
+  reversedByEventId String?       @map("reversed_by_event_id")
+  failureReason     String?       @map("failure_reason")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  // Self-relation for reversals
+  reversedByEvent PostingEvent?  @relation("PostingReversal", fields: [reversedByEventId], references: [id])
+  reversals       PostingEvent[] @relation("PostingReversal")
+
+  // Relations
+  project    Project            @relation(fields: [projectId], references: [id])
+  exceptions PostingException[]
+
+  @@index([projectId, eventType, status])
+  @@map("posting_events")
+}
+
+model PostingException {
+  id             String    @id @default(uuid()) @map("id")
+  eventId        String    @map("event_id")
+  reason         String    @map("reason")
+  assignedTo     String?   @map("assigned_to")
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?   @map("resolved_by")
+  resolutionNote String?   @map("resolution_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  event PostingEvent @relation(fields: [eventId], references: [id])
+
+  @@map("posting_exceptions")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Audit
+// ---------------------------------------------------------------------------
+
+enum AuditActorSource {
+  user   @map("user")
+  system @map("system")
+  agent  @map("agent")
+  job    @map("job")
+
+  @@map("audit_actor_source")
+}
+
+// ---------------------------------------------------------------------------
+// 9. Audit (append-only)
+// ---------------------------------------------------------------------------
+
+/// APPEND-ONLY: no updatedAt, no soft-delete. Never updated, never deleted.
+model AuditLog {
+  id           String           @id @default(uuid()) @map("id")
+  actorUserId  String?          @map("actor_user_id")
+  actorSource  AuditActorSource @map("actor_source")
+  action       String           @map("action")
+  resourceType String           @map("resource_type")
+  resourceId   String           @map("resource_id")
+  projectId    String?          @map("project_id")
+  beforeJson   Json             @map("before_json")
+  afterJson    Json             @map("after_json")
+  reason       String?          @map("reason")
+  ip           String?          @map("ip")
+  userAgent    String?          @map("user_agent")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  overrideLogs OverrideLog[]
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("audit_logs")
+}
+
+/// Override log: denormalized view of audit entries where an override occurred.
+/// Materialized on write for fast admin visibility.
+model OverrideLog {
+  id              String   @id @default(uuid()) @map("id")
+  auditLogId      String   @map("audit_log_id")
+  overrideType    String   @map("override_type")
+  overriderUserId String   @map("overrider_user_id")
+  reason          String   @map("reason")
+  beforeJson      Json     @map("before_json")
+  afterJson       Json     @map("after_json")
+  approvedBy      String?  @map("approved_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  auditLog AuditLog @relation(fields: [auditLogId], references: [id])
+
+  @@map("override_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Notification
+// ---------------------------------------------------------------------------
+
+enum NotificationChannel {
+  in_app @map("in_app")
+  email  @map("email")
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  pending @map("pending")
+  sent    @map("sent")
+  failed  @map("failed")
+  read    @map("read")
+
+  @@map("notification_status")
+}
+
+// ---------------------------------------------------------------------------
+// 10. Notifications
+// ---------------------------------------------------------------------------
+
+model NotificationTemplate {
+  id              String              @id @default(uuid()) @map("id")
+  code            String              @unique @map("code")
+  channel         NotificationChannel @map("channel")
+  subjectTemplate String              @map("subject_template")
+  bodyTemplate    String              @map("body_template")
+  defaultEnabled  Boolean             @default(true) @map("default_enabled")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  @@map("notification_templates")
+}
+
+model Notification {
+  id           String              @id @default(uuid()) @map("id")
+  userId       String              @map("user_id")
+  templateCode String              @map("template_code")
+  payloadJson  Json                @map("payload_json")
+  channel      NotificationChannel @map("channel")
+  status       NotificationStatus  @map("status")
+  sentAt       DateTime?           @map("sent_at")
+  readAt       DateTime?           @map("read_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, status, createdAt])
+  @@map("notifications")
+}
+
+/// Composite PK (userId, templateCode, channel).
+model NotificationPreference {
+  userId       String              @map("user_id")
+  templateCode String              @map("template_code")
+  channel      NotificationChannel @map("channel")
+  enabled      Boolean             @map("enabled")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, templateCode, channel])
+  @@map("notification_preferences")
 }

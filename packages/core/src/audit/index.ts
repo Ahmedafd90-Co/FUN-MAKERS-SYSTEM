@@ -1,2 +1,2 @@
-// TODO(phase 1.3): implement audit service
-export const auditService = {};
+export { auditService } from './service';
+export type { AuditEntry } from './service';
