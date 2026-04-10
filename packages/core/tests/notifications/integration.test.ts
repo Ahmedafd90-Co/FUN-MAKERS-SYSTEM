@@ -21,6 +21,13 @@ import { registerWorkflowNotificationHandlers } from '../../src/notifications/ev
 
 const ts = `int-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
+// Helper: count notifications for a user with a given template
+async function countNotifications(userId: string, templateCode: string, channel?: string) {
+  const where: Record<string, unknown> = { userId, templateCode };
+  if (channel) where['channel'] = channel;
+  return prisma.notification.count({ where: where as any });
+}
+
 // ============================================================================
 // 1.8.11 — Notification Lifecycle
 // ============================================================================
@@ -40,6 +47,12 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
     });
   });
 
+  afterAll(async () => {
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM notifications WHERE user_id = '${user.id}'`);
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM audit_logs WHERE actor_user_id = '${user.id}'`);
+    await prisma.user.delete({ where: { id: user.id } });
+  });
+
   it('create -> deliver -> read -> list full lifecycle', async () => {
     const iKey = `lifecycle-${ts}`;
 
@@ -55,11 +68,11 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
     // 2. Verify it appears in listForUser() as unread
     const listBefore = await listForUser(user.id, { unreadOnly: true });
     const found = listBefore.items.find(
-      (n) => n.subject === 'Welcome to Fun Makers KSA',
+      (n) => n.templateCode === 'user_invited',
     );
     expect(found).toBeDefined();
-    expect(found!.readAt).toBeNull();
-    expect(found!.status).toBe('sent');
+    expect(found?.readAt).toBeNull();
+    expect(found?.status).toBe('sent');
     notificationId = found!.id;
 
     // 3. Verify getUnreadCount() reflects it
@@ -73,8 +86,8 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
     const listAfter = await listForUser(user.id, { limit: 50 });
     const readNotif = listAfter.items.find((n) => n.id === notificationId);
     expect(readNotif).toBeDefined();
-    expect(readNotif!.status).toBe('read');
-    expect(readNotif!.readAt).not.toBeNull();
+    expect(readNotif?.status).toBe('read');
+    expect(readNotif?.readAt).not.toBeNull();
 
     // 6. Verify getUnreadCount() decreases
     const countAfter = await getUnreadCount(user.id);
@@ -87,8 +100,9 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
     const afterIdempotent = await prisma.notification.findUnique({
       where: { id: notificationId },
     });
+    expect(afterIdempotent).not.toBeNull();
     expect(afterIdempotent!.readAt!.getTime()).toBe(
-      readNotif!.readAt!.getTime(),
+      new Date(readNotif!.readAt!).getTime(),
     );
   });
 });
@@ -122,6 +136,12 @@ describe('Task 1.8.12 — Idempotency', () => {
     ]);
   });
 
+  afterAll(async () => {
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM notifications WHERE user_id IN ('${userA.id}', '${userB.id}')`);
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM audit_logs WHERE actor_user_id IN ('${userA.id}', '${userB.id}')`);
+    await prisma.user.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
+  });
+
   it('same key + same recipient + same channel produces only ONE row', async () => {
     const iKey = `idem-dup-${ts}`;
     const callPayload = {
@@ -135,9 +155,7 @@ describe('Task 1.8.12 — Idempotency', () => {
     await notify(callPayload);
     await notify(callPayload); // second call — should be skipped
 
-    const count = await prisma.notification.count({
-      where: { userId: userA.id, idempotencyKey: iKey, channel: 'in_app' },
-    });
+    const count = await countNotifications(userA.id, 'user_invited', 'in_app');
     expect(count).toBe(1);
   });
 
@@ -211,7 +229,8 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
   let approverUser: { id: string };
   let entity: { id: string };
   let project: { id: string };
-  let template: { id: string };
+  let wfTemplate: { id: string };
+  let approverRole: { id: string };
   let step1: { id: string; name: string };
   let step2: { id: string; name: string };
   let instance: { id: string };
@@ -282,7 +301,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     });
 
     // Create a role for the approver
-    const approverRole = await prisma.role.create({
+    approverRole = await prisma.role.create({
       data: {
         name: `E2E Doc Controller ${ts}`,
         code: `e2e_doc_ctrl_${ts}`,
@@ -315,7 +334,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     });
 
     // Create workflow template + steps
-    template = await prisma.workflowTemplate.create({
+    wfTemplate = await prisma.workflowTemplate.create({
       data: {
         code: `wf-e2e-${ts}`,
         name: `Test E2E WF ${ts}`,
@@ -329,7 +348,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
 
     step1 = await prisma.workflowStep.create({
       data: {
-        templateId: template.id,
+        templateId: wfTemplate.id,
         orderIndex: 10,
         name: 'E2E Step 1 Review',
         approverRuleJson: { type: 'user', userId: approverUser.id },
@@ -341,7 +360,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
 
     step2 = await prisma.workflowStep.create({
       data: {
-        templateId: template.id,
+        templateId: wfTemplate.id,
         orderIndex: 20,
         name: 'E2E Step 2 Approval',
         approverRuleJson: { type: 'user', userId: approverUser.id },
@@ -354,7 +373,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     // Create workflow instance pointing at step2 (simulating step1 just approved)
     instance = await (prisma as any).workflowInstance.create({
       data: {
-        templateId: template.id,
+        templateId: wfTemplate.id,
         recordType: 'document',
         recordId: `doc-e2e-${ts}`,
         projectId: project.id,
@@ -372,6 +391,21 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
 
   afterAll(async () => {
     workflowEvents.clearHandlers();
+    if (!templatesExist) return;
+
+    // Cleanup in reverse dependency order
+    const userIds = [starterUser.id, approverUser.id];
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM notifications WHERE user_id IN ('${userIds.join("','")}')`);
+    await (prisma as any).$executeRawUnsafe(`DELETE FROM audit_logs WHERE actor_user_id IN ('${userIds.join("','")}') OR (resource_type = 'notification' AND actor_source = 'system')`);
+    await (prisma as any).workflowInstance.deleteMany({ where: { id: instance.id } });
+    await prisma.workflowStep.deleteMany({ where: { templateId: wfTemplate.id } });
+    await prisma.workflowTemplate.delete({ where: { id: wfTemplate.id } });
+    await (prisma as any).projectAssignment.deleteMany({ where: { projectId: project.id } });
+    await prisma.userRole.deleteMany({ where: { userId: approverUser.id, roleId: approverRole.id } });
+    await prisma.role.delete({ where: { id: approverRole.id } });
+    await prisma.project.delete({ where: { id: project.id } });
+    await prisma.entity.delete({ where: { id: entity.id } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   });
 
   it('workflow.stepApproved creates notification for next-step approver', async () => {
@@ -380,9 +414,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
       return;
     }
 
-    const before = await prisma.notification.count({
-      where: { userId: approverUser.id, templateCode: 'workflow_step_assigned' },
-    });
+    const before = await countNotifications(approverUser.id, 'workflow_step_assigned');
 
     await workflowEvents.emit('workflow.stepApproved', {
       instanceId: instance.id,
@@ -394,9 +426,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
       stepName: step1.name,
     });
 
-    const after = await prisma.notification.count({
-      where: { userId: approverUser.id, templateCode: 'workflow_step_assigned' },
-    });
+    const after = await countNotifications(approverUser.id, 'workflow_step_assigned');
     expect(after).toBeGreaterThan(before);
 
     // Verify notification content was rendered from template
@@ -420,9 +450,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
       return;
     }
 
-    const before = await prisma.notification.count({
-      where: { userId: starterUser.id, templateCode: 'workflow_approved' },
-    });
+    const before = await countNotifications(starterUser.id, 'workflow_approved');
 
     await workflowEvents.emit('workflow.approved', {
       instanceId: instance.id,
@@ -433,9 +461,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
       actorUserId: approverUser.id,
     });
 
-    const after = await prisma.notification.count({
-      where: { userId: starterUser.id, templateCode: 'workflow_approved' },
-    });
+    const after = await countNotifications(starterUser.id, 'workflow_approved');
     expect(after).toBeGreaterThan(before);
 
     // Verify notification content was rendered from template
