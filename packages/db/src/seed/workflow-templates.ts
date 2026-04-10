@@ -3,20 +3,15 @@ import type { PrismaClient } from '@prisma/client';
 /**
  * Reference workflow template: Document Approval
  *
+ * Approved by Ahmed Al-Dossary on 2026-04-10 (Pause #2).
+ *
  * This is the canonical template demonstrating how Pico Play workflows
  * are structured. Modules 2/3 will copy this pattern for IPA, RFQ, etc.
  *
- * TODO(ahmed): Confirm or edit the step sequence and approver rules below.
- * The defaults are:
- *   Step 1: Document Controller Review (24h SLA)
- *   Step 2: PM Approval (48h SLA)
- *   Step 3: PD Sign-off (72h SLA, optional)
- *
- * Approver rule shapes:
- *   { type: 'role', roleCode: 'document_controller' }
- *   { type: 'project_role', roleCode: 'project_manager', projectScoped: true }
- *   { type: 'user', userId: '...' }
- *   { type: 'any_of', rules: [...] }
+ * Steps:
+ *   1. Document Controller Review (role-based, 24h SLA)
+ *   2. Project Manager Approval (project-scoped role, 48h SLA)
+ *   3. Project Director Sign-off (project-scoped role, 72h SLA, optional)
  */
 
 const DOCUMENT_APPROVAL_TEMPLATE = {
@@ -29,7 +24,6 @@ const DOCUMENT_APPROVAL_TEMPLATE = {
     allowOverride: true,
   },
   steps: [
-    // TODO(ahmed): confirm these steps and approver rules
     {
       orderIndex: 10,
       name: 'Document Controller Review',
