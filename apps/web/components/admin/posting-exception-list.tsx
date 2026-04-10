@@ -20,6 +20,8 @@ import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 
+import { EmptyState } from '@/components/ui/empty-state';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -143,12 +145,11 @@ export function PostingExceptionList({
 
       {/* Empty state */}
       {!isLoading && exceptions.length === 0 && (
-        <div className="py-12 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-green-500 mb-3" />
-          <p className="text-muted-foreground">
-            No posting exceptions. The posting pipeline is healthy.
-          </p>
-        </div>
+        <EmptyState
+          icon={CheckCircle2}
+          title="No posting exceptions"
+          description="All posting events are processing normally."
+        />
       )}
 
       {/* Table */}

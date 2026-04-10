@@ -15,6 +15,8 @@ import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 
+import { EmptyState } from '@/components/ui/empty-state';
+
 import {
   ApproveDialog,
   RejectDialog,
@@ -136,11 +138,11 @@ export function ApprovalList() {
 
       {/* Empty state */}
       {!isLoading && (!approvals || approvals.length === 0) && (
-        <div className="py-16 text-center">
-          <p className="text-muted-foreground text-lg">
-            No approvals waiting for you -- your queue is clear.
-          </p>
-        </div>
+        <EmptyState
+          icon={CheckCircle2}
+          title="No pending approvals"
+          description="Your queue is clear — nothing needs your attention right now."
+        />
       )}
 
       {/* Approval cards */}
