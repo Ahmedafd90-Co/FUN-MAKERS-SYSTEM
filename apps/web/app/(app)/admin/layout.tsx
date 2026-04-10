@@ -38,7 +38,6 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Workflow Templates',
     href: '/admin/workflow-templates',
     icon: GitBranch,
-    stub: 'Coming in Phase 1.5',
   },
   {
     label: 'Notification Templates',
