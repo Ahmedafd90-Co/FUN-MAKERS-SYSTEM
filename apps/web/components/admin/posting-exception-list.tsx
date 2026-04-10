@@ -19,6 +19,7 @@ import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { statusBadgeStyle } from '@/lib/badge-variants';
 
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -52,6 +53,19 @@ function formatReason(reason: string): string {
     .replace(/^payload_validation_failed:\s*/i, '');
   // Truncate to 80 chars for table display
   return cleaned.length > 80 ? `${cleaned.slice(0, 77)}...` : cleaned;
+}
+
+function ExceptionStatusBadge({ resolved }: { resolved: boolean }) {
+  const style = statusBadgeStyle(resolved ? 'resolved' : 'pending');
+  if (resolved) {
+    return <Badge variant={style.variant} className={style.className}>Resolved</Badge>;
+  }
+  return (
+    <Badge variant={style.variant} className={style.className}>
+      <AlertTriangle className="h-3 w-3 mr-1" />
+      Open
+    </Badge>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,22 +225,7 @@ export function PostingExceptionList({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {exc.resolvedAt ? (
-                        <Badge
-                          variant="secondary"
-                          className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                        >
-                          Resolved
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="secondary"
-                          className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                        >
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          Open
-                        </Badge>
-                      )}
+                      <ExceptionStatusBadge resolved={!!exc.resolvedAt} />
                     </td>
                   </tr>
                 ))}

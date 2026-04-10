@@ -3,6 +3,7 @@
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import { Input } from '@fmksa/ui/components/input';
+import { statusBadgeStyle } from '@/lib/badge-variants';
 import {
   Select,
   SelectContent,
@@ -155,7 +156,7 @@ function AssignmentRows({
             <td className="px-4 py-3 text-muted-foreground">-</td>
             <td className="px-4 py-3 text-muted-foreground">-</td>
             <td className="px-4 py-3 text-center">
-              <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+              <Badge variant={statusBadgeStyle('active').variant} className={statusBadgeStyle('active').className}>
                 Active
               </Badge>
             </td>

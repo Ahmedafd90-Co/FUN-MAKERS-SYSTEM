@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function ProfilePage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 lg:px-8">
       <h1 className="text-2xl font-bold tracking-tight">Your profile</h1>
       <ProfileInfo />
       <ChangePasswordForm />

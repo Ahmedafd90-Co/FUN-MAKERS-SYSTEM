@@ -15,22 +15,16 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { statusBadgeStyle } from '@/lib/badge-variants';
 
 // ---------------------------------------------------------------------------
-// Status badge variants
+// Status badge
 // ---------------------------------------------------------------------------
 
 function statusBadge(status: string) {
-  switch (status) {
-    case 'active':
-      return <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Active</Badge>;
-    case 'inactive':
-      return <Badge variant="secondary" className="bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">Inactive</Badge>;
-    case 'locked':
-      return <Badge variant="destructive">Locked</Badge>;
-    default:
-      return <Badge variant="outline">{status}</Badge>;
-  }
+  const { variant, className } = statusBadgeStyle(status);
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
 // ---------------------------------------------------------------------------
