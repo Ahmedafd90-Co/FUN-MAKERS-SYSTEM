@@ -197,7 +197,7 @@ export function ApprovalList() {
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Button
                   size="sm"
                   onClick={() => setApproveItem(item as unknown as ApprovalItem)}

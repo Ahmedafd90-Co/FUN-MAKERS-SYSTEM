@@ -197,7 +197,7 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
                   key={item.label}
                   href={item.href}
                   className={cn(
-                    'px-3 py-2 text-sm rounded-md transition-colors',
+                    'px-3 py-2.5 text-sm rounded-md transition-colors',
                     item.active
                       ? 'bg-accent text-accent-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
