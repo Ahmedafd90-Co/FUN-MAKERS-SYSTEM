@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Separator } from '@fmksa/ui/components/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fmksa/ui/components/tabs';
 import { useState } from 'react';
@@ -114,11 +115,7 @@ export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
         <TabsTrigger value="team">Team</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
         {/* Future module tabs — subtle, not noisy */}
-        <TabsTrigger
-          value="commercial"
-          className="text-muted-foreground/50"
-          title="Coming in Module 2"
-        >
+        <TabsTrigger value="commercial">
           Commercial
         </TabsTrigger>
         <TabsTrigger
@@ -178,7 +175,11 @@ export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
       </TabsContent>
 
       <TabsContent value="commercial">
-        <PlaceholderTab module="Module 2" />
+        <div className="py-6 text-center">
+          <Link href={`/projects/${project.id}/commercial`} className="text-sm text-primary hover:underline">
+            Open Commercial Dashboard →
+          </Link>
+        </div>
       </TabsContent>
 
       <TabsContent value="procurement">

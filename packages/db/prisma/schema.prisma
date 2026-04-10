@@ -283,6 +283,14 @@ model Project {
   workflowInstances WorkflowInstance[]
   documents         Document[]
   postingEvents     PostingEvent[]
+  // Module 2 — Commercial Engine relations
+  ipas              Ipa[]
+  ipcs              Ipc[]
+  variations        Variation[]
+  costProposals     CostProposal[]
+  taxInvoices       TaxInvoice[]
+  correspondences   Correspondence[]
+  referenceCounters ReferenceCounter[]
 
   @@index([entityId])
   @@map("projects")
@@ -697,6 +705,71 @@ enum NotificationStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Enums — Module 2: Commercial Engine
+// ---------------------------------------------------------------------------
+
+enum VariationSubtype {
+  vo           @map("vo")
+  change_order @map("change_order")
+
+  @@map("variation_subtype")
+}
+
+enum CorrespondenceSubtype {
+  letter      @map("letter")
+  notice      @map("notice")
+  claim       @map("claim")
+  back_charge @map("back_charge")
+
+  @@map("correspondence_subtype")
+}
+
+enum VariationInitiatedBy {
+  contractor @map("contractor")
+  client     @map("client")
+
+  @@map("variation_initiated_by")
+}
+
+enum NoticeType {
+  delay             @map("delay")
+  claim_notice      @map("claim_notice")
+  extension_of_time @map("extension_of_time")
+  dispute           @map("dispute")
+  force_majeure     @map("force_majeure")
+  general           @map("general")
+
+  @@map("notice_type")
+}
+
+enum ClaimType {
+  time_extension  @map("time_extension")
+  additional_cost @map("additional_cost")
+  time_and_cost   @map("time_and_cost")
+
+  @@map("claim_type")
+}
+
+enum BackChargeCategory {
+  defect         @map("defect")
+  delay          @map("delay")
+  non_compliance @map("non_compliance")
+  damage         @map("damage")
+  other          @map("other")
+
+  @@map("back_charge_category")
+}
+
+enum LetterType {
+  instruction @map("instruction")
+  response    @map("response")
+  transmittal @map("transmittal")
+  general     @map("general")
+
+  @@map("letter_type")
+}
+
+// ---------------------------------------------------------------------------
 // 10. Notifications
 // ---------------------------------------------------------------------------
 
@@ -747,4 +820,228 @@ model NotificationPreference {
 
   @@id([userId, templateCode, channel])
   @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// Models — Module 2: Commercial Engine
+// ---------------------------------------------------------------------------
+
+model Ipa {
+  id                String   @id @default(uuid()) @map("id")
+  projectId         String   @map("project_id")
+  status            String   @default("draft") @map("status")
+  referenceNumber   String?  @unique @map("reference_number")
+  periodNumber      Int      @map("period_number")
+  periodFrom        DateTime @map("period_from")
+  periodTo          DateTime @map("period_to")
+  grossAmount       Decimal  @map("gross_amount") @db.Decimal(18, 2)
+  retentionRate     Decimal  @map("retention_rate") @db.Decimal(5, 4)
+  retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
+  previousCertified Decimal  @map("previous_certified") @db.Decimal(18, 2)
+  currentClaim      Decimal  @map("current_claim") @db.Decimal(18, 2)
+  advanceRecovery   Decimal? @map("advance_recovery") @db.Decimal(18, 2)
+  otherDeductions   Decimal? @map("other_deductions") @db.Decimal(18, 2)
+  netClaimed        Decimal  @map("net_claimed") @db.Decimal(18, 2)
+  currency          String   @map("currency")
+  description       String?  @map("description")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipcs    Ipc[]
+
+  @@unique([projectId, periodNumber])
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@map("ipas")
+}
+
+model Ipc {
+  id                String   @id @default(uuid()) @map("id")
+  projectId         String   @map("project_id")
+  ipaId             String   @map("ipa_id")
+  status            String   @default("draft") @map("status")
+  referenceNumber   String?  @unique @map("reference_number")
+  certifiedAmount   Decimal  @map("certified_amount") @db.Decimal(18, 2)
+  retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
+  adjustments       Decimal? @map("adjustments") @db.Decimal(18, 2)
+  netCertified      Decimal  @map("net_certified") @db.Decimal(18, 2)
+  certificationDate DateTime @map("certification_date")
+  currency          String   @map("currency")
+  remarks           String?  @map("remarks")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipa         Ipa          @relation(fields: [ipaId], references: [id], onDelete: Restrict)
+  taxInvoices TaxInvoice[]
+
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@index([ipaId])
+  @@map("ipcs")
+}
+
+model Variation {
+  id                     String                @id @default(uuid()) @map("id")
+  projectId              String                @map("project_id")
+  subtype                VariationSubtype      @map("subtype")
+  status                 String                @default("draft") @map("status")
+  referenceNumber        String?               @unique @map("reference_number")
+  title                  String                @map("title")
+  description            String                @map("description")
+  reason                 String                @map("reason")
+  costImpact             Decimal?              @map("cost_impact") @db.Decimal(18, 2)
+  timeImpactDays         Int?                  @map("time_impact_days")
+  currency               String                @map("currency")
+  // Assessment fields (Addendum A) — populated during review/approve
+  assessedCostImpact     Decimal?              @map("assessed_cost_impact") @db.Decimal(18, 2)
+  assessedTimeImpactDays Int?                  @map("assessed_time_impact_days")
+  approvedCostImpact     Decimal?              @map("approved_cost_impact") @db.Decimal(18, 2)
+  approvedTimeImpactDays Int?                  @map("approved_time_impact_days")
+  // VO-specific (nullable)
+  initiatedBy            VariationInitiatedBy? @map("initiated_by")
+  contractClause         String?               @map("contract_clause")
+  // CO-specific (nullable)
+  parentVariationId      String?               @map("parent_variation_id")
+  originalContractValue  Decimal?              @map("original_contract_value") @db.Decimal(18, 2)
+  adjustmentAmount       Decimal?              @map("adjustment_amount") @db.Decimal(18, 2)
+  newContractValue       Decimal?              @map("new_contract_value") @db.Decimal(18, 2)
+  timeAdjustmentDays     Int?                  @map("time_adjustment_days")
+  createdBy              String                @map("created_by")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentVariation Variation?     @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
+  childVariations Variation[]    @relation("VariationParent")
+  costProposals   CostProposal[]
+
+  @@index([projectId, subtype, status])
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@map("variations")
+}
+
+model CostProposal {
+  id                String   @id @default(uuid()) @map("id")
+  projectId         String   @map("project_id")
+  variationId       String?  @map("variation_id")
+  status            String   @default("draft") @map("status")
+  referenceNumber   String?  @unique @map("reference_number")
+  revisionNumber    Int      @map("revision_number")
+  estimatedCost     Decimal  @map("estimated_cost") @db.Decimal(18, 2)
+  estimatedTimeDays Int?     @map("estimated_time_days")
+  methodology       String?  @map("methodology")
+  costBreakdown     String?  @map("cost_breakdown")
+  currency          String   @map("currency")
+  // Assessment fields (Addendum A) — populated during review/approve
+  assessedCost      Decimal? @map("assessed_cost") @db.Decimal(18, 2)
+  assessedTimeDays  Int?     @map("assessed_time_days")
+  approvedCost      Decimal? @map("approved_cost") @db.Decimal(18, 2)
+  approvedTimeDays  Int?     @map("approved_time_days")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@index([variationId])
+  @@map("cost_proposals")
+}
+
+model TaxInvoice {
+  id              String    @id @default(uuid()) @map("id")
+  projectId       String    @map("project_id")
+  ipcId           String    @map("ipc_id")
+  status          String    @default("draft") @map("status")
+  referenceNumber String?   @unique @map("reference_number")
+  invoiceNumber   String    @map("invoice_number")
+  invoiceDate     DateTime  @map("invoice_date")
+  grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
+  vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount       Decimal   @map("vat_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal   @map("total_amount") @db.Decimal(18, 2)
+  dueDate         DateTime? @map("due_date")
+  currency        String    @map("currency")
+  buyerName       String    @map("buyer_name")
+  buyerTaxId      String?   @map("buyer_tax_id")
+  sellerTaxId     String    @map("seller_tax_id")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipc     Ipc     @relation(fields: [ipcId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, invoiceNumber])
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@index([ipcId])
+  @@map("tax_invoices")
+}
+
+model Correspondence {
+  id                     String                @id @default(uuid()) @map("id")
+  projectId              String                @map("project_id")
+  subtype                CorrespondenceSubtype @map("subtype")
+  status                 String                @default("draft") @map("status")
+  referenceNumber        String?               @unique @map("reference_number")
+  subject                String                @map("subject")
+  body                   String                @map("body")
+  recipientName          String                @map("recipient_name")
+  recipientOrg           String?               @map("recipient_org")
+  currency               String?               @map("currency")
+  parentCorrespondenceId String?               @map("parent_correspondence_id")
+  // Notice-specific
+  noticeType             NoticeType?           @map("notice_type")
+  contractClause         String?               @map("contract_clause")
+  responseDeadline       DateTime?             @map("response_deadline")
+  // Claim-specific
+  claimType              ClaimType?            @map("claim_type")
+  claimedAmount          Decimal?              @map("claimed_amount") @db.Decimal(18, 2)
+  claimedTimeDays        Int?                  @map("claimed_time_days")
+  settledAmount          Decimal?              @map("settled_amount") @db.Decimal(18, 2)
+  settledTimeDays        Int?                  @map("settled_time_days")
+  // Back-charge-specific
+  targetName             String?               @map("target_name")
+  category               BackChargeCategory?   @map("category")
+  chargedAmount          Decimal?              @map("charged_amount") @db.Decimal(18, 2)
+  evidenceDescription    String?               @map("evidence_description")
+  // Letter-specific
+  letterType             LetterType?           @map("letter_type")
+  inReplyToId            String?               @map("in_reply_to_id")
+  createdBy              String                @map("created_by")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  project              Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentCorrespondence Correspondence?  @relation("CorrespondenceParent", fields: [parentCorrespondenceId], references: [id], onDelete: Restrict)
+  childCorrespondences Correspondence[] @relation("CorrespondenceParent")
+  inReplyTo            Correspondence?  @relation("CorrespondenceReply", fields: [inReplyToId], references: [id], onDelete: Restrict)
+  replies              Correspondence[] @relation("CorrespondenceReply")
+
+  @@index([projectId, subtype, status])
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@index([parentCorrespondenceId])
+  @@index([inReplyToId])
+  @@map("correspondences")
+}
+
+model ReferenceCounter {
+  id         String @id @default(uuid()) @map("id")
+  projectId  String @map("project_id")
+  typeCode   String @map("type_code")
+  lastNumber Int    @default(0) @map("last_number")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, typeCode])
+  @@map("reference_counters")
 }

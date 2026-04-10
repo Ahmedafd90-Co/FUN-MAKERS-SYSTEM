@@ -15,6 +15,7 @@ import { notificationsRouter } from './notifications';
 import { dashboardRouter } from './dashboard';
 import { auditRouter } from './audit';
 import { healthRouter } from './health';
+import { commercialRouter } from './commercial';
 
 export const appRouter = router({
   auth: authRouter,
@@ -28,6 +29,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   audit: auditRouter,
   health: healthRouter,
+  commercial: commercialRouter,
 });
 
 export type AppRouter = typeof appRouter;
