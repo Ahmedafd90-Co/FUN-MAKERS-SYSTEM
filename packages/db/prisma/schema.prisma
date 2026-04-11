@@ -240,6 +240,11 @@ model Entity {
 
   // Relations
   projects Project[]
+  // Module 3 — Procurement Engine relations
+  vendors                Vendor[]
+  procurementCategories  ProcurementCategory[]
+  itemCatalogs           ItemCatalog[]
+  frameworkAgreements    FrameworkAgreement[]
 
   @@map("entities")
 }
@@ -291,6 +296,15 @@ model Project {
   taxInvoices       TaxInvoice[]
   correspondences   Correspondence[]
   referenceCounters ReferenceCounter[]
+  // Module 3 — Procurement Engine relations
+  vendorContracts        VendorContract[]
+  frameworkAgreements    FrameworkAgreement[]
+  rfqs                   RFQ[]
+  purchaseOrders         PurchaseOrder[]
+  supplierInvoices       SupplierInvoice[]
+  expenses               Expense[]
+  creditNotes            CreditNote[]
+  projectVendors         ProjectVendor[]
 
   @@index([entityId])
   @@map("projects")
@@ -770,6 +784,61 @@ enum LetterType {
 }
 
 // ---------------------------------------------------------------------------
+// Enums — Module 3: Procurement Engine
+// ---------------------------------------------------------------------------
+
+enum ExpenseSubtype {
+  ticket          @map("ticket")
+  accommodation   @map("accommodation")
+  transportation  @map("transportation")
+  equipment       @map("equipment")
+  general         @map("general")
+
+  @@map("expense_subtype")
+}
+
+enum CreditNoteSubtype {
+  credit_note @map("credit_note")
+  rebate      @map("rebate")
+  recovery    @map("recovery")
+
+  @@map("credit_note_subtype")
+}
+
+enum VendorContractType {
+  service     @map("service")
+  supply      @map("supply")
+  subcontract @map("subcontract")
+  consulting  @map("consulting")
+
+  @@map("vendor_contract_type")
+}
+
+enum ProcurementCategoryLevel {
+  category    @map("category")
+  subcategory @map("subcategory")
+  spend_type  @map("spend_type")
+
+  @@map("procurement_category_level")
+}
+
+enum TicketType {
+  flight @map("flight")
+  event  @map("event")
+  other  @map("other")
+
+  @@map("ticket_type")
+}
+
+enum TransportRateType {
+  per_trip @map("per_trip")
+  per_day  @map("per_day")
+  per_km   @map("per_km")
+
+  @@map("transport_rate_type")
+}
+
+// ---------------------------------------------------------------------------
 // 10. Notifications
 // ---------------------------------------------------------------------------
 
@@ -1025,6 +1094,7 @@ model Correspondence {
   childCorrespondences Correspondence[] @relation("CorrespondenceParent")
   inReplyTo            Correspondence?  @relation("CorrespondenceReply", fields: [inReplyToId], references: [id], onDelete: Restrict)
   replies              Correspondence[] @relation("CorrespondenceReply")
+  creditNotes          CreditNote[]     // M3 back_charge cross-reference
 
   @@index([projectId, subtype, status])
   @@index([projectId, status])
@@ -1044,4 +1114,462 @@ model ReferenceCounter {
 
   @@unique([projectId, typeCode])
   @@map("reference_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Models — Module 3: Procurement Engine
+// ---------------------------------------------------------------------------
+
+model Vendor {
+  id                 String     @id @default(uuid())
+  entityId           String     @map("entity_id")
+  vendorCode         String     @map("vendor_code")
+  name               String
+  tradeName          String?    @map("trade_name")
+  registrationNumber String?    @map("registration_number")
+  taxId              String?    @map("tax_id")
+  contactName        String?    @map("contact_name")
+  contactEmail       String?    @map("contact_email")
+  contactPhone       String?    @map("contact_phone")
+  address            String?
+  city               String?
+  country            String?
+  classification     String?    // Category reference (soft FK to ProcurementCategory)
+  status             String     @default("draft")
+  notes              String?
+  createdBy          String     @map("created_by")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  entity             Entity     @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  projectVendors     ProjectVendor[]
+  vendorContracts    VendorContract[]
+  frameworkAgreements FrameworkAgreement[]
+  purchaseOrders     PurchaseOrder[]
+  supplierInvoices   SupplierInvoice[]
+  creditNotes        CreditNote[]
+  quotations         Quotation[]
+  rfqVendors         RFQVendor[]
+
+  @@unique([entityId, vendorCode])
+  @@index([entityId, status])
+  @@index([entityId, name])
+  @@map("vendors")
+}
+
+model ProjectVendor {
+  id           String    @id @default(uuid())
+  projectId    String    @map("project_id")
+  vendorId     String    @map("vendor_id")
+  approvedDate DateTime? @map("approved_date")
+  status       String    @default("active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor  Vendor  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, vendorId])
+  @@index([vendorId])
+  @@map("project_vendors")
+}
+
+model ProcurementCategory {
+  id        String                    @id @default(uuid())
+  entityId  String                    @map("entity_id")
+  name      String
+  code      String
+  level     ProcurementCategoryLevel
+  parentId  String?                   @map("parent_id")
+  status    String                    @default("active")
+  createdAt DateTime                  @default(now()) @map("created_at")
+  updatedAt DateTime                  @updatedAt @map("updated_at")
+
+  entity    Entity                    @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  parent    ProcurementCategory?      @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children  ProcurementCategory[]     @relation("CategoryHierarchy")
+
+  @@unique([entityId, code])
+  @@index([entityId, level])
+  @@index([parentId])
+  @@map("procurement_categories")
+}
+
+model ItemCatalog {
+  id          String   @id @default(uuid())
+  entityId    String   @map("entity_id")
+  itemCode    String   @map("item_code")
+  description String
+  unit        String
+  categoryId  String?  @map("category_id")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Restrict)
+
+  @@unique([entityId, itemCode])
+  @@index([entityId, status])
+  @@map("item_catalogs")
+}
+
+model VendorContract {
+  id               String             @id @default(uuid())
+  projectId        String             @map("project_id")
+  vendorId         String             @map("vendor_id")
+  contractNumber   String             @unique @map("contract_number")
+  title            String
+  description      String?
+  contractType     VendorContractType @map("contract_type")
+  startDate        DateTime           @map("start_date")
+  endDate          DateTime           @map("end_date")
+  totalValue       Decimal            @map("total_value") @db.Decimal(18, 2)
+  currency         String
+  terms            String?
+  signedDate       DateTime?          @map("signed_date")
+  parentContractId String?            @map("parent_contract_id")
+  status           String             @default("draft")
+  referenceNumber  String?            @unique @map("reference_number")
+  createdBy        String             @map("created_by")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor         Vendor          @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  parentContract VendorContract? @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
+  childContracts VendorContract[] @relation("ContractAmendment")
+
+  @@index([projectId, status])
+  @@index([projectId, vendorId])
+  @@index([projectId, createdAt])
+  @@index([parentContractId])
+  @@map("vendor_contracts")
+}
+
+model FrameworkAgreement {
+  id                  String    @id @default(uuid())
+  vendorId            String    @map("vendor_id")
+  projectId           String?   @map("project_id")
+  entityId            String    @map("entity_id")
+  agreementNumber     String    @unique @map("agreement_number")
+  title               String
+  description         String?
+  validFrom           DateTime  @map("valid_from")
+  validTo             DateTime  @map("valid_to")
+  currency            String
+  totalCommittedValue Decimal?  @map("total_committed_value") @db.Decimal(18, 2)
+  status              String    @default("draft")
+  createdBy           String    @map("created_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  vendor  Vendor                  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  project Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entity  Entity                  @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  items   FrameworkAgreementItem[]
+
+  @@index([entityId, status])
+  @@index([projectId, status])
+  @@index([vendorId])
+  @@map("framework_agreements")
+}
+
+model FrameworkAgreementItem {
+  id                   String   @id @default(uuid())
+  frameworkAgreementId String   @map("framework_agreement_id")
+  itemCatalogId        String?  @map("item_catalog_id")
+  itemDescription      String   @map("item_description")
+  unit                 String
+  agreedRate           Decimal  @map("agreed_rate") @db.Decimal(18, 2)
+  currency             String
+  minQuantity          Decimal? @map("min_quantity") @db.Decimal(18, 2)
+  maxQuantity          Decimal? @map("max_quantity") @db.Decimal(18, 2)
+  notes                String?
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  frameworkAgreement FrameworkAgreement @relation(fields: [frameworkAgreementId], references: [id], onDelete: Restrict)
+
+  @@index([frameworkAgreementId])
+  @@map("framework_agreement_items")
+}
+
+model RFQ {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  rfqNumber       String    @unique @map("rfq_number")
+  title           String
+  description     String?
+  requiredByDate  DateTime? @map("required_by_date")
+  categoryId      String?   @map("category_id")
+  currency        String
+  estimatedBudget Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
+  status          String    @default("draft")
+  referenceNumber String?   @unique @map("reference_number")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  items      RFQItem[]
+  rfqVendors RFQVendor[]
+  quotations Quotation[]
+
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@map("rfqs")
+}
+
+model RFQItem {
+  id                 String   @id @default(uuid())
+  rfqId              String   @map("rfq_id")
+  itemCatalogId      String?  @map("item_catalog_id")
+  itemDescription    String   @map("item_description")
+  quantity           Decimal  @db.Decimal(18, 2)
+  unit               String
+  estimatedUnitPrice Decimal? @map("estimated_unit_price") @db.Decimal(18, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  rfq RFQ @relation(fields: [rfqId], references: [id], onDelete: Restrict)
+
+  @@index([rfqId])
+  @@map("rfq_items")
+}
+
+model RFQVendor {
+  id             String    @id @default(uuid())
+  rfqId          String    @map("rfq_id")
+  vendorId       String    @map("vendor_id")
+  sentAt         DateTime? @map("sent_at")
+  responseStatus String?   @map("response_status")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  rfq    RFQ    @relation(fields: [rfqId], references: [id], onDelete: Restrict)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@unique([rfqId, vendorId])
+  @@index([vendorId])
+  @@map("rfq_vendors")
+}
+
+model Quotation {
+  id            String    @id @default(uuid())
+  rfqId         String    @map("rfq_id")
+  vendorId      String    @map("vendor_id")
+  quotationRef  String?   @map("quotation_ref")
+  receivedDate  DateTime  @map("received_date")
+  validUntil    DateTime? @map("valid_until")
+  totalAmount   Decimal   @map("total_amount") @db.Decimal(18, 2)
+  currency      String
+  deliveryTerms String?   @map("delivery_terms")
+  paymentTerms  String?   @map("payment_terms")
+  status        String    @default("received")
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  rfq       RFQ                 @relation(fields: [rfqId], references: [id], onDelete: Restrict)
+  vendor    Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lineItems QuotationLineItem[]
+
+  @@index([rfqId, vendorId])
+  @@index([rfqId, status])
+  @@map("quotations")
+}
+
+model QuotationLineItem {
+  id              String    @id @default(uuid())
+  quotationId     String    @map("quotation_id")
+  itemCatalogId   String?   @map("item_catalog_id")
+  rfqItemId       String?   @map("rfq_item_id")
+  itemDescription String    @map("item_description")
+  quantity        Decimal   @db.Decimal(18, 2)
+  unit            String
+  unitPrice       Decimal   @map("unit_price") @db.Decimal(18, 2)
+  totalPrice      Decimal   @map("total_price") @db.Decimal(18, 2)
+  currency        String
+  validityDate    DateTime? @map("validity_date")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  @@index([quotationId])
+  @@index([itemCatalogId])
+  @@map("quotation_line_items")
+}
+
+model PurchaseOrder {
+  id                    String    @id @default(uuid())
+  projectId             String    @map("project_id")
+  vendorId              String    @map("vendor_id")
+  rfqId                 String?   @map("rfq_id")
+  quotationId           String?   @map("quotation_id")
+  vendorContractId      String?   @map("vendor_contract_id")
+  frameworkAgreementId  String?   @map("framework_agreement_id")
+  categoryId            String?   @map("category_id")
+  poNumber              String    @unique @map("po_number")
+  title                 String
+  description           String?
+  totalAmount           Decimal   @map("total_amount") @db.Decimal(18, 2)
+  currency              String
+  deliveryDate          DateTime? @map("delivery_date")
+  deliveryAddress       String?   @map("delivery_address")
+  paymentTerms          String?   @map("payment_terms")
+  hasFrameworkDeviation Boolean   @default(false) @map("has_framework_deviation")
+  status                String    @default("draft")
+  referenceNumber       String?   @unique @map("reference_number")
+  createdBy             String    @map("created_by")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  project          Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor           Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  items            PurchaseOrderItem[]
+  supplierInvoices SupplierInvoice[]
+  expenses         Expense[]
+  creditNotes      CreditNote[]
+
+  @@index([projectId, status])
+  @@index([projectId, vendorId])
+  @@index([projectId, createdAt])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  purchaseOrderId String   @map("purchase_order_id")
+  itemCatalogId   String?  @map("item_catalog_id")
+  itemDescription String   @map("item_description")
+  quantity        Decimal  @db.Decimal(18, 2)
+  unit            String
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(18, 2)
+  totalPrice      Decimal  @map("total_price") @db.Decimal(18, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_items")
+}
+
+model SupplierInvoice {
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  vendorId        String    @map("vendor_id")
+  purchaseOrderId String?   @map("purchase_order_id")
+  invoiceNumber   String    @map("invoice_number")
+  invoiceDate     DateTime  @map("invoice_date")
+  grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
+  vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount       Decimal   @map("vat_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal   @map("total_amount") @db.Decimal(18, 2)
+  dueDate         DateTime? @map("due_date")
+  currency        String
+  categoryId      String?   @map("category_id")
+  noPOReason      String?   @map("no_po_reason")
+  status          String    @default("received")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  creditNotes   CreditNote[]
+
+  @@index([projectId, status])
+  @@index([projectId, vendorId])
+  @@index([projectId, createdAt])
+  @@index([purchaseOrderId])
+  @@map("supplier_invoices")
+}
+
+model Expense {
+  id                   String           @id @default(uuid())
+  projectId            String           @map("project_id")
+  subtype              ExpenseSubtype
+  title                String
+  description          String?
+  amount               Decimal          @db.Decimal(18, 2)
+  currency             String
+  expenseDate          DateTime         @map("expense_date")
+  categoryId           String?          @map("category_id")
+  receiptReference     String?          @map("receipt_reference")
+  purchaseOrderId      String?          @map("purchase_order_id")
+  status               String           @default("draft")
+  // ticket-specific
+  ticketType           TicketType?      @map("ticket_type")
+  travelerName         String?          @map("traveler_name")
+  origin               String?
+  destination          String?
+  travelDate           DateTime?        @map("travel_date")
+  returnDate           DateTime?        @map("return_date")
+  // accommodation-specific
+  guestName            String?          @map("guest_name")
+  checkIn              DateTime?        @map("check_in")
+  checkOut             DateTime?        @map("check_out")
+  hotelName            String?          @map("hotel_name")
+  expenseCity          String?          @map("expense_city")
+  nightlyRate          Decimal?         @map("nightly_rate") @db.Decimal(18, 2)
+  nights               Int?
+  // transportation-specific
+  vehicleType          String?          @map("vehicle_type")
+  transportOrigin      String?          @map("transport_origin")
+  transportDestination String?          @map("transport_destination")
+  distance             Decimal?         @db.Decimal(10, 2)
+  rateType             TransportRateType? @map("rate_type")
+  // equipment-specific
+  equipmentName        String?          @map("equipment_name")
+  equipmentType        String?          @map("equipment_type")
+  rentalPeriodFrom     DateTime?        @map("rental_period_from")
+  rentalPeriodTo       DateTime?        @map("rental_period_to")
+  dailyRate            Decimal?         @map("daily_rate") @db.Decimal(18, 2)
+  days                 Int?
+  createdBy            String           @map("created_by")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, subtype, status])
+  @@index([projectId, createdAt])
+  @@map("expenses")
+}
+
+model CreditNote {
+  id                String           @id @default(uuid())
+  projectId         String           @map("project_id")
+  vendorId          String           @map("vendor_id")
+  subtype           CreditNoteSubtype
+  creditNoteNumber  String           @unique @map("credit_note_number")
+  supplierInvoiceId String?          @map("supplier_invoice_id")
+  purchaseOrderId   String?          @map("purchase_order_id")
+  correspondenceId  String?          @map("correspondence_id")
+  amount            Decimal          @db.Decimal(18, 2)
+  currency          String
+  reason            String
+  receivedDate      DateTime         @map("received_date")
+  status            String           @default("received")
+  createdBy         String           @map("created_by")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id], onDelete: Restrict)
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  correspondence  Correspondence?  @relation(fields: [correspondenceId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, status])
+  @@index([projectId, vendorId])
+  @@index([projectId, createdAt])
+  @@index([supplierInvoiceId])
+  @@index([purchaseOrderId])
+  @@map("credit_notes")
 }
