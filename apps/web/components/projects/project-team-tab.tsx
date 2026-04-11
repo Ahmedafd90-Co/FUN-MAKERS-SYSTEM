@@ -3,6 +3,14 @@
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@fmksa/ui/components/command';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -12,8 +20,20 @@ import {
 } from '@fmksa/ui/components/dialog';
 import { Input } from '@fmksa/ui/components/input';
 import { Label } from '@fmksa/ui/components/label';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@fmksa/ui/components/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@fmksa/ui/components/select';
+import { ChevronsUpDown, Plus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
@@ -118,7 +138,7 @@ export function ProjectTeamTab({ projectId }: ProjectTeamTabProps) {
         </table>
       </div>
 
-      {/* Add member dialog (simplified) */}
+      {/* Add member dialog */}
       <AddMemberDialog
         open={addOpen}
         onOpenChange={setAddOpen}
@@ -176,8 +196,14 @@ export function ProjectTeamTab({ projectId }: ProjectTeamTabProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Add member dialog
+// Add member dialog — with searchable user picker and role dropdown
 // ---------------------------------------------------------------------------
+
+type SelectedUser = {
+  id: string;
+  name: string;
+  email: string;
+};
 
 function AddMemberDialog({
   open,
@@ -188,18 +214,42 @@ function AddMemberDialog({
   onOpenChange: (open: boolean) => void;
   projectId: string;
 }) {
-  const [userId, setUserId] = useState('');
-  const [roleId, setRoleId] = useState('');
+  // User search state
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const [userPopoverOpen, setUserPopoverOpen] = useState(false);
+
+  // Role state
+  const [selectedRoleId, setSelectedRoleId] = useState('');
+
+  // Date state
   const [effectiveFrom, setEffectiveFrom] = useState('');
+
+  // Debounce the search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // User search query — only fires when search term is >= 2 chars
+  const { data: searchResults, isFetching: isSearching } =
+    trpc.projects.userSearch.useQuery(
+      { query: debouncedSearch },
+      { enabled: debouncedSearch.length >= 2 },
+    );
+
+  // Role list query
+  const { data: roles } = trpc.projects.roleList.useQuery(undefined, {
+    enabled: open,
+  });
 
   const utils = trpc.useUtils();
   const assignMutation = trpc.projects.assignments.assign.useMutation({
     onSuccess: () => {
       toast.success('Team member added.');
       utils.projects.assignments.list.invalidate();
-      setUserId('');
-      setRoleId('');
-      setEffectiveFrom('');
+      resetForm();
       onOpenChange(false);
     },
     onError: (err) => {
@@ -207,48 +257,155 @@ function AddMemberDialog({
     },
   });
 
+  function resetForm() {
+    setSearch('');
+    setDebouncedSearch('');
+    setSelectedUser(null);
+    setSelectedRoleId('');
+    setEffectiveFrom('');
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!userId.trim() || !roleId.trim() || !effectiveFrom) {
-      toast.error('User ID, role ID, and effective-from date are required.');
+    if (!selectedUser) {
+      toast.error('Please select a user.');
+      return;
+    }
+    if (!selectedRoleId) {
+      toast.error('Please select a role.');
+      return;
+    }
+    if (!effectiveFrom) {
+      toast.error('Effective-from date is required.');
       return;
     }
     assignMutation.mutate({
       projectId,
-      userId,
-      roleId,
+      userId: selectedUser.id,
+      roleId: selectedRoleId,
       effectiveFrom: new Date(effectiveFrom),
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) resetForm();
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Team Member</DialogTitle>
           <DialogDescription>
-            Assign a user to this project with a role.
+            Search for a user and assign them a role on this project.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* User picker (Combobox) */}
           <div className="space-y-2">
-            <Label htmlFor="add-user-id">User ID</Label>
-            <Input
-              id="add-user-id"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="Enter user ID"
-            />
+            <Label>User</Label>
+            {selectedUser ? (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{selectedUser.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{selectedUser.email}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0"
+                  onClick={() => setSelectedUser(null)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={userPopoverOpen}
+                    className="w-full justify-between font-normal text-muted-foreground"
+                  >
+                    Search for a user...
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Type name or email..."
+                      value={search}
+                      onValueChange={setSearch}
+                    />
+                    <CommandList>
+                      {debouncedSearch.length < 2 ? (
+                        <CommandEmpty>Type at least 2 characters to search.</CommandEmpty>
+                      ) : isSearching ? (
+                        <CommandEmpty>Searching...</CommandEmpty>
+                      ) : !searchResults || searchResults.length === 0 ? (
+                        <CommandEmpty>No users found.</CommandEmpty>
+                      ) : (
+                        <CommandGroup>
+                          {searchResults.map((user) => (
+                            <CommandItem
+                              key={user.id}
+                              value={user.id}
+                              onSelect={() => {
+                                setSelectedUser({
+                                  id: user.id,
+                                  name: user.name,
+                                  email: user.email,
+                                });
+                                setSearch('');
+                                setUserPopoverOpen(false);
+                              }}
+                            >
+                              <div className="flex items-center justify-between w-full gap-2">
+                                <span className="truncate">{user.name}</span>
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {user.email}
+                                </span>
+                              </div>
+                              {user.status !== 'active' && (
+                                <Badge variant="secondary" className="ml-2 text-[10px]">
+                                  {user.status}
+                                </Badge>
+                              )}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
+
+          {/* Role picker (Select dropdown) */}
           <div className="space-y-2">
-            <Label htmlFor="add-role-id">Role ID</Label>
-            <Input
-              id="add-role-id"
-              value={roleId}
-              onChange={(e) => setRoleId(e.target.value)}
-              placeholder="Enter role ID"
-            />
+            <Label>Role</Label>
+            <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {roles?.map((role) => (
+                  <SelectItem key={role.id} value={role.id}>
+                    {role.name} ({role.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {/* Effective From */}
           <div className="space-y-2">
             <Label htmlFor="add-from">Effective From</Label>
             <Input
@@ -258,8 +415,16 @@ function AddMemberDialog({
               onChange={(e) => setEffectiveFrom(e.target.value)}
             />
           </div>
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                resetForm();
+                onOpenChange(false);
+              }}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={assignMutation.isPending}>

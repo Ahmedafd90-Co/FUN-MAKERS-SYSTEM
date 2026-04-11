@@ -86,7 +86,7 @@ export function AssignmentFormDialog({ open, onOpenChange }: AssignmentFormProps
               <SelectContent>
                 {projects?.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.code} - {p.name}
+                    {p.name} ({p.code})
                   </SelectItem>
                 ))}
               </SelectContent>
