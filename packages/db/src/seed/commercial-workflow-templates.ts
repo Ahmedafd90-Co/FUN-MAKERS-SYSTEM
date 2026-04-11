@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 type WorkflowStep = {
   orderIndex: number;
@@ -253,7 +254,7 @@ export async function seedCommercialWorkflowTemplates(prisma: PrismaClient) {
           approverRuleJson: s.approverRule,
           slaHours: s.slaHours,
           isOptional: s.isOptional,
-          requirementFlagsJson: s.requirementFlags,
+          requirementFlagsJson: s.requirementFlags as Prisma.InputJsonValue,
         },
       });
     }

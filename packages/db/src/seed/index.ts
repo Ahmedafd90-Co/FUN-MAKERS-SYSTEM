@@ -15,6 +15,11 @@ import { seedCommercialPermissions } from './commercial-permissions';
 import { seedCommercialRolePermissions } from './commercial-role-permissions';
 import { seedCommercialWorkflowTemplates } from './commercial-workflow-templates';
 import { seedCommercialNotificationTemplates } from './commercial-notification-templates';
+import { seedProcurementPermissions } from './procurement-permissions';
+import { seedProcurementRolePermissions } from './procurement-role-permissions';
+import { seedProcurementWorkflowTemplates } from './procurement-workflow-templates';
+import { seedProcurementNotificationTemplates } from './procurement-notification-templates';
+import { seedProcurementCategories } from './procurement-categories';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +43,11 @@ async function main() {
   await seedCommercialRolePermissions(prisma);
   await seedCommercialWorkflowTemplates(prisma);
   await seedCommercialNotificationTemplates(prisma);
+  await seedProcurementPermissions(prisma);
+  await seedProcurementRolePermissions(prisma);
+  await seedProcurementWorkflowTemplates(prisma);
+  await seedProcurementNotificationTemplates(prisma);
+  await seedProcurementCategories(prisma);
 
   console.log('✅ Seeding complete.');
 }
