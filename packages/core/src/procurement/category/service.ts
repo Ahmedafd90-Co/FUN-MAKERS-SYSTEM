@@ -19,6 +19,9 @@ export async function createCategory(input: CreateCategoryInput, actorUserId: st
     const parent = await prisma.procurementCategory.findUniqueOrThrow({
       where: { id: input.parentId },
     });
+    if (parent.entityId !== input.entityId) {
+      throw new Error('Parent category must belong to the same entity.');
+    }
     level = deriveChildLevel(parent.level);
   }
 
@@ -61,6 +64,22 @@ export async function updateCategory(input: UpdateCategoryInput, actorUserId: st
   for (const [key, value] of Object.entries(updateFields)) {
     if (value === undefined) continue;
     data[key] = value;
+  }
+
+  // Re-derive level when parentId changes to maintain 3-level hierarchy
+  if ('parentId' in updateFields) {
+    if (updateFields.parentId === null) {
+      // Moving to top-level
+      data.level = defaultTopLevel();
+    } else if (updateFields.parentId) {
+      const newParent = await prisma.procurementCategory.findUniqueOrThrow({
+        where: { id: updateFields.parentId },
+      });
+      if (newParent.entityId !== existing.entityId) {
+        throw new Error('Parent category must belong to the same entity.');
+      }
+      data.level = deriveChildLevel(newParent.level);
+    }
   }
 
   const updated = await prisma.procurementCategory.update({

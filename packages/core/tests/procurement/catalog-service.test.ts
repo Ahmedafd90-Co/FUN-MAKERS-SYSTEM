@@ -4,9 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock Prisma + audit (hoisted so vi.mock factories can reference them)
 // ---------------------------------------------------------------------------
 
-const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
+const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
   const mockAuditLog = vi.fn().mockResolvedValue({});
-  const mockPrisma = {
+  const mockPrisma: Record<string, any> = {
     itemCatalog: {
       findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -16,10 +16,21 @@ const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
       count: vi.fn(),
     },
   };
-  return { mockPrisma, mockAuditLog };
+  // $transaction executes the callback with mockPrisma as the tx client
+  mockPrisma.$transaction = vi.fn().mockImplementation((cb: (tx: any) => any) => cb(mockPrisma));
+  // Prisma namespace mock for P2002 error handling
+  class PrismaClientKnownRequestError extends Error {
+    code: string;
+    constructor(message: string, { code }: { code: string }) {
+      super(message);
+      this.code = code;
+    }
+  }
+  const mockPrismaNamespace = { PrismaClientKnownRequestError };
+  return { mockPrisma, mockAuditLog, mockPrismaNamespace };
 });
 
-vi.mock('@fmksa/db', () => ({ prisma: mockPrisma }));
+vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace }));
 vi.mock('../../src/audit/service', () => ({
   auditService: { log: (...args: unknown[]) => mockAuditLog(...args) },
 }));

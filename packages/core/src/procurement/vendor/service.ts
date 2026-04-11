@@ -3,52 +3,65 @@
  *
  * Phase 4, Task 4.3 — Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, Prisma } from '@fmksa/db';
 import type { CreateVendorInput, UpdateVendorInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { VENDOR_TRANSITIONS, VENDOR_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextVendorCode, EDITABLE_STATUSES } from './validation';
 
 // ---------------------------------------------------------------------------
-// Internal: generate sequential vendorCode for entity
-// ---------------------------------------------------------------------------
-
-async function generateVendorCode(entityId: string): Promise<string> {
-  const last = await prisma.vendor.findFirst({
-    where: { entityId },
-    orderBy: { vendorCode: 'desc' },
-    select: { vendorCode: true },
-  });
-  return nextVendorCode(last?.vendorCode ?? null);
-}
-
-// ---------------------------------------------------------------------------
-// Create
+// Create (transaction-safe sequential code generation with P2002 retry)
 // ---------------------------------------------------------------------------
 
 export async function createVendor(input: CreateVendorInput, actorUserId: string) {
-  const vendorCode = await generateVendorCode(input.entityId);
+  const MAX_RETRIES = 1;
+  let attempt = 0;
 
-  const vendor = await prisma.vendor.create({
-    data: {
-      entityId: input.entityId,
-      vendorCode,
-      name: input.name,
-      tradeName: input.tradeName ?? null,
-      registrationNumber: input.registrationNumber ?? null,
-      taxId: input.taxId ?? null,
-      contactName: input.contactName ?? null,
-      contactEmail: input.contactEmail ?? null,
-      contactPhone: input.contactPhone ?? null,
-      address: input.address ?? null,
-      city: input.city ?? null,
-      country: input.country ?? null,
-      classification: input.classificationId ?? null,
-      status: 'draft',
-      notes: input.notes ?? null,
-      createdBy: actorUserId,
-    },
-  });
+  const vendor = await (async () => {
+    while (true) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const last = await (tx as any).vendor.findFirst({
+            where: { entityId: input.entityId },
+            orderBy: { vendorCode: 'desc' },
+            select: { vendorCode: true },
+          });
+          const vendorCode = nextVendorCode(last?.vendorCode ?? null);
+
+          return (tx as any).vendor.create({
+            data: {
+              entityId: input.entityId,
+              vendorCode,
+              name: input.name,
+              tradeName: input.tradeName ?? null,
+              registrationNumber: input.registrationNumber ?? null,
+              taxId: input.taxId ?? null,
+              contactName: input.contactName ?? null,
+              contactEmail: input.contactEmail ?? null,
+              contactPhone: input.contactPhone ?? null,
+              address: input.address ?? null,
+              city: input.city ?? null,
+              country: input.country ?? null,
+              classification: input.classificationId ?? null,
+              status: 'draft',
+              notes: input.notes ?? null,
+              createdBy: actorUserId,
+            },
+          });
+        });
+      } catch (err: unknown) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          attempt < MAX_RETRIES
+        ) {
+          attempt++;
+          continue; // retry with fresh sequence number
+        }
+        throw err;
+      }
+    }
+  })();
 
   await auditService.log({
     actorUserId,

@@ -3,41 +3,54 @@
  *
  * Phase 4, Task 4.2 — Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, Prisma } from '@fmksa/db';
 import type { CreateCatalogItemInput, UpdateCatalogItemInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { nextItemCode } from './validation';
 
 // ---------------------------------------------------------------------------
-// Internal: generate sequential itemCode for entity
-// ---------------------------------------------------------------------------
-
-async function generateItemCode(entityId: string): Promise<string> {
-  const last = await prisma.itemCatalog.findFirst({
-    where: { entityId },
-    orderBy: { itemCode: 'desc' },
-    select: { itemCode: true },
-  });
-  return nextItemCode(last?.itemCode ?? null);
-}
-
-// ---------------------------------------------------------------------------
-// Create
+// Create (transaction-safe sequential code generation with P2002 retry)
 // ---------------------------------------------------------------------------
 
 export async function createCatalogItem(input: CreateCatalogItemInput, actorUserId: string) {
-  const itemCode = await generateItemCode(input.entityId);
+  const MAX_RETRIES = 1;
+  let attempt = 0;
 
-  const item = await prisma.itemCatalog.create({
-    data: {
-      entityId: input.entityId,
-      itemCode,
-      description: input.description ?? input.name,
-      unit: input.unit,
-      categoryId: input.categoryId ?? null,
-      status: 'active',
-    },
-  });
+  const item = await (async () => {
+    while (true) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const last = await (tx as any).itemCatalog.findFirst({
+            where: { entityId: input.entityId },
+            orderBy: { itemCode: 'desc' },
+            select: { itemCode: true },
+          });
+          const itemCode = nextItemCode(last?.itemCode ?? null);
+
+          return (tx as any).itemCatalog.create({
+            data: {
+              entityId: input.entityId,
+              itemCode,
+              description: input.description ?? input.name,
+              unit: input.unit,
+              categoryId: input.categoryId ?? null,
+              status: 'active',
+            },
+          });
+        });
+      } catch (err: unknown) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002' &&
+          attempt < MAX_RETRIES
+        ) {
+          attempt++;
+          continue; // retry with fresh sequence number
+        }
+        throw err;
+      }
+    }
+  })();
 
   await auditService.log({
     actorUserId,
