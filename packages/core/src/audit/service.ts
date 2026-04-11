@@ -7,7 +7,7 @@ import { prisma } from '@fmksa/db';
  * `@prisma/client` directly — that dependency lives in `@fmksa/db`.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-type TransactionClient = Record<string, unknown>;
+export type TransactionClient = Record<string, unknown>;
 
 /**
  * JSON-serializable value accepted by Prisma for Json columns.

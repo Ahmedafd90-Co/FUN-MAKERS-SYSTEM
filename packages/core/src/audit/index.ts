@@ -1,5 +1,5 @@
 export { auditService } from './service';
-export type { AuditEntry } from './service';
+export type { AuditEntry, TransactionClient } from './service';
 export {
   withOverride,
   OverrideNotPermittedError,
