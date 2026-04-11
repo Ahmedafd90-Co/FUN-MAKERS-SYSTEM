@@ -4,6 +4,7 @@
  * Phase 4, Task 4.3 — Module 3 Procurement Engine.
  */
 import { prisma, Prisma } from '@fmksa/db';
+import type { VendorStatus } from '@fmksa/db';
 import type { CreateVendorInput, UpdateVendorInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { VENDOR_TRANSITIONS, VENDOR_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
@@ -158,7 +159,7 @@ export async function transitionVendor(
 
   const updated = await prisma.vendor.update({
     where: { id },
-    data: { status: newStatus },
+    data: { status: newStatus as VendorStatus },
   });
 
   await auditService.log({

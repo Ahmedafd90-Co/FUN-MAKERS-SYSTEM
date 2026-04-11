@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { CorrespondenceStatus } from '@fmksa/db';
 import type { CreateCorrespondenceInput, UpdateCorrespondenceInput, ListFilterInput } from '@fmksa/contracts';
 import type { CorrespondenceListFilter } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -271,7 +272,7 @@ export async function transitionCorrespondence(
     // Simple status update
     updated = await prisma.correspondence.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as CorrespondenceStatus },
       include: { project: true },
     });
 

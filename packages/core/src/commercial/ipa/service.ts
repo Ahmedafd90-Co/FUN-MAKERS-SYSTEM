@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { IpaStatus } from '@fmksa/db';
 import type { CreateIpaInput, UpdateIpaInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -206,7 +207,7 @@ export async function transitionIpa(
     // Simple status update
     updated = await prisma.ipa.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as IpaStatus },
       include: { project: true },
     });
 

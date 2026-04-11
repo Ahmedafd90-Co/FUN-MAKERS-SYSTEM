@@ -892,15 +892,125 @@ model NotificationPreference {
 }
 
 // ---------------------------------------------------------------------------
+// Status enums — Module 2: Commercial Engine (H5 hardening)
+// ---------------------------------------------------------------------------
+
+enum IpaStatus {
+  draft
+  submitted
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  issued
+  superseded
+  closed
+
+  @@map("ipa_status")
+}
+
+enum IpcStatus {
+  draft
+  submitted
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  issued
+  superseded
+  closed
+
+  @@map("ipc_status")
+}
+
+enum VariationStatus {
+  draft
+  submitted
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  issued
+  client_pending
+  client_approved
+  client_rejected
+  superseded
+  closed
+
+  @@map("variation_status")
+}
+
+enum CostProposalStatus {
+  draft
+  submitted
+  under_review
+  returned
+  rejected
+  approved_internal
+  issued
+  linked_to_variation
+  superseded
+  closed
+
+  @@map("cost_proposal_status")
+}
+
+enum TaxInvoiceStatus {
+  draft
+  under_review
+  returned
+  approved_internal
+  issued
+  submitted
+  overdue
+  partially_collected
+  collected
+  cancelled
+  superseded
+  closed
+
+  @@map("tax_invoice_status")
+}
+
+enum CorrespondenceStatus {
+  draft
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  issued
+  superseded
+  closed
+  // Notice-specific
+  response_due
+  responded
+  // Claim-specific
+  under_evaluation
+  partially_accepted
+  accepted
+  disputed
+  // Back-charge-specific
+  acknowledged
+  partially_recovered
+  recovered
+
+  @@map("correspondence_status")
+}
+
+// ---------------------------------------------------------------------------
 // Models — Module 2: Commercial Engine
 // ---------------------------------------------------------------------------
 
 model Ipa {
   id                String   @id @default(uuid()) @map("id")
-  projectId         String   @map("project_id")
-  status            String   @default("draft") @map("status")
-  referenceNumber   String?  @unique @map("reference_number")
-  periodNumber      Int      @map("period_number")
+  projectId         String    @map("project_id")
+  status            IpaStatus @default(draft) @map("status")
+  referenceNumber   String?   @unique @map("reference_number")
+  periodNumber      Int       @map("period_number")
   periodFrom        DateTime @map("period_from")
   periodTo          DateTime @map("period_to")
   grossAmount       Decimal  @map("gross_amount") @db.Decimal(18, 2)
@@ -929,10 +1039,10 @@ model Ipa {
 model Ipc {
   id                String   @id @default(uuid()) @map("id")
   projectId         String   @map("project_id")
-  ipaId             String   @map("ipa_id")
-  status            String   @default("draft") @map("status")
-  referenceNumber   String?  @unique @map("reference_number")
-  certifiedAmount   Decimal  @map("certified_amount") @db.Decimal(18, 2)
+  ipaId             String    @map("ipa_id")
+  status            IpcStatus @default(draft) @map("status")
+  referenceNumber   String?   @unique @map("reference_number")
+  certifiedAmount   Decimal   @map("certified_amount") @db.Decimal(18, 2)
   retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
   adjustments       Decimal? @map("adjustments") @db.Decimal(18, 2)
   netCertified      Decimal  @map("net_certified") @db.Decimal(18, 2)
@@ -957,7 +1067,7 @@ model Variation {
   id                     String                @id @default(uuid()) @map("id")
   projectId              String                @map("project_id")
   subtype                VariationSubtype      @map("subtype")
-  status                 String                @default("draft") @map("status")
+  status                 VariationStatus       @default(draft) @map("status")
   referenceNumber        String?               @unique @map("reference_number")
   title                  String                @map("title")
   description            String                @map("description")
@@ -997,10 +1107,10 @@ model Variation {
 model CostProposal {
   id                String   @id @default(uuid()) @map("id")
   projectId         String   @map("project_id")
-  variationId       String?  @map("variation_id")
-  status            String   @default("draft") @map("status")
-  referenceNumber   String?  @unique @map("reference_number")
-  revisionNumber    Int      @map("revision_number")
+  variationId       String?            @map("variation_id")
+  status            CostProposalStatus @default(draft) @map("status")
+  referenceNumber   String?            @unique @map("reference_number")
+  revisionNumber    Int                @map("revision_number")
   estimatedCost     Decimal  @map("estimated_cost") @db.Decimal(18, 2)
   estimatedTimeDays Int?     @map("estimated_time_days")
   methodology       String?  @map("methodology")
@@ -1027,10 +1137,10 @@ model CostProposal {
 model TaxInvoice {
   id              String    @id @default(uuid()) @map("id")
   projectId       String    @map("project_id")
-  ipcId           String    @map("ipc_id")
-  status          String    @default("draft") @map("status")
-  referenceNumber String?   @unique @map("reference_number")
-  invoiceNumber   String    @map("invoice_number")
+  ipcId           String          @map("ipc_id")
+  status          TaxInvoiceStatus @default(draft) @map("status")
+  referenceNumber String?          @unique @map("reference_number")
+  invoiceNumber   String           @map("invoice_number")
   invoiceDate     DateTime  @map("invoice_date")
   grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
   vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
@@ -1058,10 +1168,10 @@ model TaxInvoice {
 model Correspondence {
   id                     String                @id @default(uuid()) @map("id")
   projectId              String                @map("project_id")
-  subtype                CorrespondenceSubtype @map("subtype")
-  status                 String                @default("draft") @map("status")
-  referenceNumber        String?               @unique @map("reference_number")
-  subject                String                @map("subject")
+  subtype                CorrespondenceSubtype  @map("subtype")
+  status                 CorrespondenceStatus   @default(draft) @map("status")
+  referenceNumber        String?                @unique @map("reference_number")
+  subject                String                 @map("subject")
   body                   String                @map("body")
   recipientName          String                @map("recipient_name")
   recipientOrg           String?               @map("recipient_org")
@@ -1117,6 +1227,77 @@ model ReferenceCounter {
 }
 
 // ---------------------------------------------------------------------------
+// Status enums — Module 3: Procurement Engine (H5 hardening)
+// ---------------------------------------------------------------------------
+
+enum VendorStatus {
+  draft
+  active
+  suspended
+  blacklisted
+  archived
+
+  @@map("vendor_status")
+}
+
+enum VendorContractStatus {
+  draft
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  active
+  expired
+  terminated
+  superseded
+
+  @@map("vendor_contract_status")
+}
+
+enum FrameworkAgreementStatus {
+  draft
+  under_review
+  returned
+  rejected
+  approved_internal
+  signed
+  active
+  expired
+  terminated
+  superseded
+
+  @@map("framework_agreement_status")
+}
+
+enum RfqStatus {
+  draft
+  under_review
+  returned
+  rejected
+  approved_internal
+  issued
+  responses_received
+  evaluation
+  awarded
+  closed
+  cancelled
+
+  @@map("rfq_status")
+}
+
+enum QuotationStatus {
+  received
+  under_review
+  shortlisted
+  awarded
+  rejected
+  expired
+
+  @@map("quotation_status")
+}
+
+// ---------------------------------------------------------------------------
 // Models — Module 3: Procurement Engine
 // ---------------------------------------------------------------------------
 
@@ -1134,8 +1315,8 @@ model Vendor {
   address            String?
   city               String?
   country            String?
-  classification     String?    // Category reference (soft FK to ProcurementCategory)
-  status             String     @default("draft")
+  classification     String?      // Category reference (soft FK to ProcurementCategory)
+  status             VendorStatus @default(draft)
   notes              String?
   createdBy          String     @map("created_by")
   createdAt          DateTime   @default(now()) @map("created_at")
@@ -1227,16 +1408,16 @@ model VendorContract {
   currency         String
   terms            String?
   signedDate       DateTime?          @map("signed_date")
-  parentContractId String?            @map("parent_contract_id")
-  status           String             @default("draft")
-  referenceNumber  String?            @unique @map("reference_number")
-  createdBy        String             @map("created_by")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  parentContractId String?              @map("parent_contract_id")
+  status           VendorContractStatus @default(draft)
+  referenceNumber  String?              @unique @map("reference_number")
+  createdBy        String               @map("created_by")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
 
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  vendor         Vendor          @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  parentContract VendorContract? @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  vendor         Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  parentContract VendorContract?  @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
   childContracts VendorContract[] @relation("ContractAmendment")
 
   @@index([projectId, status])
@@ -1257,9 +1438,9 @@ model FrameworkAgreement {
   validFrom           DateTime  @map("valid_from")
   validTo             DateTime  @map("valid_to")
   currency            String
-  totalCommittedValue Decimal?  @map("total_committed_value") @db.Decimal(18, 2)
-  status              String    @default("draft")
-  createdBy           String    @map("created_by")
+  totalCommittedValue Decimal?                @map("total_committed_value") @db.Decimal(18, 2)
+  status              FrameworkAgreementStatus @default(draft)
+  createdBy           String                  @map("created_by")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
@@ -1304,7 +1485,7 @@ model RFQ {
   categoryId      String?   @map("category_id")
   currency        String
   estimatedBudget Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
-  status          String    @default("draft")
+  status          RfqStatus @default(draft)
   referenceNumber String?   @unique @map("reference_number")
   createdBy       String    @map("created_by")
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -1363,10 +1544,10 @@ model Quotation {
   validUntil    DateTime? @map("valid_until")
   totalAmount   Decimal   @map("total_amount") @db.Decimal(18, 2)
   currency      String
-  deliveryTerms String?   @map("delivery_terms")
-  paymentTerms  String?   @map("payment_terms")
-  status        String    @default("received")
-  createdBy     String    @map("created_by")
+  deliveryTerms String?         @map("delivery_terms")
+  paymentTerms  String?         @map("payment_terms")
+  status        QuotationStatus @default(received)
+  createdBy     String          @map("created_by")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { VariationStatus } from '@fmksa/db';
 import type { CreateVariationInput, UpdateVariationInput, ListFilterInput } from '@fmksa/contracts';
 import type { VariationListFilter } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -270,7 +271,7 @@ export async function transitionVariation(
     // Simple status update
     updated = await prisma.variation.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as VariationStatus },
       include: { project: true },
     });
 

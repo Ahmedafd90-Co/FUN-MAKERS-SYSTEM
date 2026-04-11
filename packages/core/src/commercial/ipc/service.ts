@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { IpcStatus } from '@fmksa/db';
 import type { CreateIpcInput, UpdateIpcInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -224,7 +225,7 @@ export async function transitionIpc(
     // Simple status update
     updated = await prisma.ipc.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as IpcStatus },
       include: { project: true },
     });
 

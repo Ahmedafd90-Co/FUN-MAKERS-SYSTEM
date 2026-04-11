@@ -4,6 +4,7 @@
  * Phase 5, Task 5.1 — Module 3 Procurement Engine.
  */
 import { prisma, Prisma } from '@fmksa/db';
+import type { VendorContractStatus } from '@fmksa/db';
 import type { CreateVendorContractInput, UpdateVendorContractInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -159,7 +160,7 @@ export async function transitionVendorContract(
   }
 
   // Build update data — set signedDate on signed transition
-  const updateData: Record<string, unknown> = { status: newStatus };
+  const updateData: Record<string, unknown> = { status: newStatus as VendorContractStatus };
   if (newStatus === 'signed') {
     updateData.signedDate = new Date();
   }

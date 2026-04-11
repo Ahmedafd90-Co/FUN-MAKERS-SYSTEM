@@ -9,8 +9,7 @@
  *   4. No duplicate permission codes exist in the seed.
  */
 import { describe, it, expect } from 'vitest';
-// Direct relative import — seed file isn't exported from @fmksa/db package.json
-import { PROCUREMENT_PERMISSIONS } from '../../../db/src/seed/procurement-permissions';
+import { PROCUREMENT_PERMISSIONS } from '@fmksa/db';
 
 // ---------------------------------------------------------------------------
 // Replicate getTransitionPermission logic to test it in isolation.

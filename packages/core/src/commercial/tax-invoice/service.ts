@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { TaxInvoiceStatus } from '@fmksa/db';
 import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -235,7 +236,7 @@ export async function transitionTaxInvoice(
     // Simple status update
     updated = await prisma.taxInvoice.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as TaxInvoiceStatus },
       include: { project: true },
     });
 

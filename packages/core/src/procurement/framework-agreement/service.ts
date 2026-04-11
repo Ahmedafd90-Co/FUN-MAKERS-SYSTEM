@@ -4,6 +4,7 @@
  * Phase 5, Task 5.2 — Module 3 Procurement Engine.
  */
 import { prisma, Prisma } from '@fmksa/db';
+import type { FrameworkAgreementStatus } from '@fmksa/db';
 import type { CreateFrameworkAgreementInput, UpdateFrameworkAgreementInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { FRAMEWORK_AGREEMENT_TRANSITIONS, FRAMEWORK_AGREEMENT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
@@ -187,7 +188,7 @@ export async function transitionFrameworkAgreement(
 
   const updated = await prisma.frameworkAgreement.update({
     where: { id },
-    data: { status: newStatus },
+    data: { status: newStatus as FrameworkAgreementStatus },
     include: { vendor: true },
   });
 

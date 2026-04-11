@@ -4,6 +4,7 @@
  * Phase 5, Task 5.3 — Module 3 Procurement Engine.
  */
 import { prisma, Prisma } from '@fmksa/db';
+import type { RfqStatus } from '@fmksa/db';
 import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { RFQ_TRANSITIONS, RFQ_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
@@ -206,7 +207,7 @@ export async function transitionRfq(
 
       return (tx as any).rFQ.update({
         where: { id },
-        data: { status: newStatus, referenceNumber },
+        data: { status: newStatus as RfqStatus, referenceNumber },
         include: { project: true },
       });
     });
@@ -229,7 +230,7 @@ export async function transitionRfq(
   // Simple status update
   const updated = await prisma.rFQ.update({
     where: { id },
-    data: { status: newStatus },
+    data: { status: newStatus as RfqStatus },
     include: { project: true },
   });
 

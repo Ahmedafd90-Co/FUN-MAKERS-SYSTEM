@@ -5,6 +5,7 @@
  * Phase 5, Task 5.4 — Module 3 Procurement Engine.
  */
 import { prisma } from '@fmksa/db';
+import type { QuotationStatus } from '@fmksa/db';
 import type { CreateQuotationInput, UpdateQuotationInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { QUOTATION_TRANSITIONS, QUOTATION_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
@@ -165,7 +166,7 @@ export async function transitionQuotation(
 
   const updated = await prisma.quotation.update({
     where: { id },
-    data: { status: newStatus },
+    data: { status: newStatus as QuotationStatus },
     include: { rfq: { select: { projectId: true } } },
   });
 

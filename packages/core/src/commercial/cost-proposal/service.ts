@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { CostProposalStatus } from '@fmksa/db';
 import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { generateReferenceNumber } from '../reference-number/service';
@@ -200,7 +201,7 @@ export async function transitionCostProposal(
     // Simple status update
     updated = await prisma.costProposal.update({
       where: { id },
-      data: { status: newStatus },
+      data: { status: newStatus as CostProposalStatus },
       include: { project: true },
     });
 

@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { IpaStatus, IpcStatus, TaxInvoiceStatus, VariationStatus, CostProposalStatus } from '@fmksa/db';
 // ---------------------------------------------------------------------------
 // Status sets for financial aggregates
 // ---------------------------------------------------------------------------
@@ -117,19 +118,19 @@ export async function getCommercialDashboard(projectId: string) {
 
     // --- Financial aggregates ---
     prisma.ipa.aggregate({
-      where: { projectId, status: { in: IPA_APPROVED_PLUS } },
+      where: { projectId, status: { in: IPA_APPROVED_PLUS as IpaStatus[] } },
       _sum: { netClaimed: true },
     }),
     prisma.ipc.aggregate({
-      where: { projectId, status: { in: IPC_SIGNED_PLUS } },
+      where: { projectId, status: { in: IPC_SIGNED_PLUS as IpcStatus[] } },
       _sum: { netCertified: true },
     }),
     prisma.taxInvoice.aggregate({
-      where: { projectId, status: { in: TI_ISSUED_PLUS } },
+      where: { projectId, status: { in: TI_ISSUED_PLUS as TaxInvoiceStatus[] } },
       _sum: { totalAmount: true },
     }),
     prisma.variation.aggregate({
-      where: { projectId, status: { in: VAR_APPROVED_PLUS } },
+      where: { projectId, status: { in: VAR_APPROVED_PLUS as VariationStatus[] } },
       _sum: { costImpact: true },
     }),
     prisma.variation.aggregate({
@@ -137,7 +138,7 @@ export async function getCommercialDashboard(projectId: string) {
       _sum: { approvedCostImpact: true },
     }),
     prisma.costProposal.aggregate({
-      where: { projectId, status: { in: CP_APPROVED_PLUS } },
+      where: { projectId, status: { in: CP_APPROVED_PLUS as CostProposalStatus[] } },
       _sum: { estimatedCost: true },
     }),
     prisma.costProposal.aggregate({
@@ -172,15 +173,15 @@ export async function getCommercialDashboard(projectId: string) {
   };
 
   // --- Build financial summary ---
-  const totalClaimed = decimalToString(ipaClaimed._sum.netClaimed);
-  const totalCertified = decimalToString(ipcCertified._sum.netCertified);
-  const totalInvoiced = decimalToString(tiInvoiced._sum.totalAmount);
-  const totalVariationExposure = decimalToString(varExposure._sum.costImpact);
+  const totalClaimed = decimalToString(ipaClaimed._sum?.netClaimed ?? null);
+  const totalCertified = decimalToString(ipcCertified._sum?.netCertified ?? null);
+  const totalInvoiced = decimalToString(tiInvoiced._sum?.totalAmount ?? null);
+  const totalVariationExposure = decimalToString(varExposure._sum?.costImpact ?? null);
 
   // --- Build variance analytics ---
-  const totalVarApproved = decimalToString(varApproved._sum.approvedCostImpact);
-  const totalCpEstimated = decimalToString(cpEstimated._sum.estimatedCost);
-  const totalCpApproved = decimalToString(cpApproved._sum.approvedCost);
+  const totalVarApproved = decimalToString(varApproved._sum?.approvedCostImpact ?? null);
+  const totalCpEstimated = decimalToString(cpEstimated._sum?.estimatedCost ?? null);
+  const totalCpApproved = decimalToString(cpApproved._sum?.approvedCost ?? null);
 
   const ipaVar = computeVariance(totalClaimed, totalCertified);
   const variationVar = computeVariance(totalVariationExposure, totalVarApproved);
