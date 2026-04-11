@@ -2,6 +2,7 @@
  * ProcurementCategory tRPC sub-router — entity-scoped.
  *
  * Phase 4, Task 4.6 — Module 3 Procurement Engine.
+ * Permission alignment: H3 hardening patch.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
@@ -19,26 +20,7 @@ import {
   deleteCategory,
 } from '@fmksa/core';
 import { router, entityProcedure } from '../../trpc';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function hasEntityPerm(ctx: { entityPermissions: string[] }, perm: string): boolean {
-  return ctx.entityPermissions.includes('system.admin') || ctx.entityPermissions.includes(perm);
-}
-
-function mapError(err: unknown): never {
-  if (err instanceof Error) {
-    if (err.message.includes('does not belong to the expected'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
-      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
-  }
-  throw err;
-}
+import { mapError, hasEntityPerm } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -76,7 +58,7 @@ export const categoryRouter = router({
   create: entityProcedure
     .input(CreateCategoryInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'procurement_category.create'))
+      if (!hasEntityPerm(ctx, 'procurement_category.manage'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await createCategory(input, ctx.user.id);
@@ -88,7 +70,7 @@ export const categoryRouter = router({
   update: entityProcedure
     .input(UpdateCategoryInputSchema.extend({ entityId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'procurement_category.update'))
+      if (!hasEntityPerm(ctx, 'procurement_category.manage'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateCategory(input, ctx.user.id, input.entityId);
@@ -100,7 +82,7 @@ export const categoryRouter = router({
   delete: entityProcedure
     .input(z.object({ entityId: z.string().uuid(), id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'procurement_category.delete'))
+      if (!hasEntityPerm(ctx, 'procurement_category.manage'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         await deleteCategory(input.id, ctx.user.id, input.entityId);

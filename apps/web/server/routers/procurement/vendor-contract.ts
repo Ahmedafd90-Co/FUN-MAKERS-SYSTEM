@@ -2,6 +2,7 @@
  * VendorContract tRPC sub-router — project-scoped.
  *
  * Phase 5, Task 5.5 — Module 3 Procurement Engine.
+ * Permission alignment: H3 hardening patch.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
@@ -19,22 +20,7 @@ import {
   deleteVendorContract,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-
-// ---------------------------------------------------------------------------
-// Error mapping helper
-// ---------------------------------------------------------------------------
-
-function mapError(err: unknown): never {
-  if (err instanceof Error) {
-    if (err.message.includes('does not belong to the expected'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
-      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
-  }
-  throw err;
-}
+import { mapError, getTransitionPermission } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -44,7 +30,7 @@ export const vendorContractRouter = router({
   list: projectProcedure
     .input(ProcurementListFilterInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('vendor_contract.list'))
+      if (!ctx.user.permissions.includes('vendor_contract.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       return listVendorContracts(input);
     }),
@@ -76,7 +62,7 @@ export const vendorContractRouter = router({
   update: projectProcedure
     .input(UpdateVendorContractInputSchema.extend({ projectId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('vendor_contract.update'))
+      if (!ctx.user.permissions.includes('vendor_contract.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateVendorContract(input, ctx.user.id, input.projectId);
@@ -93,7 +79,8 @@ export const vendorContractRouter = router({
       comment: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('vendor_contract.transition'))
+      const requiredPerm = getTransitionPermission('vendor_contract', input.action);
+      if (!ctx.user.permissions.includes(requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionVendorContract(input.id, input.action, ctx.user.id, input.comment, input.projectId);

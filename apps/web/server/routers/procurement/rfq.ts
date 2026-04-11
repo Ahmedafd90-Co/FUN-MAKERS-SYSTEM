@@ -2,6 +2,7 @@
  * RFQ tRPC sub-router — project-scoped.
  *
  * Phase 5, Task 5.6 — Module 3 Procurement Engine.
+ * Permission alignment: H3 hardening patch.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
@@ -20,22 +21,7 @@ import {
   inviteVendors,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-
-// ---------------------------------------------------------------------------
-// Error mapping helper
-// ---------------------------------------------------------------------------
-
-function mapError(err: unknown): never {
-  if (err instanceof Error) {
-    if (err.message.includes('does not belong to the expected'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
-      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
-  }
-  throw err;
-}
+import { mapError, getTransitionPermission } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -45,7 +31,7 @@ export const rfqRouter = router({
   list: projectProcedure
     .input(ProcurementListFilterInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('rfq.list'))
+      if (!ctx.user.permissions.includes('rfq.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       return listRfqs(input);
     }),
@@ -77,7 +63,7 @@ export const rfqRouter = router({
   update: projectProcedure
     .input(UpdateRfqInputSchema.extend({ projectId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('rfq.update'))
+      if (!ctx.user.permissions.includes('rfq.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateRfq(input, ctx.user.id, input.projectId);
@@ -94,7 +80,8 @@ export const rfqRouter = router({
       comment: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('rfq.transition'))
+      const requiredPerm = getTransitionPermission('rfq', input.action);
+      if (!ctx.user.permissions.includes(requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionRfq(input.id, input.action, ctx.user.id, input.comment, input.projectId);
@@ -123,7 +110,7 @@ export const rfqRouter = router({
       vendorIds: z.array(z.string().uuid()).min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('rfq.update'))
+      if (!ctx.user.permissions.includes('rfq.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await inviteVendors(input.rfqId, input.vendorIds, ctx.user.id, input.projectId);

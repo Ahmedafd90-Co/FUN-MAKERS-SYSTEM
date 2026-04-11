@@ -5,6 +5,7 @@
  * Uses entityProcedure for union-aggregated entity permissions.
  *
  * Phase 5, Task 5.5 — Module 3 Procurement Engine.
+ * Permission alignment: H3 hardening patch.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
@@ -23,26 +24,7 @@ import {
   getUtilization,
 } from '@fmksa/core';
 import { router, entityProcedure } from '../../trpc';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function hasEntityPerm(ctx: { entityPermissions: string[] }, perm: string): boolean {
-  return ctx.entityPermissions.includes('system.admin') || ctx.entityPermissions.includes(perm);
-}
-
-function mapError(err: unknown): never {
-  if (err instanceof Error) {
-    if (err.message.includes('does not belong to the expected'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
-      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
-  }
-  throw err;
-}
+import { mapError, hasEntityPerm, getTransitionPermission } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -52,7 +34,7 @@ export const frameworkAgreementRouter = router({
   list: entityProcedure
     .input(EntityListFilterInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'framework_agreement.list'))
+      if (!hasEntityPerm(ctx, 'framework_agreement.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       return listFrameworkAgreements(input);
     }),
@@ -84,7 +66,7 @@ export const frameworkAgreementRouter = router({
   update: entityProcedure
     .input(UpdateFrameworkAgreementInputSchema.extend({ entityId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'framework_agreement.update'))
+      if (!hasEntityPerm(ctx, 'framework_agreement.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateFrameworkAgreement(input, ctx.user.id, input.entityId);
@@ -101,7 +83,8 @@ export const frameworkAgreementRouter = router({
       comment: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!hasEntityPerm(ctx, 'framework_agreement.transition'))
+      const requiredPerm = getTransitionPermission('framework_agreement', input.action);
+      if (!hasEntityPerm(ctx, requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionFrameworkAgreement(input.id, input.action, ctx.user.id, input.comment, input.entityId);

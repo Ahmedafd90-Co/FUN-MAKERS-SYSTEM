@@ -11,27 +11,27 @@ const RESOURCES: { resource: string; label: string; actions: string[] }[] = [
   {
     resource: 'vendor',
     label: 'Vendor',
-    actions: ['view', 'create', 'edit', 'activate', 'suspend', 'blacklist'],
+    actions: ['view', 'create', 'edit', 'delete', 'activate', 'suspend', 'blacklist'],
   },
   {
     resource: 'vendor_contract',
     label: 'Vendor Contract',
-    actions: ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'terminate'],
+    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate'],
   },
   {
     resource: 'framework_agreement',
     label: 'Framework Agreement',
-    actions: ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'terminate'],
+    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate'],
   },
   {
     resource: 'rfq',
     label: 'Request for Quotation',
-    actions: ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award'],
+    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award'],
   },
   {
     resource: 'quotation',
     label: 'Quotation',
-    actions: ['view', 'create', 'edit', 'review', 'shortlist', 'award', 'reject'],
+    actions: ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject'],
   },
   {
     resource: 'purchase_order',
@@ -79,6 +79,7 @@ const ACTION_VERBS: Record<string, string> = {
   view: 'View',
   create: 'Create',
   edit: 'Edit draft',
+  delete: 'Delete draft',
   submit: 'Submit for review',
   review: 'Review and provide feedback',
   approve: 'Approve',

@@ -2,6 +2,7 @@
  * Quotation tRPC sub-router — project-scoped.
  *
  * Phase 5, Task 5.6 — Module 3 Procurement Engine.
+ * Permission alignment: H3 hardening patch.
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
@@ -19,22 +20,7 @@ import {
   compareQuotations,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-
-// ---------------------------------------------------------------------------
-// Error mapping helper
-// ---------------------------------------------------------------------------
-
-function mapError(err: unknown): never {
-  if (err instanceof Error) {
-    if (err.message.includes('does not belong to the expected'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
-    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
-      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
-  }
-  throw err;
-}
+import { mapError, getTransitionPermission } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -53,7 +39,7 @@ export const quotationRouter = router({
       sortDirection: z.enum(['asc', 'desc']).default('desc'),
     }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('quotation.list'))
+      if (!ctx.user.permissions.includes('quotation.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       return listQuotations(input);
     }),
@@ -85,7 +71,7 @@ export const quotationRouter = router({
   update: projectProcedure
     .input(UpdateQuotationInputSchema.extend({ projectId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('quotation.update'))
+      if (!ctx.user.permissions.includes('quotation.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateQuotation(input, ctx.user.id, input.projectId);
@@ -102,7 +88,8 @@ export const quotationRouter = router({
       comment: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('quotation.transition'))
+      const requiredPerm = getTransitionPermission('quotation', input.action);
+      if (!ctx.user.permissions.includes(requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionQuotation(input.id, input.action, ctx.user.id, input.comment, input.projectId);
