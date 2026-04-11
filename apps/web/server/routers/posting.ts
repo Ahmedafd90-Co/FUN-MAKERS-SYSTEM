@@ -2,10 +2,14 @@
  * Posting tRPC router -- admin read operations for events + exceptions.
  *
  * Task 1.7.7: Phase 1.7 Group B
+ * Permission alignment: H4 hardening patch.
  *
  * IMPORTANT: There is NO posting.post endpoint. Business services call
  * postingService.post() directly from server-side code. This router only
  * exposes admin/read operations and exception management.
+ *
+ * Permissions: Uses granular posting.view / posting.retry / posting.resolve
+ * codes instead of blanket system.admin. Master admin bypasses via system.admin.
  */
 import { TRPCError } from '@trpc/server';
 import {
@@ -18,11 +22,16 @@ import {
 } from '@fmksa/contracts';
 import { postingExceptionService } from '@fmksa/core';
 import { prisma } from '@fmksa/db';
-import { router, adminProcedure } from '../trpc';
+import { router, protectedProcedure } from '../trpc';
 
 // ---------------------------------------------------------------------------
-// Error mapping helper
+// Helpers
 // ---------------------------------------------------------------------------
+
+/** Check if user has a specific permission or system.admin bypass. */
+function hasPerm(ctx: { user: { permissions: string[] } }, perm: string): boolean {
+  return ctx.user.permissions.includes('system.admin') || ctx.user.permissions.includes(perm);
+}
 
 function mapPostingError(err: unknown): never {
   if (err instanceof Error && err.message.includes('not found')) {
@@ -35,17 +44,20 @@ function mapPostingError(err: unknown): never {
 }
 
 // ---------------------------------------------------------------------------
-// Events sub-router (read-only admin operations)
+// Events sub-router (read-only operations)
 // ---------------------------------------------------------------------------
 
 const eventsRouter = router({
   /**
    * List posting events with optional filters and pagination.
-   * Requires: posting.view (admin-level)
+   * Requires: posting.view
    */
-  list: adminProcedure
+  list: protectedProcedure
     .input(ListPostingEventsInputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+
       const { projectId, eventType, status, skip, take } = input;
 
       const where: Record<string, unknown> = {};
@@ -74,11 +86,14 @@ const eventsRouter = router({
 
   /**
    * Get a single posting event with related exceptions.
-   * Requires: posting.view (admin-level)
+   * Requires: posting.view
    */
-  get: adminProcedure
+  get: protectedProcedure
     .input(GetPostingEventInputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+
       const event = await prisma.postingEvent.findUnique({
         where: { id: input.id },
         include: {
@@ -105,11 +120,14 @@ const eventsRouter = router({
 const exceptionsRouter = router({
   /**
    * List posting exceptions with optional filters and pagination.
-   * Requires: posting.view (admin-level)
+   * Requires: posting.view
    */
-  list: adminProcedure
+  list: protectedProcedure
     .input(ListPostingExceptionsInputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+
       // Strip undefined values — exactOptionalPropertyTypes compat
       const filters: {
         status?: 'open' | 'resolved';
@@ -126,11 +144,13 @@ const exceptionsRouter = router({
 
   /**
    * Get a single exception with its related event and audit logs.
-   * Requires: posting.view (admin-level)
+   * Requires: posting.view
    */
-  get: adminProcedure
+  get: protectedProcedure
     .input(GetPostingExceptionInputSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await postingExceptionService.getException(input.id);
       } catch (err) {
@@ -140,11 +160,13 @@ const exceptionsRouter = router({
 
   /**
    * Retry a failed exception by re-posting the original event data.
-   * Requires: posting.retry (admin-level)
+   * Requires: posting.retry
    */
-  retry: adminProcedure
+  retry: protectedProcedure
     .input(RetryPostingExceptionInputSchema)
     .mutation(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.retry'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         const result = await postingExceptionService.retryException(
           input.exceptionId,
@@ -173,11 +195,13 @@ const exceptionsRouter = router({
 
   /**
    * Manually resolve an exception with a required note.
-   * Requires: posting.resolve (admin-level)
+   * Requires: posting.resolve
    */
-  resolve: adminProcedure
+  resolve: protectedProcedure
     .input(ResolvePostingExceptionInputSchema)
     .mutation(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'posting.resolve'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await postingExceptionService.resolveException(
           input.exceptionId,
