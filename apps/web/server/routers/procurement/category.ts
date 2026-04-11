@@ -1,0 +1,110 @@
+/**
+ * ProcurementCategory tRPC sub-router — entity-scoped.
+ *
+ * Phase 4, Task 4.6 — Module 3 Procurement Engine.
+ */
+import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
+import {
+  CreateCategoryInputSchema,
+  UpdateCategoryInputSchema,
+  EntityListFilterInputSchema,
+} from '@fmksa/contracts';
+import {
+  createCategory,
+  updateCategory,
+  getCategory,
+  listCategories,
+  getCategoryTree,
+  deleteCategory,
+} from '@fmksa/core';
+import { router, entityProcedure } from '../../trpc';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function hasEntityPerm(ctx: { entityPermissions: string[] }, perm: string): boolean {
+  return ctx.entityPermissions.includes('system.admin') || ctx.entityPermissions.includes(perm);
+}
+
+function mapError(err: unknown): never {
+  if (err instanceof Error) {
+    if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
+    if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
+      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
+  }
+  throw err;
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
+export const categoryRouter = router({
+  list: entityProcedure
+    .input(EntityListFilterInputSchema.extend({ level: z.string().optional(), parentId: z.string().uuid().nullable().optional() }))
+    .query(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      return listCategories(input);
+    }),
+
+  get: entityProcedure
+    .input(z.object({ entityId: z.string().uuid(), id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      try {
+        return await getCategory(input.id);
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+  tree: entityProcedure
+    .input(z.object({ entityId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.view'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      return getCategoryTree(input.entityId);
+    }),
+
+  create: entityProcedure
+    .input(CreateCategoryInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.create'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      try {
+        return await createCategory(input, ctx.user.id);
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+  update: entityProcedure
+    .input(UpdateCategoryInputSchema.extend({ entityId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.update'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      try {
+        return await updateCategory(input, ctx.user.id);
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+  delete: entityProcedure
+    .input(z.object({ entityId: z.string().uuid(), id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!hasEntityPerm(ctx, 'procurement_category.delete'))
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
+      try {
+        await deleteCategory(input.id, ctx.user.id);
+        return { success: true };
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+});

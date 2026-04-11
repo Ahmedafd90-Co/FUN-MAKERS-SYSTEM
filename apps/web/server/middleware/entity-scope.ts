@@ -63,8 +63,11 @@ export async function verifyEntityAccess(opts: {
   const { userId, entityId, path } = opts;
   const now = new Date();
 
-  // Query active assignments where the project belongs to this entity,
-  // including role -> rolePermissions -> permission in ONE query
+  // NOTE: Unlike project-scope.ts which delegates to accessControlService,
+  // entity membership requires a cross-project permission aggregation query
+  // that accessControlService does not provide. A single Prisma query with
+  // nested includes avoids N+1 and resolves entity membership + permissions
+  // in one round trip.
   const assignments = await prisma.projectAssignment.findMany({
     where: {
       userId,

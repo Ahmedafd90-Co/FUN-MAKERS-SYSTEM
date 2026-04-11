@@ -16,6 +16,7 @@ import { dashboardRouter } from './dashboard';
 import { auditRouter } from './audit';
 import { healthRouter } from './health';
 import { commercialRouter } from './commercial';
+import { procurementRouter } from './procurement';
 
 export const appRouter = router({
   auth: authRouter,
@@ -30,6 +31,7 @@ export const appRouter = router({
   audit: auditRouter,
   health: healthRouter,
   commercial: commercialRouter,
+  procurement: procurementRouter,
 });
 
 export type AppRouter = typeof appRouter;
