@@ -7,6 +7,7 @@
  *  - `protectedProcedure`  — UNAUTHORIZED if no user in context
  *  - `adminProcedure`      — FORBIDDEN if user lacks system.admin permission
  *  - `projectProcedure`    — project-scoped: assignment check + ctx.projectId
+ *  - `entityProcedure`     — entity-scoped: entity membership check + ctx.entityId + ctx.entityPermissions
  *  - `createCallerFactory` — for server-side calling
  */
 import { initTRPC, TRPCError } from '@trpc/server';
@@ -16,6 +17,10 @@ import {
   extractProjectId,
   verifyProjectAccess,
 } from './middleware/project-scope';
+import {
+  extractEntityId,
+  verifyEntityAccess,
+} from './middleware/entity-scope';
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -145,4 +150,65 @@ const enforceProjectScopeMiddleware = t.middleware(
  */
 export const projectProcedure = protectedProcedure.use(
   enforceProjectScopeMiddleware,
+);
+
+/**
+ * Middleware that enforces entity-scope isolation.
+ *
+ * Reads `entityId` from raw input, verifies the caller's entity membership
+ * via ProjectAssignment (or system.admin), writes an audit log on denial,
+ * and injects `ctx.entityId` and `ctx.entityPermissions` for downstream resolvers.
+ */
+const enforceEntityScopeMiddleware = t.middleware(
+  async ({ ctx, next, getRawInput, input, path }) => {
+    // Auth is already enforced by protectedProcedure upstream, but we
+    // defensively check again for safety.
+    if (!ctx.user) {
+      throw new TRPCError({
+        code: 'UNAUTHORIZED',
+        message: 'You must be signed in to perform this action.',
+      });
+    }
+
+    // Extract entityId from parsed input or raw input
+    let entityId = extractEntityId(input);
+    if (!entityId) {
+      const rawInput = await getRawInput();
+      entityId = extractEntityId(rawInput);
+    }
+
+    if (!entityId) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'entityId is required for this operation.',
+      });
+    }
+
+    // Verify entity membership / system.admin access (throws on denial)
+    const { entityPermissions } = await verifyEntityAccess({
+      userId: ctx.user.id,
+      entityId,
+      path,
+    });
+
+    // Pass entityId and entityPermissions into context for downstream resolvers
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user,
+        entityId,
+        entityPermissions,
+      },
+    });
+  },
+);
+
+/**
+ * Entity-scoped procedure. Every entity-scoped API endpoint uses this.
+ * Enforces: user must hold an active project assignment within the entity
+ * OR have system.admin.
+ * Adds ctx.entityId and ctx.entityPermissions for downstream use.
+ */
+export const entityProcedure = protectedProcedure.use(
+  enforceEntityScopeMiddleware,
 );

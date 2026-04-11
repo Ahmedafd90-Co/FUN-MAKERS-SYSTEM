@@ -17,3 +17,4 @@ export * from './audit';
 export * from './notifications';
 export * from './health';
 export * from './commercial';
+export * from './procurement';
