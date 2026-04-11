@@ -8,6 +8,7 @@ import type { CreateFrameworkAgreementInput, UpdateFrameworkAgreementInput, Enti
 import { auditService } from '../../audit/service';
 import { FRAMEWORK_AGREEMENT_TRANSITIONS, FRAMEWORK_AGREEMENT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextAgreementNumber, EDITABLE_STATUSES } from './validation';
+import { assertEntityScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (transaction-safe sequential code generation with P2002 retry)
@@ -89,11 +90,12 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateFrameworkAgreement(input: UpdateFrameworkAgreementInput, actorUserId: string) {
+export async function updateFrameworkAgreement(input: UpdateFrameworkAgreementInput, actorUserId: string, entityId?: string) {
   const existing = await prisma.frameworkAgreement.findUniqueOrThrow({
     where: { id: input.id },
     include: { items: true },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'FrameworkAgreement', input.id);
 
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     throw new Error(`Cannot update framework agreement in status '${existing.status}'. Only draft or returned agreements can be updated.`);
@@ -157,6 +159,7 @@ export async function transitionFrameworkAgreement(
   action: string,
   actorUserId: string,
   comment?: string,
+  entityId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -167,6 +170,7 @@ export async function transitionFrameworkAgreement(
     where: { id },
     include: { vendor: true },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'FrameworkAgreement', id);
 
   // Terminal status check
   if (FRAMEWORK_AGREEMENT_TERMINAL_STATUSES.includes(existing.status)) {
@@ -220,11 +224,13 @@ export async function transitionFrameworkAgreement(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getFrameworkAgreement(id: string) {
-  return prisma.frameworkAgreement.findUniqueOrThrow({
+export async function getFrameworkAgreement(id: string, entityId?: string) {
+  const record = await prisma.frameworkAgreement.findUniqueOrThrow({
     where: { id },
     include: { items: true, vendor: true },
   });
+  if (entityId) assertEntityScope(record, entityId, 'FrameworkAgreement', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,10 +280,11 @@ export async function listFrameworkAgreements(input: EntityListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteFrameworkAgreement(id: string, actorUserId: string) {
+export async function deleteFrameworkAgreement(id: string, actorUserId: string, entityId?: string) {
   const existing = await prisma.frameworkAgreement.findUniqueOrThrow({
     where: { id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'FrameworkAgreement', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete framework agreement in status '${existing.status}'. Only draft agreements can be deleted.`);
@@ -307,11 +314,12 @@ export async function deleteFrameworkAgreement(id: string, actorUserId: string) 
 // Utilization tracking
 // ---------------------------------------------------------------------------
 
-export async function getUtilization(agreementId: string) {
+export async function getUtilization(agreementId: string, entityId?: string) {
   const agreement = await prisma.frameworkAgreement.findUniqueOrThrow({
     where: { id: agreementId },
-    select: { id: true, totalCommittedValue: true },
+    select: { id: true, totalCommittedValue: true, entityId: true },
   });
+  if (entityId) assertEntityScope(agreement, entityId, 'FrameworkAgreement', agreementId);
 
   // Sum PO totalAmounts that reference this framework agreement
   const result = await prisma.purchaseOrder.aggregate({

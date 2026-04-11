@@ -4,6 +4,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { IPC_TRANSITIONS, IPC_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action → status mapping
@@ -83,8 +84,9 @@ export async function createIpc(input: CreateIpcInput, actorUserId: string) {
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateIpc(input: UpdateIpcInput, actorUserId: string) {
+export async function updateIpc(input: UpdateIpcInput, actorUserId: string, projectId: string) {
   const existing = await prisma.ipc.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'IPC', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update IPC in status '${existing.status}'. Only draft or returned IPCs can be updated.`);
@@ -131,6 +133,7 @@ export async function transitionIpc(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -141,6 +144,7 @@ export async function transitionIpc(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'IPC', id);
 
   // Terminal status check
   if (IPC_TERMINAL_STATUSES.includes(existing.status)) {
@@ -244,11 +248,13 @@ export async function transitionIpc(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getIpc(id: string) {
-  return prisma.ipc.findUniqueOrThrow({
+export async function getIpc(id: string, projectId: string) {
+  const record = await prisma.ipc.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'IPC', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +307,9 @@ export async function listIpcs(input: ListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteIpc(id: string, actorUserId: string) {
+export async function deleteIpc(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.ipc.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'IPC', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete IPC in status '${existing.status}'. Only draft IPCs can be deleted.`);

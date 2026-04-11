@@ -30,6 +30,8 @@ import { router, projectProcedure } from '../../trpc';
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (
       err.message.includes('not found') ||
       err.message.includes('findUniqueOrThrow')
@@ -74,7 +76,7 @@ export const variationRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await getVariation(input.id);
+        return await getVariation(input.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -106,7 +108,7 @@ export const variationRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await updateVariation(input, ctx.user.id);
+        return await updateVariation(input, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -156,6 +158,7 @@ export const variationRouter = router({
           ctx.user.id,
           input.comment,
           assessment,
+          input.projectId,
         );
       } catch (err) {
         mapError(err);
@@ -171,7 +174,7 @@ export const variationRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        await deleteVariation(input.id, ctx.user.id);
+        await deleteVariation(input.id, ctx.user.id, input.projectId);
         return { success: true };
       } catch (err) {
         mapError(err);

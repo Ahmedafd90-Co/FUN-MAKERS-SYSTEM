@@ -93,17 +93,17 @@ describe('IPA Service', () => {
   it('updateIpa only works in draft/returned status', async () => {
     const ipa = await createIpa(makeInput({ periodNumber: 8 }), 'test-user');
     // Should work in draft
-    const updated = await updateIpa({ id: ipa.id, grossAmount: 20000 }, 'test-user');
+    const updated = await updateIpa({ id: ipa.id, grossAmount: 20000 }, 'test-user', testProject.id);
     expect(Number(updated.grossAmount)).toBe(20000);
 
     // Transition to submitted — update should fail
     await transitionIpa(ipa.id, 'submit', 'test-user');
-    await expect(updateIpa({ id: ipa.id, grossAmount: 30000 }, 'test-user')).rejects.toThrow();
+    await expect(updateIpa({ id: ipa.id, grossAmount: 30000 }, 'test-user', testProject.id)).rejects.toThrow();
   });
 
   it('deleteIpa only works in draft', async () => {
     const ipa = await createIpa(makeInput({ periodNumber: 7 }), 'test-user');
-    await deleteIpa(ipa.id, 'test-user');
+    await deleteIpa(ipa.id, 'test-user', testProject.id);
     const deleted = await prisma.ipa.findUnique({ where: { id: ipa.id } });
     expect(deleted).toBeNull();
   });

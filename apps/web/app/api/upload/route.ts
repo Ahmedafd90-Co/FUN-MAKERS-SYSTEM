@@ -19,6 +19,7 @@
 import {
   documentService,
   accessControlService,
+  assertProjectScope,
 } from '@fmksa/core';
 import { NextResponse } from 'next/server';
 
@@ -147,7 +148,7 @@ async function handleCreate(params: {
     );
   }
 
-  // Permission check
+  // Permission check (also verifies project membership)
   try {
     await accessControlService.requirePermission(
       userId,
@@ -157,6 +158,15 @@ async function handleCreate(params: {
   } catch {
     return NextResponse.json(
       { error: 'You do not have permission to upload documents.' },
+      { status: 403 },
+    );
+  }
+
+  // Project membership check
+  const isAssigned = await accessControlService.isAssignedToProject(userId, projectId);
+  if (!isAssigned) {
+    return NextResponse.json(
+      { error: 'You are not assigned to this project.' },
       { status: 403 },
     );
   }
@@ -226,6 +236,24 @@ async function handleSupersede(params: {
     return NextResponse.json(
       { error: 'You do not have permission to supersede documents.' },
       { status: 403 },
+    );
+  }
+
+  // Project membership check
+  const isAssigned = await accessControlService.isAssignedToProject(userId, projectId);
+  if (!isAssigned) {
+    return NextResponse.json(
+      { error: 'You are not assigned to this project.' },
+      { status: 403 },
+    );
+  }
+
+  // Verify document belongs to this project (scope binding)
+  const doc = await documentService.getDocument(documentId, userId);
+  if (doc.projectId !== projectId) {
+    return NextResponse.json(
+      { error: 'Document not found.' },
+      { status: 404 },
     );
   }
 

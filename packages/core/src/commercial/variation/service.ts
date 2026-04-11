@@ -5,6 +5,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { getVariationTransitions, VARIATION_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action -> status mapping
@@ -78,8 +79,9 @@ export async function createVariation(input: CreateVariationInput, actorUserId: 
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateVariation(input: UpdateVariationInput, actorUserId: string) {
+export async function updateVariation(input: UpdateVariationInput, actorUserId: string, projectId: string) {
   const existing = await prisma.variation.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'Variation', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update Variation in status '${existing.status}'. Only draft or returned Variations can be updated.`);
@@ -127,6 +129,7 @@ export async function transitionVariation(
     approvedCostImpact?: number | null;
     approvedTimeImpactDays?: number | null;
   },
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -137,6 +140,7 @@ export async function transitionVariation(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'Variation', id);
 
   // Terminal status check
   if (VARIATION_TERMINAL_STATUSES.includes(existing.status)) {
@@ -290,11 +294,13 @@ export async function transitionVariation(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getVariation(id: string) {
-  return prisma.variation.findUniqueOrThrow({
+export async function getVariation(id: string, projectId: string) {
+  const record = await prisma.variation.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'Variation', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,8 +360,9 @@ export async function listVariations(
 // Delete (draft only -- hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteVariation(id: string, actorUserId: string) {
+export async function deleteVariation(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.variation.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'Variation', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete Variation in status '${existing.status}'. Only draft Variations can be deleted.`);

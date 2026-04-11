@@ -9,6 +9,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { VENDOR_CONTRACT_TRANSITIONS, VENDOR_CONTRACT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextContractNumber, EDITABLE_STATUSES } from './validation';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (transaction-safe sequential code generation with P2002 retry)
@@ -79,10 +80,11 @@ export async function createVendorContract(input: CreateVendorContractInput, act
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateVendorContract(input: UpdateVendorContractInput, actorUserId: string) {
+export async function updateVendorContract(input: UpdateVendorContractInput, actorUserId: string, projectId: string) {
   const existing = await prisma.vendorContract.findUniqueOrThrow({
     where: { id: input.id },
   });
+  assertProjectScope(existing, projectId, 'VendorContract', input.id);
 
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     throw new Error(`Cannot update vendor contract in status '${existing.status}'. Only draft or returned contracts can be updated.`);
@@ -130,6 +132,7 @@ export async function transitionVendorContract(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -140,6 +143,7 @@ export async function transitionVendorContract(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'VendorContract', id);
 
   // Terminal status check
   if (VENDOR_CONTRACT_TERMINAL_STATUSES.includes(existing.status)) {
@@ -210,11 +214,13 @@ export async function transitionVendorContract(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getVendorContract(id: string) {
-  return prisma.vendorContract.findUniqueOrThrow({
+export async function getVendorContract(id: string, projectId: string) {
+  const record = await prisma.vendorContract.findUniqueOrThrow({
     where: { id },
     include: { project: true, vendor: true, parentContract: true, childContracts: true },
   });
+  assertProjectScope(record, projectId, 'VendorContract', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,10 +277,11 @@ export async function listVendorContracts(input: ProcurementListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteVendorContract(id: string, actorUserId: string) {
+export async function deleteVendorContract(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.vendorContract.findUniqueOrThrow({
     where: { id },
   });
+  assertProjectScope(existing, projectId, 'VendorContract', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete vendor contract in status '${existing.status}'. Only draft contracts can be deleted.`);

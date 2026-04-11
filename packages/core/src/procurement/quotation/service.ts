@@ -9,6 +9,7 @@ import type { CreateQuotationInput, UpdateQuotationInput } from '@fmksa/contract
 import { auditService } from '../../audit/service';
 import { QUOTATION_TRANSITIONS, QUOTATION_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { EDITABLE_STATUSES } from './validation';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (with nested lineItems)
@@ -67,11 +68,12 @@ export async function createQuotation(input: CreateQuotationInput, actorUserId: 
 // Update (received only)
 // ---------------------------------------------------------------------------
 
-export async function updateQuotation(input: UpdateQuotationInput, actorUserId: string) {
+export async function updateQuotation(input: UpdateQuotationInput, actorUserId: string, projectId?: string) {
   const existing = await prisma.quotation.findUniqueOrThrow({
     where: { id: input.id },
     include: { lineItems: true, rfq: { select: { projectId: true } } },
   });
+  if (projectId) assertProjectScope(existing.rfq, projectId, 'Quotation', input.id);
 
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     throw new Error(`Cannot update quotation in status '${existing.status}'. Only received quotations can be updated.`);
@@ -135,6 +137,7 @@ export async function transitionQuotation(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -145,6 +148,7 @@ export async function transitionQuotation(
     where: { id },
     include: { rfq: { select: { projectId: true } } },
   });
+  if (projectId) assertProjectScope(existing.rfq, projectId, 'Quotation', id);
 
   // Terminal status check
   if (QUOTATION_TERMINAL_STATUSES.includes(existing.status)) {
@@ -184,11 +188,13 @@ export async function transitionQuotation(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getQuotation(id: string) {
-  return prisma.quotation.findUniqueOrThrow({
+export async function getQuotation(id: string, projectId?: string) {
+  const record = await prisma.quotation.findUniqueOrThrow({
     where: { id },
     include: { lineItems: true, vendor: true, rfq: true },
   });
+  if (projectId) assertProjectScope(record.rfq, projectId, 'Quotation', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,11 +250,12 @@ export async function listQuotations(input: {
 // Delete (received only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteQuotation(id: string, actorUserId: string) {
+export async function deleteQuotation(id: string, actorUserId: string, projectId?: string) {
   const existing = await prisma.quotation.findUniqueOrThrow({
     where: { id },
     include: { rfq: { select: { projectId: true } } },
   });
+  if (projectId) assertProjectScope(existing.rfq, projectId, 'Quotation', id);
 
   if (existing.status !== 'received') {
     throw new Error(`Cannot delete quotation in status '${existing.status}'. Only received quotations can be deleted.`);
@@ -275,7 +282,14 @@ export async function deleteQuotation(id: string, actorUserId: string) {
 // Compare quotations for an RFQ
 // ---------------------------------------------------------------------------
 
-export async function compareQuotations(rfqId: string) {
+export async function compareQuotations(rfqId: string, projectId?: string) {
+  if (projectId) {
+    const rfq = await prisma.rFQ.findUniqueOrThrow({
+      where: { id: rfqId },
+      select: { projectId: true },
+    });
+    assertProjectScope(rfq, projectId, 'RFQ', rfqId);
+  }
   // Get all quotations with line items and vendor info for this RFQ
   const quotations = await prisma.quotation.findMany({
     where: { rfqId },

@@ -7,6 +7,7 @@ import { prisma } from '@fmksa/db';
 import type { CreateCategoryInput, UpdateCategoryInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { deriveChildLevel, defaultTopLevel } from './validation';
+import { assertEntityScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create
@@ -53,10 +54,11 @@ export async function createCategory(input: CreateCategoryInput, actorUserId: st
 // Update
 // ---------------------------------------------------------------------------
 
-export async function updateCategory(input: UpdateCategoryInput, actorUserId: string) {
+export async function updateCategory(input: UpdateCategoryInput, actorUserId: string, entityId?: string) {
   const existing = await prisma.procurementCategory.findUniqueOrThrow({
     where: { id: input.id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'ProcurementCategory', input.id);
 
   const { id, ...updateFields } = input;
   const data: Record<string, unknown> = {};
@@ -104,11 +106,13 @@ export async function updateCategory(input: UpdateCategoryInput, actorUserId: st
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getCategory(id: string) {
-  return prisma.procurementCategory.findUniqueOrThrow({
+export async function getCategory(id: string, entityId?: string) {
+  const record = await prisma.procurementCategory.findUniqueOrThrow({
     where: { id },
     include: { children: true, parent: true },
   });
+  if (entityId) assertEntityScope(record, entityId, 'ProcurementCategory', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,11 +177,12 @@ export async function getCategoryTree(entityId: string) {
 // Delete (only if no children exist — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteCategory(id: string, actorUserId: string) {
+export async function deleteCategory(id: string, actorUserId: string, entityId?: string) {
   const existing = await prisma.procurementCategory.findUniqueOrThrow({
     where: { id },
     include: { children: true },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'ProcurementCategory', id);
 
   if (existing.children.length > 0) {
     throw new Error('Cannot delete category that has children. Remove child categories first.');

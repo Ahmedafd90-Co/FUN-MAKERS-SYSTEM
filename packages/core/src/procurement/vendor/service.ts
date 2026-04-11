@@ -8,6 +8,7 @@ import type { CreateVendorInput, UpdateVendorInput, EntityListFilterInput } from
 import { auditService } from '../../audit/service';
 import { VENDOR_TRANSITIONS, VENDOR_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextVendorCode, EDITABLE_STATUSES } from './validation';
+import { assertEntityScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (transaction-safe sequential code generation with P2002 retry)
@@ -80,10 +81,11 @@ export async function createVendor(input: CreateVendorInput, actorUserId: string
 // Update (draft / active only)
 // ---------------------------------------------------------------------------
 
-export async function updateVendor(input: UpdateVendorInput, actorUserId: string) {
+export async function updateVendor(input: UpdateVendorInput, actorUserId: string, entityId?: string) {
   const existing = await prisma.vendor.findUniqueOrThrow({
     where: { id: input.id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'Vendor', input.id);
 
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     throw new Error(`Cannot update vendor in status '${existing.status}'. Only draft or active vendors can be updated.`);
@@ -129,6 +131,7 @@ export async function transitionVendor(
   action: string,
   actorUserId: string,
   comment?: string,
+  entityId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -138,6 +141,7 @@ export async function transitionVendor(
   const existing = await prisma.vendor.findUniqueOrThrow({
     where: { id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'Vendor', id);
 
   // Terminal status check
   if (VENDOR_TERMINAL_STATUSES.includes(existing.status)) {
@@ -175,11 +179,13 @@ export async function transitionVendor(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getVendor(id: string) {
-  return prisma.vendor.findUniqueOrThrow({
+export async function getVendor(id: string, entityId?: string) {
+  const record = await prisma.vendor.findUniqueOrThrow({
     where: { id },
     include: { projectVendors: true, entity: true },
   });
+  if (entityId) assertEntityScope(record, entityId, 'Vendor', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,10 +238,11 @@ export async function listVendors(input: EntityListFilterInput & { search?: stri
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteVendor(id: string, actorUserId: string) {
+export async function deleteVendor(id: string, actorUserId: string, entityId?: string) {
   const existing = await prisma.vendor.findUniqueOrThrow({
     where: { id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'Vendor', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete vendor in status '${existing.status}'. Only draft vendors can be deleted.`);

@@ -171,7 +171,7 @@ describe('VendorContract Service', () => {
     const updated = fakeContract({ status: 'draft', title: 'Updated Title' });
     mockPrisma.vendorContract.update.mockResolvedValue(updated);
 
-    const result = await updateVendorContract({ id: 'vc1', title: 'Updated Title' }, ACTOR);
+    const result = await updateVendorContract({ id: 'vc1', title: 'Updated Title' }, ACTOR, PROJECT_ID);
     expect(result.title).toBe('Updated Title');
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
   });
@@ -182,7 +182,7 @@ describe('VendorContract Service', () => {
     const updated = fakeContract({ status: 'returned', title: 'Fixed' });
     mockPrisma.vendorContract.update.mockResolvedValue(updated);
 
-    const result = await updateVendorContract({ id: 'vc1', title: 'Fixed' }, ACTOR);
+    const result = await updateVendorContract({ id: 'vc1', title: 'Fixed' }, ACTOR, PROJECT_ID);
     expect(result.title).toBe('Fixed');
   });
 
@@ -190,7 +190,7 @@ describe('VendorContract Service', () => {
     const existing = fakeContract({ status: 'active' });
     mockPrisma.vendorContract.findUniqueOrThrow.mockResolvedValue(existing);
 
-    await expect(updateVendorContract({ id: 'vc1', title: 'Nope' }, ACTOR)).rejects.toThrow(
+    await expect(updateVendorContract({ id: 'vc1', title: 'Nope' }, ACTOR, PROJECT_ID)).rejects.toThrow(
       /Cannot update vendor contract/,
     );
   });
@@ -336,7 +336,7 @@ describe('VendorContract Service', () => {
     const contract = { ...fakeContract(), vendor: {}, parentContract: null, childContracts: [] };
     mockPrisma.vendorContract.findUniqueOrThrow.mockResolvedValue(contract);
 
-    const result = await getVendorContract('vc1');
+    const result = await getVendorContract('vc1', PROJECT_ID);
     expect(result).toBe(contract);
     expect(mockPrisma.vendorContract.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: 'vc1' },
@@ -372,7 +372,7 @@ describe('VendorContract Service', () => {
     mockPrisma.vendorContract.findUniqueOrThrow.mockResolvedValue(existing);
     mockPrisma.vendorContract.delete.mockResolvedValue(existing);
 
-    await deleteVendorContract('vc1', ACTOR);
+    await deleteVendorContract('vc1', ACTOR, PROJECT_ID);
     expect(mockPrisma.vendorContract.delete).toHaveBeenCalledWith({ where: { id: 'vc1' } });
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
   });
@@ -381,6 +381,6 @@ describe('VendorContract Service', () => {
     const existing = fakeContract({ status: 'active' });
     mockPrisma.vendorContract.findUniqueOrThrow.mockResolvedValue(existing);
 
-    await expect(deleteVendorContract('vc1', ACTOR)).rejects.toThrow(/Cannot delete vendor contract/);
+    await expect(deleteVendorContract('vc1', ACTOR, PROJECT_ID)).rejects.toThrow(/Cannot delete vendor contract/);
   });
 });

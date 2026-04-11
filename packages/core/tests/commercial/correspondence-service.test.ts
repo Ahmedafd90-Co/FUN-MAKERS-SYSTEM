@@ -236,7 +236,7 @@ describe('Correspondence Service', () => {
   // 9. Delete only in draft
   it('delete only in draft', async () => {
     const corr = await createCorrespondence(makeInput('letter'), 'test-user');
-    await deleteCorrespondence(corr.id, 'test-user');
+    await deleteCorrespondence(corr.id, 'test-user', testProject.id);
     const deleted = await prisma.correspondence.findUnique({ where: { id: corr.id } });
     expect(deleted).toBeNull();
   });
@@ -244,7 +244,7 @@ describe('Correspondence Service', () => {
   it('delete rejects non-draft correspondence', async () => {
     const corr = await createCorrespondence(makeInput('letter', { subject: 'Delete non-draft' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await expect(deleteCorrespondence(corr.id, 'test-user')).rejects.toThrow(/Only draft/);
+    await expect(deleteCorrespondence(corr.id, 'test-user', testProject.id)).rejects.toThrow(/Only draft/);
   });
 
   // 10. List with subtypeFilter

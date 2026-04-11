@@ -3,6 +3,7 @@ import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput 
 import { auditService } from '../../audit/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { COST_PROPOSAL_TRANSITIONS, COST_PROPOSAL_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action -> status mapping
@@ -58,8 +59,9 @@ export async function createCostProposal(input: CreateCostProposalInput, actorUs
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateCostProposal(input: UpdateCostProposalInput, actorUserId: string) {
+export async function updateCostProposal(input: UpdateCostProposalInput, actorUserId: string, projectId: string) {
   const existing = await prisma.costProposal.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'CostProposal', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update CostProposal in status '${existing.status}'. Only draft or returned CostProposals can be updated.`);
@@ -107,6 +109,7 @@ export async function transitionCostProposal(
     approvedCost?: number | null;
     approvedTimeDays?: number | null;
   },
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -117,6 +120,7 @@ export async function transitionCostProposal(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'CostProposal', id);
 
   // Terminal status check
   if (COST_PROPOSAL_TERMINAL_STATUSES.includes(existing.status)) {
@@ -220,11 +224,13 @@ export async function transitionCostProposal(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getCostProposal(id: string) {
-  return prisma.costProposal.findUniqueOrThrow({
+export async function getCostProposal(id: string, projectId: string) {
+  const record = await prisma.costProposal.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'CostProposal', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,8 +283,9 @@ export async function listCostProposals(input: ListFilterInput) {
 // Delete (draft only -- hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteCostProposal(id: string, actorUserId: string) {
+export async function deleteCostProposal(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.costProposal.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'CostProposal', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete CostProposal in status '${existing.status}'. Only draft CostProposals can be deleted.`);

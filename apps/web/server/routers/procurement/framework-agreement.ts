@@ -34,6 +34,8 @@ function hasEntityPerm(ctx: { entityPermissions: string[] }, perm: string): bool
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
@@ -61,7 +63,7 @@ export const frameworkAgreementRouter = router({
       if (!hasEntityPerm(ctx, 'framework_agreement.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await getFrameworkAgreement(input.id);
+        return await getFrameworkAgreement(input.id, input.entityId);
       } catch (err) {
         mapError(err);
       }
@@ -85,7 +87,7 @@ export const frameworkAgreementRouter = router({
       if (!hasEntityPerm(ctx, 'framework_agreement.update'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await updateFrameworkAgreement(input, ctx.user.id);
+        return await updateFrameworkAgreement(input, ctx.user.id, input.entityId);
       } catch (err) {
         mapError(err);
       }
@@ -102,7 +104,7 @@ export const frameworkAgreementRouter = router({
       if (!hasEntityPerm(ctx, 'framework_agreement.transition'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await transitionFrameworkAgreement(input.id, input.action, ctx.user.id, input.comment);
+        return await transitionFrameworkAgreement(input.id, input.action, ctx.user.id, input.comment, input.entityId);
       } catch (err) {
         mapError(err);
       }
@@ -114,7 +116,7 @@ export const frameworkAgreementRouter = router({
       if (!hasEntityPerm(ctx, 'framework_agreement.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        await deleteFrameworkAgreement(input.id, ctx.user.id);
+        await deleteFrameworkAgreement(input.id, ctx.user.id, input.entityId);
         return { success: true };
       } catch (err) {
         mapError(err);
@@ -127,7 +129,7 @@ export const frameworkAgreementRouter = router({
       if (!hasEntityPerm(ctx, 'framework_agreement.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await getUtilization(input.id);
+        return await getUtilization(input.id, input.entityId);
       } catch (err) {
         mapError(err);
       }

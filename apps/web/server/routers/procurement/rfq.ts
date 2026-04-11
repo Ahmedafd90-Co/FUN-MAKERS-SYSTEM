@@ -27,6 +27,8 @@ import { router, projectProcedure } from '../../trpc';
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
@@ -54,7 +56,7 @@ export const rfqRouter = router({
       if (!ctx.user.permissions.includes('rfq.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await getRfq(input.id);
+        return await getRfq(input.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -78,7 +80,7 @@ export const rfqRouter = router({
       if (!ctx.user.permissions.includes('rfq.update'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await updateRfq(input, ctx.user.id);
+        return await updateRfq(input, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -95,7 +97,7 @@ export const rfqRouter = router({
       if (!ctx.user.permissions.includes('rfq.transition'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await transitionRfq(input.id, input.action, ctx.user.id, input.comment);
+        return await transitionRfq(input.id, input.action, ctx.user.id, input.comment, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -107,7 +109,7 @@ export const rfqRouter = router({
       if (!ctx.user.permissions.includes('rfq.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        await deleteRfq(input.id, ctx.user.id);
+        await deleteRfq(input.id, ctx.user.id, input.projectId);
         return { success: true };
       } catch (err) {
         mapError(err);
@@ -124,7 +126,7 @@ export const rfqRouter = router({
       if (!ctx.user.permissions.includes('rfq.update'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await inviteVendors(input.rfqId, input.vendorIds, ctx.user.id);
+        return await inviteVendors(input.rfqId, input.vendorIds, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }

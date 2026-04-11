@@ -190,7 +190,7 @@ describe('TaxInvoice Service', () => {
 
   it('delete only in draft', async () => {
     const inv = await createTaxInvoice(makeInput(), 'test-user');
-    await deleteTaxInvoice(inv.id, 'test-user');
+    await deleteTaxInvoice(inv.id, 'test-user', testProject.id);
     const deleted = await prisma.taxInvoice.findUnique({ where: { id: inv.id } });
     expect(deleted).toBeNull();
   });

@@ -127,7 +127,7 @@ describe('CostProposal Service', () => {
   // 7. Delete only in draft
   it('delete only in draft', async () => {
     const cp = await createCostProposal(makeInput(), 'test-user');
-    await deleteCostProposal(cp.id, 'test-user');
+    await deleteCostProposal(cp.id, 'test-user', testProject.id);
     const deleted = await prisma.costProposal.findUnique({ where: { id: cp.id } });
     expect(deleted).toBeNull();
   });
@@ -135,7 +135,7 @@ describe('CostProposal Service', () => {
   it('delete rejects non-draft CostProposal', async () => {
     const cp = await createCostProposal(makeInput(), 'test-user');
     await transitionCostProposal(cp.id, 'submit', 'test-user');
-    await expect(deleteCostProposal(cp.id, 'test-user')).rejects.toThrow(/Only draft/);
+    await expect(deleteCostProposal(cp.id, 'test-user', testProject.id)).rejects.toThrow(/Only draft/);
   });
 
   // 8. List with filters

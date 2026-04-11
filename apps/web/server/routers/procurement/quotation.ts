@@ -26,6 +26,8 @@ import { router, projectProcedure } from '../../trpc';
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
@@ -62,7 +64,7 @@ export const quotationRouter = router({
       if (!ctx.user.permissions.includes('quotation.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await getQuotation(input.id);
+        return await getQuotation(input.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -86,7 +88,7 @@ export const quotationRouter = router({
       if (!ctx.user.permissions.includes('quotation.update'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await updateQuotation(input, ctx.user.id);
+        return await updateQuotation(input, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -103,7 +105,7 @@ export const quotationRouter = router({
       if (!ctx.user.permissions.includes('quotation.transition'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await transitionQuotation(input.id, input.action, ctx.user.id, input.comment);
+        return await transitionQuotation(input.id, input.action, ctx.user.id, input.comment, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -115,7 +117,7 @@ export const quotationRouter = router({
       if (!ctx.user.permissions.includes('quotation.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        await deleteQuotation(input.id, ctx.user.id);
+        await deleteQuotation(input.id, ctx.user.id, input.projectId);
         return { success: true };
       } catch (err) {
         mapError(err);
@@ -128,7 +130,7 @@ export const quotationRouter = router({
       if (!ctx.user.permissions.includes('quotation.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await compareQuotations(input.rfqId);
+        return await compareQuotations(input.rfqId, input.projectId);
       } catch (err) {
         mapError(err);
       }

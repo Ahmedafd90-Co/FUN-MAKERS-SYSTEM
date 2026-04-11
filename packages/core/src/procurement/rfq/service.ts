@@ -8,6 +8,7 @@ import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from 
 import { auditService } from '../../audit/service';
 import { RFQ_TRANSITIONS, RFQ_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextRfqNumber, nextRfqReferenceNumber, EDITABLE_STATUSES } from './validation';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (transaction-safe sequential code generation with P2002 retry)
@@ -91,11 +92,12 @@ export async function createRfq(input: CreateRfqInput, actorUserId: string) {
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateRfq(input: UpdateRfqInput, actorUserId: string) {
+export async function updateRfq(input: UpdateRfqInput, actorUserId: string, projectId: string) {
   const existing = await prisma.rFQ.findUniqueOrThrow({
     where: { id: input.id },
     include: { items: true },
   });
+  assertProjectScope(existing, projectId, 'RFQ', input.id);
 
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     throw new Error(`Cannot update RFQ in status '${existing.status}'. Only draft or returned RFQs can be updated.`);
@@ -166,6 +168,7 @@ export async function transitionRfq(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -176,6 +179,7 @@ export async function transitionRfq(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'RFQ', id);
 
   // Terminal status check
   if (RFQ_TERMINAL_STATUSES.includes(existing.status)) {
@@ -248,11 +252,13 @@ export async function transitionRfq(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getRfq(id: string) {
-  return prisma.rFQ.findUniqueOrThrow({
+export async function getRfq(id: string, projectId: string) {
+  const record = await prisma.rFQ.findUniqueOrThrow({
     where: { id },
     include: { items: true, rfqVendors: { include: { vendor: true } }, quotations: true },
   });
+  assertProjectScope(record, projectId, 'RFQ', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,10 +308,11 @@ export async function listRfqs(input: ProcurementListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteRfq(id: string, actorUserId: string) {
+export async function deleteRfq(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.rFQ.findUniqueOrThrow({
     where: { id },
   });
+  assertProjectScope(existing, projectId, 'RFQ', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete RFQ in status '${existing.status}'. Only draft RFQs can be deleted.`);
@@ -333,10 +340,11 @@ export async function deleteRfq(id: string, actorUserId: string) {
 // Invite vendors
 // ---------------------------------------------------------------------------
 
-export async function inviteVendors(rfqId: string, vendorIds: string[], actorUserId: string) {
+export async function inviteVendors(rfqId: string, vendorIds: string[], actorUserId: string, projectId?: string) {
   const rfq = await prisma.rFQ.findUniqueOrThrow({
     where: { id: rfqId },
   });
+  if (projectId) assertProjectScope(rfq, projectId, 'RFQ', rfqId);
 
   // Allow invitations when issued or before
   const allowedStatuses = ['draft', 'under_review', 'approved_internal', 'issued'];

@@ -28,6 +28,8 @@ import { router, projectProcedure } from '../../trpc';
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (
       err.message.includes('not found') ||
       err.message.includes('findUniqueOrThrow')
@@ -68,7 +70,7 @@ export const costProposalRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await getCostProposal(input.id);
+        return await getCostProposal(input.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -102,7 +104,7 @@ export const costProposalRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await updateCostProposal(input, ctx.user.id);
+        return await updateCostProposal(input, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -152,6 +154,7 @@ export const costProposalRouter = router({
           ctx.user.id,
           input.comment,
           assessment,
+          input.projectId,
         );
       } catch (err) {
         mapError(err);
@@ -167,7 +170,7 @@ export const costProposalRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        await deleteCostProposal(input.id, ctx.user.id);
+        await deleteCostProposal(input.id, ctx.user.id, input.projectId);
         return { success: true };
       } catch (err) {
         mapError(err);

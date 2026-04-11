@@ -5,6 +5,7 @@
  */
 import { prisma } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Link vendor to project
@@ -56,10 +57,11 @@ export async function linkVendorToProject(
 // Unlink vendor from project (soft removal)
 // ---------------------------------------------------------------------------
 
-export async function unlinkVendorFromProject(id: string, actorUserId: string) {
+export async function unlinkVendorFromProject(id: string, actorUserId: string, projectId?: string) {
   const existing = await prisma.projectVendor.findUniqueOrThrow({
     where: { id },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'ProjectVendor', id);
 
   const updated = await prisma.projectVendor.update({
     where: { id },
@@ -96,9 +98,11 @@ export async function listProjectVendors(projectId: string) {
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getProjectVendor(id: string) {
-  return prisma.projectVendor.findUniqueOrThrow({
+export async function getProjectVendor(id: string, projectId?: string) {
+  const record = await prisma.projectVendor.findUniqueOrThrow({
     where: { id },
     include: { vendor: true },
   });
+  if (projectId) assertProjectScope(record, projectId, 'ProjectVendor', id);
+  return record;
 }

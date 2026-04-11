@@ -168,7 +168,7 @@ describe('RFQ Service', () => {
     const updated = fakeRfq({ status: 'draft', title: 'Updated' });
     mockPrisma.rFQ.update.mockResolvedValue(updated);
 
-    const result = await updateRfq({ id: 'rfq1', title: 'Updated' }, ACTOR);
+    const result = await updateRfq({ id: 'rfq1', title: 'Updated' }, ACTOR, PROJECT_ID);
     expect(result.title).toBe('Updated');
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
   });
@@ -177,7 +177,7 @@ describe('RFQ Service', () => {
     const existing = fakeRfq({ status: 'issued' });
     mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
 
-    await expect(updateRfq({ id: 'rfq1', title: 'Nope' }, ACTOR)).rejects.toThrow(
+    await expect(updateRfq({ id: 'rfq1', title: 'Nope' }, ACTOR, PROJECT_ID)).rejects.toThrow(
       /Cannot update RFQ/,
     );
   });
@@ -260,7 +260,7 @@ describe('RFQ Service', () => {
     const rfq = fakeRfq({ quotations: [] });
     mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(rfq);
 
-    const result = await getRfq('rfq1');
+    const result = await getRfq('rfq1', PROJECT_ID);
     expect(result).toBe(rfq);
     expect(mockPrisma.rFQ.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: 'rfq1' },
@@ -287,7 +287,7 @@ describe('RFQ Service', () => {
     mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
     mockPrisma.rFQ.delete.mockResolvedValue(existing);
 
-    await deleteRfq('rfq1', ACTOR);
+    await deleteRfq('rfq1', ACTOR, PROJECT_ID);
     expect(mockPrisma.rFQItem.deleteMany).toHaveBeenCalledWith({ where: { rfqId: 'rfq1' } });
     expect(mockPrisma.rFQVendor.deleteMany).toHaveBeenCalledWith({ where: { rfqId: 'rfq1' } });
     expect(mockPrisma.rFQ.delete).toHaveBeenCalledWith({ where: { id: 'rfq1' } });
@@ -297,7 +297,7 @@ describe('RFQ Service', () => {
     const existing = fakeRfq({ status: 'issued' });
     mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
 
-    await expect(deleteRfq('rfq1', ACTOR)).rejects.toThrow(/Cannot delete RFQ/);
+    await expect(deleteRfq('rfq1', ACTOR, PROJECT_ID)).rejects.toThrow(/Cannot delete RFQ/);
   });
 
   // -- Invite vendors --

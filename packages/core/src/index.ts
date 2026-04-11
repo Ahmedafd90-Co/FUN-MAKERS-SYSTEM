@@ -18,3 +18,4 @@ export * from './notifications';
 export * from './health';
 export * from './commercial';
 export * from './procurement';
+export * from './scope-binding';

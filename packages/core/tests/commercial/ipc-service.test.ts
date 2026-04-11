@@ -149,7 +149,7 @@ describe('IPC Service', () => {
 
   it('deleteIpc only works in draft', async () => {
     const ipc = await createIpc(makeInput(), 'test-user');
-    await deleteIpc(ipc.id, 'test-user');
+    await deleteIpc(ipc.id, 'test-user', testProject.id);
     const deleted = await prisma.ipc.findUnique({ where: { id: ipc.id } });
     expect(deleted).toBeNull();
   });

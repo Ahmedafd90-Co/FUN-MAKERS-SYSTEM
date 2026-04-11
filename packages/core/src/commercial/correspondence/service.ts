@@ -5,6 +5,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { getCorrespondenceTransitions, CORRESPONDENCE_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action -> status mapping
@@ -108,8 +109,9 @@ export async function createCorrespondence(input: CreateCorrespondenceInput, act
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateCorrespondence(input: UpdateCorrespondenceInput, actorUserId: string) {
+export async function updateCorrespondence(input: UpdateCorrespondenceInput, actorUserId: string, projectId: string) {
   const existing = await prisma.correspondence.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'Correspondence', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update Correspondence in status '${existing.status}'. Only draft or returned Correspondences can be updated.`);
@@ -155,6 +157,7 @@ export async function transitionCorrespondence(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -165,6 +168,7 @@ export async function transitionCorrespondence(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'Correspondence', id);
 
   // Terminal status check
   if (CORRESPONDENCE_TERMINAL_STATUSES.includes(existing.status)) {
@@ -291,11 +295,13 @@ export async function transitionCorrespondence(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getCorrespondence(id: string) {
-  return prisma.correspondence.findUniqueOrThrow({
+export async function getCorrespondence(id: string, projectId: string) {
+  const record = await prisma.correspondence.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'Correspondence', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,8 +361,9 @@ export async function listCorrespondences(
 // Delete (draft only -- hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteCorrespondence(id: string, actorUserId: string) {
+export async function deleteCorrespondence(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.correspondence.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'Correspondence', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete Correspondence in status '${existing.status}'. Only draft Correspondences can be deleted.`);

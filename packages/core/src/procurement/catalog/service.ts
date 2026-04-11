@@ -7,6 +7,7 @@ import { prisma, Prisma } from '@fmksa/db';
 import type { CreateCatalogItemInput, UpdateCatalogItemInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { nextItemCode } from './validation';
+import { assertEntityScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Create (transaction-safe sequential code generation with P2002 retry)
@@ -69,10 +70,11 @@ export async function createCatalogItem(input: CreateCatalogItemInput, actorUser
 // Update
 // ---------------------------------------------------------------------------
 
-export async function updateCatalogItem(input: UpdateCatalogItemInput, actorUserId: string) {
+export async function updateCatalogItem(input: UpdateCatalogItemInput, actorUserId: string, entityId?: string) {
   const existing = await prisma.itemCatalog.findUniqueOrThrow({
     where: { id: input.id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'ItemCatalog', input.id);
 
   const { id, ...updateFields } = input;
   const data: Record<string, unknown> = {};
@@ -104,10 +106,12 @@ export async function updateCatalogItem(input: UpdateCatalogItemInput, actorUser
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getCatalogItem(id: string) {
-  return prisma.itemCatalog.findUniqueOrThrow({
+export async function getCatalogItem(id: string, entityId?: string) {
+  const record = await prisma.itemCatalog.findUniqueOrThrow({
     where: { id },
   });
+  if (entityId) assertEntityScope(record, entityId, 'ItemCatalog', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,10 +175,11 @@ export async function searchCatalogItems(entityId: string, query: string) {
 // Delete (soft delete — archive)
 // ---------------------------------------------------------------------------
 
-export async function deleteCatalogItem(id: string, actorUserId: string) {
+export async function deleteCatalogItem(id: string, actorUserId: string, entityId?: string) {
   const existing = await prisma.itemCatalog.findUniqueOrThrow({
     where: { id },
   });
+  if (entityId) assertEntityScope(existing, entityId, 'ItemCatalog', id);
 
   if (existing.status !== 'active') {
     throw new Error(`Cannot archive catalog item in status '${existing.status}'. Only active items can be archived.`);

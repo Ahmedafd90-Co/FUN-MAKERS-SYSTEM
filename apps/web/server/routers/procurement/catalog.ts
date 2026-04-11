@@ -30,6 +30,8 @@ function hasEntityPerm(ctx: { entityPermissions: string[] }, perm: string): bool
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (err.message.includes('Cannot') || err.message.includes('Invalid') || err.message.includes('Unknown'))
@@ -57,7 +59,7 @@ export const catalogRouter = router({
       if (!hasEntityPerm(ctx, 'item_catalog.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await getCatalogItem(input.id);
+        return await getCatalogItem(input.id, input.entityId);
       } catch (err) {
         mapError(err);
       }
@@ -89,7 +91,7 @@ export const catalogRouter = router({
       if (!hasEntityPerm(ctx, 'item_catalog.update'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await updateCatalogItem(input, ctx.user.id);
+        return await updateCatalogItem(input, ctx.user.id, input.entityId);
       } catch (err) {
         mapError(err);
       }
@@ -101,7 +103,7 @@ export const catalogRouter = router({
       if (!hasEntityPerm(ctx, 'item_catalog.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await deleteCatalogItem(input.id, ctx.user.id);
+        return await deleteCatalogItem(input.id, ctx.user.id, input.entityId);
       } catch (err) {
         mapError(err);
       }

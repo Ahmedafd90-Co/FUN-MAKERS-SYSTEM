@@ -4,6 +4,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { TAX_INVOICE_TRANSITIONS, TAX_INVOICE_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action → status mapping
@@ -96,8 +97,9 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput, actorUserId
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateTaxInvoice(input: UpdateTaxInvoiceInput, actorUserId: string) {
+export async function updateTaxInvoice(input: UpdateTaxInvoiceInput, actorUserId: string, projectId: string) {
   const existing = await prisma.taxInvoice.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'TaxInvoice', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update TaxInvoice in status '${existing.status}'. Only draft or returned TaxInvoices can be updated.`);
@@ -144,6 +146,7 @@ export async function transitionTaxInvoice(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -154,6 +157,7 @@ export async function transitionTaxInvoice(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'TaxInvoice', id);
 
   // Terminal status check
   if (TAX_INVOICE_TERMINAL_STATUSES.includes(existing.status)) {
@@ -255,11 +259,13 @@ export async function transitionTaxInvoice(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getTaxInvoice(id: string) {
-  return prisma.taxInvoice.findUniqueOrThrow({
+export async function getTaxInvoice(id: string, projectId: string) {
+  const record = await prisma.taxInvoice.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'TaxInvoice', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,8 +318,9 @@ export async function listTaxInvoices(input: ListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteTaxInvoice(id: string, actorUserId: string) {
+export async function deleteTaxInvoice(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.taxInvoice.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'TaxInvoice', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete TaxInvoice in status '${existing.status}'. Only draft TaxInvoices can be deleted.`);

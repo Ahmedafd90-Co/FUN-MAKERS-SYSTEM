@@ -26,6 +26,8 @@ import { router, projectProcedure } from '../../trpc';
 
 function mapError(err: unknown): never {
   if (err instanceof Error) {
+    if (err.message.includes('does not belong to the expected'))
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     if (
       err.message.includes('not found') ||
       err.message.includes('findUniqueOrThrow')
@@ -66,7 +68,7 @@ export const ipaRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await getIpa(input.id);
+        return await getIpa(input.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -96,7 +98,7 @@ export const ipaRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await updateIpa(input, ctx.user.id);
+        return await updateIpa(input, ctx.user.id, input.projectId);
       } catch (err) {
         mapError(err);
       }
@@ -123,6 +125,7 @@ export const ipaRouter = router({
           input.action,
           ctx.user.id,
           input.comment,
+          input.projectId,
         );
       } catch (err) {
         mapError(err);
@@ -138,7 +141,7 @@ export const ipaRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        await deleteIpa(input.id, ctx.user.id);
+        await deleteIpa(input.id, ctx.user.id, input.projectId);
         return { success: true };
       } catch (err) {
         mapError(err);

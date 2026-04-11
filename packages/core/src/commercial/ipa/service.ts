@@ -4,6 +4,7 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { IPA_TRANSITIONS, IPA_TERMINAL_STATUSES } from './transitions';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Action → status mapping
@@ -65,8 +66,9 @@ export async function createIpa(input: CreateIpaInput, actorUserId: string) {
 // Update (draft / returned only)
 // ---------------------------------------------------------------------------
 
-export async function updateIpa(input: UpdateIpaInput, actorUserId: string) {
+export async function updateIpa(input: UpdateIpaInput, actorUserId: string, projectId: string) {
   const existing = await prisma.ipa.findUniqueOrThrow({ where: { id: input.id } });
+  assertProjectScope(existing, projectId, 'IPA', input.id);
 
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update IPA in status '${existing.status}'. Only draft or returned IPAs can be updated.`);
@@ -113,6 +115,7 @@ export async function transitionIpa(
   action: string,
   actorUserId: string,
   comment?: string,
+  projectId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -123,6 +126,7 @@ export async function transitionIpa(
     where: { id },
     include: { project: true },
   });
+  if (projectId) assertProjectScope(existing, projectId, 'IPA', id);
 
   // Terminal status check
   if (IPA_TERMINAL_STATUSES.includes(existing.status)) {
@@ -226,11 +230,13 @@ export async function transitionIpa(
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getIpa(id: string) {
-  return prisma.ipa.findUniqueOrThrow({
+export async function getIpa(id: string, projectId: string) {
+  const record = await prisma.ipa.findUniqueOrThrow({
     where: { id },
     include: { project: true },
   });
+  assertProjectScope(record, projectId, 'IPA', id);
+  return record;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,8 +289,9 @@ export async function listIpas(input: ListFilterInput) {
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
-export async function deleteIpa(id: string, actorUserId: string) {
+export async function deleteIpa(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.ipa.findUniqueOrThrow({ where: { id } });
+  assertProjectScope(existing, projectId, 'IPA', id);
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete IPA in status '${existing.status}'. Only draft IPAs can be deleted.`);

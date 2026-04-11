@@ -214,7 +214,7 @@ describe('Variation Service', () => {
   // 11. Delete only in draft
   it('delete only in draft', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO delete draft' }), 'test-user');
-    await deleteVariation(variation.id, 'test-user');
+    await deleteVariation(variation.id, 'test-user', testProject.id);
     const deleted = await prisma.variation.findUnique({ where: { id: variation.id } });
     expect(deleted).toBeNull();
   });
@@ -222,6 +222,6 @@ describe('Variation Service', () => {
   it('delete rejects non-draft variation', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO delete submitted' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await expect(deleteVariation(variation.id, 'test-user')).rejects.toThrow(/Only draft/);
+    await expect(deleteVariation(variation.id, 'test-user', testProject.id)).rejects.toThrow(/Only draft/);
   });
 });
