@@ -69,7 +69,7 @@ export const VendorTransitionSchema = z.object({
 export type VendorTransitionInput = z.infer<typeof VendorTransitionSchema>;
 
 export const VendorContractTransitionSchema = z.object({
-  ...baseEntityTransition,
+  ...baseProjectTransition,
   action: z.enum([...PROCUREMENT_ACTIONS]),
 });
 export type VendorContractTransitionInput = z.infer<typeof VendorContractTransitionSchema>;

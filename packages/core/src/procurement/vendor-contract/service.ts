@@ -41,7 +41,7 @@ export async function createVendorContract(input: CreateVendorContractInput, act
               totalValue: input.totalValue,
               currency: input.currency,
               terms: input.paymentTerms ?? null,
-              parentContractId: (input as any).parentContractId ?? null,
+              parentContractId: input.parentContractId ?? null,
               status: 'draft',
               createdBy: actorUserId,
             },

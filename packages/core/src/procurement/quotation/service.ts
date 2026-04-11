@@ -24,7 +24,7 @@ export async function createQuotation(input: CreateQuotationInput, actorUserId: 
       totalAmount: input.totalAmount,
       currency: input.currency,
       paymentTerms: input.paymentTerms ?? null,
-      deliveryTerms: (input as any).deliveryTerms ?? null,
+      deliveryTerms: input.deliveryTerms ?? null,
       status: 'received',
       createdBy: actorUserId,
       ...(input.items && input.items.length > 0
@@ -100,7 +100,7 @@ export async function updateQuotation(input: UpdateQuotationInput, actorUserId: 
         unit: item.unit,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
-        currency: (input as any).currency ?? existing.currency,
+        currency: input.currency ?? existing.currency,
         notes: item.notes ?? null,
       })),
     };

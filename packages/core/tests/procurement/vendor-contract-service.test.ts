@@ -325,7 +325,7 @@ describe('VendorContract Service', () => {
       totalValue: 150000,
       currency: 'SAR',
       parentContractId: 'vc1',
-    } as any, ACTOR);
+    }, ACTOR);
 
     expect(result.parentContractId).toBe('vc1');
   });

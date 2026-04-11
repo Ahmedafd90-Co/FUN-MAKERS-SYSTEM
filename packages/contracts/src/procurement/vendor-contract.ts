@@ -15,6 +15,7 @@ export const CreateVendorContractInputSchema = z.object({
   retentionRate: z.number().min(0).max(1).optional(),
   penaltyClause: z.string().optional(),
   notes: z.string().optional(),
+  parentContractId: z.string().uuid().optional(),
 });
 export type CreateVendorContractInput = z.infer<typeof CreateVendorContractInputSchema>;
 

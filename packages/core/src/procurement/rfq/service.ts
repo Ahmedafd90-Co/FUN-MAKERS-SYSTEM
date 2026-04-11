@@ -36,7 +36,7 @@ export async function createRfq(input: CreateRfqInput, actorUserId: string) {
               requiredByDate: input.deadline ? new Date(input.deadline) : null,
               categoryId: input.categoryId ?? null,
               currency: input.currency,
-              estimatedBudget: (input as any).estimatedBudget ?? null,
+              estimatedBudget: input.estimatedBudget ?? null,
               status: 'draft',
               createdBy: actorUserId,
               ...(input.items && input.items.length > 0
@@ -126,6 +126,14 @@ export async function updateRfq(input: UpdateRfqInput, actorUserId: string) {
         unit: item.unit,
         estimatedUnitPrice: item.estimatedUnitPrice ?? null,
       })),
+    };
+  }
+
+  // Replace invited vendors if provided
+  if (invitedVendorIds) {
+    data.rfqVendors = {
+      deleteMany: {},
+      create: invitedVendorIds.map((vendorId) => ({ vendorId })),
     };
   }
 

@@ -10,6 +10,7 @@ export const CreateQuotationInputSchema = z.object({
   deliveryDate: z.string().datetime().optional(),
   paymentTerms: z.string().optional(),
   notes: z.string().optional(),
+  deliveryTerms: z.string().optional(),
   items: z.array(z.object({
     rfqItemId: z.string().uuid().optional(),
     itemDescription: z.string().min(1),

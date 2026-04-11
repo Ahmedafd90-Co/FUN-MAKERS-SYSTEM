@@ -11,6 +11,7 @@ export const CreateRfqInputSchema = z.object({
   deliveryLocation: z.string().optional(),
   paymentTerms: z.string().optional(),
   notes: z.string().optional(),
+  estimatedBudget: z.number().positive().optional(),
   items: z.array(z.object({
     itemCatalogId: z.string().uuid().optional(),
     itemDescription: z.string().min(1),
