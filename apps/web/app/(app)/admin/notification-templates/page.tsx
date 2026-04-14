@@ -21,7 +21,7 @@ import {
 } from '@fmksa/ui/components/sheet';
 import { Textarea } from '@fmksa/ui/components/textarea';
 import { useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
 
@@ -216,8 +216,6 @@ export default function NotificationTemplatesPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
-
       <div className="space-y-4">
         {/* Header */}
         <div>

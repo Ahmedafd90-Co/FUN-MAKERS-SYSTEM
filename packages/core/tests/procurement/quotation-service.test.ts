@@ -8,6 +8,7 @@ const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
   const mockAuditLog = vi.fn().mockResolvedValue({});
   const mockPrisma: Record<string, any> = {
     quotation: {
+      findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
@@ -20,6 +21,9 @@ const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
     },
     rFQ: {
       findUniqueOrThrow: vi.fn(),
+    },
+    rFQVendor: {
+      findMany: vi.fn(),
     },
     rFQItem: {
       findMany: vi.fn(),
@@ -96,8 +100,10 @@ describe('Quotation Service', () => {
 
   it('creates quotation in received status', async () => {
     const created = fakeQuotation();
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null); // no existing quotation
     mockPrisma.quotation.create.mockResolvedValue(created);
-    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID });
 
     const result = await createQuotation({
       projectId: PROJECT_ID,
@@ -105,7 +111,6 @@ describe('Quotation Service', () => {
       vendorId: VENDOR_ID,
       currency: 'SAR',
       totalAmount: 75000,
-      validUntil: '2026-06-30T00:00:00.000Z',
     }, ACTOR);
 
     expect(result.status).toBe('received');
@@ -116,8 +121,10 @@ describe('Quotation Service', () => {
     const created = fakeQuotation({
       lineItems: [{ id: 'li1', itemDescription: 'Steel', unitPrice: 250, totalPrice: 25000 }],
     });
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
     mockPrisma.quotation.create.mockResolvedValue(created);
-    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID });
 
     const result = await createQuotation({
       projectId: PROJECT_ID,
@@ -125,7 +132,6 @@ describe('Quotation Service', () => {
       vendorId: VENDOR_ID,
       currency: 'SAR',
       totalAmount: 25000,
-      validUntil: '2026-06-30T00:00:00.000Z',
       items: [{
         itemDescription: 'Steel',
         unit: 'ton',
@@ -138,6 +144,77 @@ describe('Quotation Service', () => {
     expect(result.lineItems).toHaveLength(1);
     const createCall = mockPrisma.quotation.create.mock.calls[0]![0] as any;
     expect(createCall.data.lineItems).toBeDefined();
+  });
+
+  // -- Create-path scope binding (Stabilization Slice B) --
+
+  it('rejects create when RFQ belongs to a different project', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: 'other-project-id', status: 'issued' });
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR)).rejects.toThrow(/mismatched project scope/);
+  });
+
+  it('allows create when projectId is omitted (legacy compatibility)', async () => {
+    const created = fakeQuotation();
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
+    mockPrisma.quotation.create.mockResolvedValue(created);
+
+    // projectId omitted from input — scope check passes (input.projectId is falsy)
+    const result = await createQuotation({
+      projectId: '' as any, // simulating absence
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR);
+
+    expect(result).toBeDefined();
+  });
+
+  // -- Quotation identity invariant (Stabilization Slice B) --
+
+  it('rejects create when active quotation from same vendor exists', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue({
+      id: 'existing-q',
+      status: 'under_review',
+    });
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR)).rejects.toThrow(/One quotation per vendor per RFQ/);
+  });
+
+  it('allows create when previous quotation from same vendor was rejected', async () => {
+    const created = fakeQuotation();
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    // findFirst with notIn: terminal → returns null (previous was rejected, not in active)
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
+    mockPrisma.quotation.create.mockResolvedValue(created);
+
+    const result = await createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR);
+
+    expect(result.status).toBe('received');
   });
 
   // -- Update --
@@ -184,14 +261,12 @@ describe('Quotation Service', () => {
     expect(result.status).toBe('shortlisted');
   });
 
-  it('transitions shortlisted -> awarded (award)', async () => {
-    const existing = fakeQuotation({ status: 'shortlisted' });
-    mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue(existing);
-    const updated = fakeQuotation({ status: 'awarded' });
-    mockPrisma.quotation.update.mockResolvedValue(updated);
-
-    const result = await transitionQuotation('q1', 'award', ACTOR);
-    expect(result.status).toBe('awarded');
+  // 'award' removed from quotation actions — quotation award happens only
+  // through RFQ award (award integrity invariant).
+  it('rejects standalone award action on quotation', async () => {
+    await expect(transitionQuotation('q1', 'award', ACTOR)).rejects.toThrow(
+      /Unknown quotation action/,
+    );
   });
 
   it('transitions shortlisted -> rejected (reject)', async () => {
@@ -214,12 +289,9 @@ describe('Quotation Service', () => {
     expect(result.status).toBe('expired');
   });
 
-  it('rejects invalid transition received -> awarded', async () => {
-    const existing = fakeQuotation({ status: 'received' });
-    mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue(existing);
-
-    await expect(transitionQuotation('q1', 'award', ACTOR)).rejects.toThrow(
-      /Invalid quotation transition/,
+  it('rejects unknown action on quotation', async () => {
+    await expect(transitionQuotation('q1', 'nonexistent', ACTOR)).rejects.toThrow(
+      /Unknown quotation action/,
     );
   });
 
@@ -284,6 +356,119 @@ describe('Quotation Service', () => {
     mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue(existing);
 
     await expect(deleteQuotation('q1', ACTOR)).rejects.toThrow(/Cannot delete quotation/);
+  });
+
+  // -- Stabilization Slice C: RFQ-state guard --
+
+  it('rejects create when RFQ is in draft status', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'draft' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR)).rejects.toThrow(/Cannot create quotation for RFQ.*status 'draft'/);
+  });
+
+  it('rejects create when RFQ is in under_review status', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'under_review' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR)).rejects.toThrow(/Cannot create quotation for RFQ.*status 'under_review'/);
+  });
+
+  it('allows create when RFQ is in responses_received status', async () => {
+    const created = fakeQuotation();
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'responses_received' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
+    mockPrisma.quotation.create.mockResolvedValue(created);
+
+    const result = await createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR);
+
+    expect(result.status).toBe('received');
+  });
+
+  // -- Stabilization Slice C: vendor eligibility guard --
+
+  it('rejects create when vendor is not invited on the RFQ', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: 'other-vendor-id' }]); // different vendor
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 75000,
+    }, ACTOR)).rejects.toThrow(/not invited on RFQ/);
+  });
+
+  // -- Stabilization Slice C: rfqItemId validation --
+
+  it('rejects create when quotation references invalid rfqItemId', async () => {
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
+    mockPrisma.rFQItem.findMany.mockResolvedValue([]); // no valid RFQ items
+
+    await expect(createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 25000,
+      items: [{
+        rfqItemId: 'nonexistent-item-id',
+        itemDescription: 'Steel',
+        unit: 'ton',
+        quantity: 100,
+        unitPrice: 250,
+        totalPrice: 25000,
+      }],
+    }, ACTOR)).rejects.toThrow(/invalid RFQ item IDs/);
+  });
+
+  it('allows create with valid rfqItemId references', async () => {
+    const created = fakeQuotation();
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue({ projectId: PROJECT_ID, status: 'issued' });
+    mockPrisma.rFQVendor.findMany.mockResolvedValue([{ vendorId: VENDOR_ID }]);
+    mockPrisma.quotation.findFirst.mockResolvedValue(null);
+    mockPrisma.rFQItem.findMany.mockResolvedValue([{ id: 'ri1' }]); // valid RFQ item
+    mockPrisma.quotation.create.mockResolvedValue(created);
+
+    const result = await createQuotation({
+      projectId: PROJECT_ID,
+      rfqId: RFQ_ID,
+      vendorId: VENDOR_ID,
+      currency: 'SAR',
+      totalAmount: 25000,
+      items: [{
+        rfqItemId: 'ri1',
+        itemDescription: 'Steel',
+        unit: 'ton',
+        quantity: 100,
+        unitPrice: 250,
+        totalPrice: 25000,
+      }],
+    }, ACTOR);
+
+    expect(result).toBeDefined();
   });
 
   // -- Compare quotations --

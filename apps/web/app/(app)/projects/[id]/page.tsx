@@ -4,14 +4,20 @@ import { Separator } from '@fmksa/ui/components/separator';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Toaster } from 'sonner';
 
 import { ProjectHeader } from '@/components/projects/project-header';
 import { ProjectWorkspaceTabs } from '@/components/projects/project-workspace-tabs';
 import { trpc } from '@/lib/trpc-client';
 
+function toStringOrNull(val: unknown): string | number | null {
+  if (val === null || val === undefined) return null;
+  return String(val);
+}
+
 export default function ProjectWorkspacePage() {
   const params = useParams<{ id: string }>();
+
+  const { data: me } = trpc.auth.me.useQuery();
 
   const { data: project, isLoading, error } = trpc.projects.get.useQuery({
     id: params.id,
@@ -52,8 +58,6 @@ export default function ProjectWorkspacePage() {
 
   return (
     <>
-      <Toaster position="top-right" />
-
       {/* Back link */}
       <Link
         href="/projects"
@@ -73,6 +77,7 @@ export default function ProjectWorkspacePage() {
       <Separator className="my-6" />
 
       <ProjectWorkspaceTabs
+        canEditProject={me?.permissions?.includes('project.edit') ?? false}
         project={{
           id: project.id,
           code: project.code,
@@ -87,6 +92,8 @@ export default function ProjectWorkspacePage() {
           currency: project.currency
             ? { code: project.currency.code, name: project.currency.name, symbol: project.currency.symbol }
             : null,
+          contractValue: toStringOrNull((project as any).contractValue),
+          revisedContractValue: toStringOrNull((project as any).revisedContractValue),
         }}
       />
     </>

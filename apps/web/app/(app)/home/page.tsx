@@ -8,7 +8,7 @@ export default function HomePage() {
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8 space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Your workspace at a glance."
+        description="Operations overview"
       />
       <DashboardCards />
     </div>

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { Plus, FileText } from 'lucide-react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { Plus, FileText, ShieldOff } from 'lucide-react';
 import { Button } from '@fmksa/ui/components/button';
 import {
   Table,
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@fmksa/ui/components/table';
 import { trpc } from '@/lib/trpc-client';
+import { parseDrilldownStatuses } from '@/lib/parse-drilldown-params';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
@@ -58,17 +59,18 @@ function formatMoney(val: unknown): string {
 
 export default function IpaListPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const projectId = params.id;
 
-  const [filters, setFilters] = useState<FilterState>({
-    statusFilter: [],
+  const [filters, setFilters] = useState<FilterState>(() => ({
+    statusFilter: parseDrilldownStatuses(searchParams),
     sortField: 'createdAt',
     sortDirection: 'desc',
-  });
+  }));
   const [page, setPage] = useState(0);
   const pageSize = 20;
 
-  const { data, isLoading } = trpc.commercial.ipa.list.useQuery({
+  const { data, isLoading, error } = trpc.commercial.ipa.list.useQuery({
     projectId,
     skip: page * pageSize,
     take: pageSize,
@@ -97,10 +99,12 @@ export default function IpaListPage() {
         title="Interim Payment Applications"
         description="Manage IPA records for this project"
         actions={
-          <Button size="sm" disabled>
-            <Plus className="h-4 w-4 mr-1" />
-            Create IPA
-          </Button>
+          <Link href={`/projects/${projectId}/commercial/ipa/create`}>
+            <Button size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              Create IPA
+            </Button>
+          </Link>
         }
       />
 
@@ -113,7 +117,15 @@ export default function IpaListPage() {
         }}
       />
 
-      {isLoading ? (
+      {error?.data?.code === 'FORBIDDEN' ? (
+        <div className="py-16 text-center space-y-2">
+          <ShieldOff className="h-8 w-8 mx-auto text-muted-foreground/40" />
+          <p className="text-sm font-medium">Access Denied</p>
+          <p className="text-xs text-muted-foreground">You don&apos;t have permission to view IPAs in this project.</p>
+        </div>
+      ) : error ? (
+        <div className="py-10 text-center text-sm text-destructive">{error.message}</div>
+      ) : isLoading ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
           Loading...
         </div>

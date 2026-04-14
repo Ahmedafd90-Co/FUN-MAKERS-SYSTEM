@@ -16,6 +16,14 @@ describe('Variation Service', () => {
   beforeAll(async () => {
     registerCommercialEventTypes();
 
+    // Deactivate Variation workflow templates so manual transitions work (legacy path)
+    const varTemplates = await prisma.workflowTemplate.findMany({
+      where: { recordType: 'variation', isActive: true },
+    });
+    for (const t of varTemplates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+    }
+
     const entity = await prisma.entity.create({
       data: { code: `ENT-VAR-${ts}`, name: 'Variation Test Entity', type: 'parent', status: 'active' },
     });

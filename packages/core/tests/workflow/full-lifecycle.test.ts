@@ -94,7 +94,7 @@ beforeAll(async () => {
 
   // 3-step template for lifecycle tests
   threeStepCode = `LC-3STEP-${ts}`;
-  await workflowTemplateService.createTemplate({
+  const templateResult = await workflowTemplateService.createTemplate({
     code: threeStepCode,
     name: 'Three Step Lifecycle',
     recordType: 'test_record',
@@ -121,6 +121,7 @@ beforeAll(async () => {
     ],
     createdBy: testUser.id,
   });
+  await workflowTemplateService.activateTemplate(templateResult.id, testUser.id);
 });
 
 beforeEach(() => {

@@ -6,3 +6,8 @@ export * from './vendor-contract';
 export * from './framework-agreement';
 export * from './rfq';
 export * from './quotation';
+export * from './purchase-order';
+export * from './supplier-invoice';
+export * from './expense';
+export * from './credit-note';
+export { ACTION_TO_PERM_SUFFIX, getActionPermission } from './permission-map';

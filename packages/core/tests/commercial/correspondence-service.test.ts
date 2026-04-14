@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import {
   createCorrespondence,
@@ -12,9 +12,19 @@ import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks
 describe('Correspondence Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate correspondence workflow templates so manual transitions work (legacy path)
+    const templates = await prisma.workflowTemplate.findMany({
+      where: { recordType: 'correspondence', isActive: true },
+    });
+    for (const t of templates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-COR-${ts}`, name: 'Correspondence Test Entity', type: 'parent', status: 'active' },
@@ -30,6 +40,13 @@ describe('Correspondence Service', () => {
       },
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
+  });
+
+  afterAll(async () => {
+    // Reactivate correspondence templates
+    for (const id of deactivatedTemplateIds) {
+      await prisma.workflowTemplate.update({ where: { id }, data: { isActive: true } });
+    }
   });
 
   const makeInput = (subtype: 'letter' | 'notice' | 'claim' | 'back_charge', overrides = {}) => ({

@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 
+type OutcomeType = 'review' | 'approve' | 'sign' | 'issue' | 'acknowledge';
+
 type WorkflowStep = {
   orderIndex: number;
   name: string;
@@ -8,6 +10,7 @@ type WorkflowStep = {
   slaHours: number;
   isOptional: boolean;
   requirementFlags: Record<string, unknown>;
+  outcomeType: OutcomeType;
 };
 
 type WorkflowTemplateDef = {
@@ -28,6 +31,7 @@ function step(
   name: string,
   roleCode: string,
   slaHours: number,
+  outcomeType: OutcomeType = 'approve',
   isOptional = false,
 ): WorkflowStep {
   return {
@@ -37,6 +41,7 @@ function step(
     slaHours,
     isOptional,
     requirementFlags: {},
+    outcomeType,
   };
 }
 
@@ -47,11 +52,11 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'IPA Standard',
     recordType: 'ipa',
     steps: [
-      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts Manager Review', 'contracts_manager', 48),
-      step(40, 'PD Sign', 'project_director', 72),
-      step(50, 'Issue', 'document_controller', 24, true),
+      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts Manager Review', 'contracts_manager', 48, 'review'),
+      step(40, 'PD Sign', 'project_director', 72, 'sign'),
+      step(50, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -59,12 +64,12 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'IPA with Finance Check',
     recordType: 'ipa',
     steps: [
-      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts Manager Review', 'contracts_manager', 48),
-      step(40, 'Finance Check', 'finance', 48),
-      step(50, 'PD Sign', 'project_director', 72),
-      step(60, 'Issue', 'document_controller', 24, true),
+      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts Manager Review', 'contracts_manager', 48, 'review'),
+      step(40, 'Finance Check', 'finance', 48, 'review'),
+      step(50, 'PD Sign', 'project_director', 72, 'sign'),
+      step(60, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   // IPC (1)
@@ -73,12 +78,12 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'IPC Standard',
     recordType: 'ipc',
     steps: [
-      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts Manager Review', 'contracts_manager', 48),
-      step(40, 'Finance Check', 'finance', 48, false),
-      step(50, 'PD Sign', 'project_director', 72, false),
-      step(60, 'Issue', 'document_controller', 24, true),
+      step(10, 'QS/Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts Manager Review', 'contracts_manager', 48, 'review'),
+      step(40, 'Finance Check', 'finance', 48, 'review'),
+      step(50, 'PD Sign', 'project_director', 72, 'sign'),
+      step(60, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   // Variation (2)
@@ -87,11 +92,11 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Variation Standard',
     recordType: 'variation',
     steps: [
-      step(10, 'Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts Review', 'contracts_manager', 48),
-      step(40, 'PD Approval/Sign', 'project_director', 72),
-      step(50, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts Review', 'contracts_manager', 48, 'review'),
+      step(40, 'PD Approval/Sign', 'project_director', 72, 'sign'),
+      step(50, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -99,12 +104,12 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Variation with Finance Check',
     recordType: 'variation',
     steps: [
-      step(10, 'Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts Review', 'contracts_manager', 48),
-      step(40, 'Finance Check', 'finance', 48),
-      step(50, 'PD Approval/Sign', 'project_director', 72),
-      step(60, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts Review', 'contracts_manager', 48, 'review'),
+      step(40, 'Finance Check', 'finance', 48, 'review'),
+      step(50, 'PD Approval/Sign', 'project_director', 72, 'sign'),
+      step(60, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   // Cost Proposal (2)
@@ -113,9 +118,9 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Cost Proposal Standard',
     recordType: 'cost_proposal',
     steps: [
-      step(10, 'Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'Contracts/Commercial Review', 'contracts_manager', 48),
-      step(30, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'Contracts/Commercial Review', 'contracts_manager', 48, 'review'),
+      step(30, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -123,12 +128,12 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Cost Proposal Full Approval',
     recordType: 'cost_proposal',
     steps: [
-      step(10, 'Commercial Prepare', 'qs_commercial', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Contracts/Commercial Review', 'contracts_manager', 48),
-      step(40, 'Finance Check', 'cost_controller', 48),
-      step(50, 'PD Approval', 'project_director', 72),
-      step(60, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial Prepare', 'qs_commercial', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Contracts/Commercial Review', 'contracts_manager', 48, 'review'),
+      step(40, 'Finance Check', 'cost_controller', 48, 'review'),
+      step(50, 'PD Approval', 'project_director', 72, 'approve'),
+      step(60, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   // Tax Invoice (2)
@@ -137,9 +142,9 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Tax Invoice Standard',
     recordType: 'tax_invoice',
     steps: [
-      step(10, 'Commercial/Finance Prepare', 'finance', 24),
-      step(20, 'Finance Review', 'finance', 48, false),
-      step(30, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial/Finance Prepare', 'finance', 24, 'review'),
+      step(20, 'Finance Review', 'finance', 48, 'review'),
+      step(30, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -147,10 +152,10 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Tax Invoice with PD Sign',
     recordType: 'tax_invoice',
     steps: [
-      step(10, 'Commercial/Finance Prepare', 'finance', 24),
-      step(20, 'Finance Review', 'finance', 48, false),
-      step(30, 'PD Sign', 'project_director', 72),
-      step(40, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial/Finance Prepare', 'finance', 24, 'review'),
+      step(20, 'Finance Review', 'finance', 48, 'review'),
+      step(30, 'PD Sign', 'project_director', 72, 'sign'),
+      step(40, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   // Correspondence (6)
@@ -159,9 +164,9 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Letter Standard',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Originator', 'contracts_manager', 24),
-      step(20, 'Manager/Contracts Review', 'project_manager', 48),
-      step(30, 'Issue', 'document_controller', 24, true),
+      step(10, 'Originator', 'contracts_manager', 24, 'review'),
+      step(20, 'Manager/Contracts Review', 'project_manager', 48, 'review'),
+      step(30, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -169,10 +174,10 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Letter with PD Sign',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Originator', 'contracts_manager', 24),
-      step(20, 'Manager/Contracts Review', 'project_manager', 48),
-      step(30, 'PD Sign', 'project_director', 72),
-      step(40, 'Issue', 'document_controller', 24, true),
+      step(10, 'Originator', 'contracts_manager', 24, 'review'),
+      step(20, 'Manager/Contracts Review', 'project_manager', 48, 'review'),
+      step(30, 'PD Sign', 'project_director', 72, 'sign'),
+      step(40, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -180,10 +185,10 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Notice Standard',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Originator/Commercial', 'qs_commercial', 24),
-      step(20, 'Contracts Review', 'contracts_manager', 48),
-      step(30, 'PD Sign', 'project_director', 72, false),
-      step(40, 'Issue', 'document_controller', 24, true),
+      step(10, 'Originator/Commercial', 'qs_commercial', 24, 'review'),
+      step(20, 'Contracts Review', 'contracts_manager', 48, 'review'),
+      step(30, 'PD Sign', 'project_director', 72, 'sign'),
+      step(40, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -191,10 +196,10 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Claim Standard',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Commercial/Contracts', 'contracts_manager', 24),
-      step(20, 'Contracts Review', 'contracts_manager', 48),
-      step(30, 'PD Sign', 'project_director', 72, false),
-      step(40, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial/Contracts', 'contracts_manager', 24, 'review'),
+      step(20, 'Contracts Review', 'contracts_manager', 48, 'review'),
+      step(30, 'PD Sign', 'project_director', 72, 'sign'),
+      step(40, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -202,11 +207,11 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Claim with Finance Check',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Commercial/Contracts', 'contracts_manager', 24),
-      step(20, 'Contracts Review', 'contracts_manager', 48),
-      step(30, 'Finance Check', 'cost_controller', 48),
-      step(40, 'PD Sign', 'project_director', 72, false),
-      step(50, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial/Contracts', 'contracts_manager', 24, 'review'),
+      step(20, 'Contracts Review', 'contracts_manager', 48, 'review'),
+      step(30, 'Finance Check', 'cost_controller', 48, 'review'),
+      step(40, 'PD Sign', 'project_director', 72, 'sign'),
+      step(50, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
   {
@@ -214,11 +219,11 @@ const COMMERCIAL_WORKFLOW_TEMPLATES: WorkflowTemplateDef[] = [
     name: 'Back Charge Standard',
     recordType: 'correspondence',
     steps: [
-      step(10, 'Commercial/Contracts', 'contracts_manager', 24),
-      step(20, 'PM Review', 'project_manager', 48),
-      step(30, 'Finance Check', 'finance', 48, false),
-      step(40, 'PD Sign', 'project_director', 72, false),
-      step(50, 'Issue', 'document_controller', 24, true),
+      step(10, 'Commercial/Contracts', 'contracts_manager', 24, 'review'),
+      step(20, 'PM Review', 'project_manager', 48, 'review'),
+      step(30, 'Finance Check', 'finance', 48, 'review'),
+      step(40, 'PD Sign', 'project_director', 72, 'sign'),
+      step(50, 'Issue', 'document_controller', 24, 'issue', true),
     ],
   },
 ];
@@ -254,6 +259,7 @@ export async function seedCommercialWorkflowTemplates(prisma: PrismaClient) {
           approverRuleJson: s.approverRule,
           slaHours: s.slaHours,
           isOptional: s.isOptional,
+          outcomeType: s.outcomeType,
           requirementFlagsJson: s.requirementFlags as Prisma.InputJsonValue,
         },
       });

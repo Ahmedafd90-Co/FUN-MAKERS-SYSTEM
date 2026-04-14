@@ -7,6 +7,7 @@ import { Badge } from '@fmksa/ui/components/badge';
 import { X, Filter } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { parseDrilldownStatuses } from '@/lib/parse-drilldown-params';
 
 type FilterState = {
   statusFilter: string[];
@@ -31,9 +32,10 @@ export function RegisterFilterBar({ statuses, filters, onFilterChange, showAmoun
   const searchParams = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
 
-  // Sync URL params on mount for dashboard drilldown
+  // Sync URL params on mount for dashboard drilldown.
+  // Split comma-joined values (e.g. ?status=issued,submitted → ['issued','submitted'])
   useEffect(() => {
-    const urlStatuses = searchParams.getAll('status');
+    const urlStatuses = parseDrilldownStatuses(searchParams);
     if (urlStatuses.length > 0 && filters.statusFilter.length === 0) {
       onFilterChange({ ...filters, statusFilter: urlStatuses });
     }

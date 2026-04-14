@@ -53,7 +53,7 @@ Revocation is expressed by setting `effectiveTo`; there is no separate `revokedA
 
 ---
 
-## Permission Codes — Module 3 Procurement (77 codes, 13 resources)
+## Permission Codes — Module 3 Procurement (79 codes, 13 resources)
 
 All codes follow the `resource.action` pattern. Seeded in `packages/db/src/seed/procurement-permissions.ts`.
 
@@ -62,8 +62,8 @@ All codes follow the `resource.action` pattern. Seeded in `packages/db/src/seed/
 | `vendor` (7) | `view`, `create`, `edit`, `delete`, `activate`, `suspend`, `blacklist` |
 | `vendor_contract` (9) | `view`, `create`, `edit`, `delete`, `submit`, `review`, `approve`, `sign`, `terminate` |
 | `framework_agreement` (9) | `view`, `create`, `edit`, `delete`, `submit`, `review`, `approve`, `sign`, `terminate` |
-| `rfq` (10) | `view`, `create`, `edit`, `delete`, `submit`, `review`, `approve`, `issue`, `evaluate`, `award` |
-| `quotation` (8) | `view`, `create`, `edit`, `delete`, `review`, `shortlist`, `award`, `reject` |
+| `rfq` (11) | `view`, `create`, `edit`, `delete`, `submit`, `review`, `approve`, `issue`, `evaluate`, `award`, `terminate` |
+| `quotation` (9) | `view`, `create`, `edit`, `delete`, `review`, `shortlist`, `award`, `reject`, `terminate` |
 | `purchase_order` (8) | `view`, `create`, `edit`, `submit`, `review`, `approve`, `sign`, `issue` |
 | `supplier_invoice` (7) | `view`, `create`, `edit`, `submit`, `review`, `approve`, `prepare_payment` |
 | `expense` (6) | `view`, `create`, `edit`, `submit`, `review`, `approve` |
@@ -98,14 +98,29 @@ Routers use `getTransitionPermission(resource, action)` (defined in `_helpers.ts
 
 ---
 
-## Total Permission Count: 124
+## Total Permission Count: 126
 
-47 (Module 1) + 77 (Module 3 Procurement) = **124 permission codes**.
+47 (Module 1) + 79 (Module 3 Procurement) = **126 permission codes**.
 
 ### Role-Permission Mapping Status
 
 `master_admin` is seeded with all Module 1 permissions (wildcard `*`).
-All other roles are stub-mapped in `packages/db/src/seed/role-permissions.ts` and will be fully defined in a subsequent module. PMO is documented to receive `*.view` + `cross_project.read`. Override permissions (`override.execute`, `system.admin`) are restricted to `master_admin` only. Procurement role-permission mappings will be defined when Module 3 feature development resumes.
+All other roles are stub-mapped in `packages/db/src/seed/role-permissions.ts` and will be fully defined in a subsequent module. PMO is documented to receive `*.view` + `cross_project.read`. Override permissions (`override.execute`, `system.admin`) are restricted to `master_admin` only.
+
+### Procurement Role-Permission Grants (Stabilization Slice B)
+
+Terminate-class permissions (`rfq.terminate`, `quotation.terminate`) are seeded in `packages/db/src/seed/procurement-role-permissions.ts`:
+
+| Role | `rfq.terminate` | `quotation.terminate` |
+|---|---|---|
+| `master_admin` | ✓ | ✓ |
+| `project_director` | ✓ | — |
+| `project_manager` | ✓ | — |
+| `procurement` | ✓ | ✓ |
+
+These permissions gate `cancel`, `close`, and `expire` transitions. Roles without terminate permission (e.g. `site_team`, `finance`, `pmo`) cannot perform any terminate-class action on RFQs or quotations.
+
+The shared permission mapping is the single source of truth at `packages/core/src/procurement/permission-map.ts`, imported by both backend routers and referenced by the UI component.
 
 ---
 

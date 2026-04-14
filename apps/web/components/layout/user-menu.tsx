@@ -91,15 +91,12 @@ export function UserMenu({ userName, userEmail }: UserMenuProps) {
               Profile
             </Link>
             <Link
-              href="/home"
+              href="/notifications"
               className="flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
               onClick={() => setOpen(false)}
             >
               <Bell className="h-4 w-4 text-muted-foreground" />
               Notifications
-              <span className="ml-auto text-xs text-muted-foreground">
-                Soon
-              </span>
             </Link>
           </div>
 

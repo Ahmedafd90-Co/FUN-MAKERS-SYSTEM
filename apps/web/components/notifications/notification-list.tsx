@@ -65,19 +65,33 @@ type NotificationListProps = {
 // ---------------------------------------------------------------------------
 
 function getResourceUrl(notification: NotificationItem): string | null {
-  // Workflow notifications link to the approvals queue
-  if (notification.templateCode.startsWith('workflow_')) {
+  const code = notification.templateCode;
+
+  // Workflow notifications — step assigned goes to approvals queue,
+  // outcome notifications (approved/rejected/returned) also go there
+  // since the user may have multiple pending items.
+  if (code.startsWith('workflow_')) {
     return '/approvals';
   }
+
   // Document notifications link to the documents view
-  if (notification.templateCode === 'document_signed') {
+  if (code === 'document_signed') {
     return '/documents';
   }
+
   // Posting exception → admin posting exceptions
-  if (notification.templateCode === 'posting_exception') {
+  if (code === 'posting_exception') {
     return '/admin/posting-exceptions';
   }
-  return null;
+
+  // System / admin notifications
+  if (code === 'user_created' || code === 'user_deactivated') {
+    return '/admin/users';
+  }
+
+  // Fallback: link to notifications page itself so clicking always does
+  // something (mark-as-read at minimum) instead of a dead end.
+  return '/notifications';
 }
 
 // ---------------------------------------------------------------------------

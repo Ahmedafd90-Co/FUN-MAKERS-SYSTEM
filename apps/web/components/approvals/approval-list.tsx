@@ -10,10 +10,12 @@
 
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
-import { CheckCircle2, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, RotateCcw, XCircle, FileSignature, Send, Eye } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { outcomeActionLabel } from '@/lib/outcome-labels';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/layout/page-header';
@@ -37,6 +39,7 @@ type ApprovalItem = {
   recordId: string;
   currentStepId: string;
   currentStepName: string;
+  currentStepOutcomeType: string;
   status: string;
   startedAt: Date;
   currentStepStartedAt: Date;
@@ -107,6 +110,17 @@ function SlaStatusBadge({
   );
 }
 
+const RECORD_TYPE_LABELS: Record<string, string> = {
+  rfq: 'RFQ',
+  ipa: 'IPA',
+  ipc: 'IPC',
+  variation: 'Variation',
+  cost_proposal: 'Cost Proposal',
+  tax_invoice: 'Tax Invoice',
+  correspondence: 'Correspondence',
+  quotation: 'Quotation',
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -124,7 +138,7 @@ export function ApprovalList() {
     <div className="space-y-4">
       <PageHeader
         title="My Approvals"
-        description="Workflow steps waiting for your approval across all assigned projects."
+        description="Records that need your decision — approve, return for revision, or reject."
       />
 
       {/* Loading */}
@@ -158,8 +172,11 @@ export function ApprovalList() {
                     <span className="font-medium text-sm">
                       {item.projectName}
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {item.recordType}
+                    <span className="font-mono text-[10px] text-muted-foreground/60">
+                      {item.projectCode}
+                    </span>
+                    <Badge variant="outline" className="text-xs uppercase">
+                      {RECORD_TYPE_LABELS[item.recordType] ?? item.recordType}
                     </Badge>
                     {item.status === 'returned' && (
                       <Badge
@@ -171,7 +188,12 @@ export function ApprovalList() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Record: {item.recordId}
+                    <RecordLink
+                      recordType={item.recordType}
+                      recordId={item.recordId}
+                      projectId={item.projectId}
+                      recordReference={item.recordReference}
+                    />
                   </p>
                 </div>
                 <SlaStatusBadge
@@ -184,10 +206,10 @@ export function ApprovalList() {
               {/* Step + timing info */}
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <span>
-                  Step: <span className="font-medium text-foreground">{item.currentStepName}</span>
+                  Your action needed: <span className="font-medium text-foreground">{item.currentStepName}</span>
                 </span>
                 <span>
-                  Waiting: {formatWaitTime(item.hoursWaiting)}
+                  Waiting {formatWaitTime(item.hoursWaiting)}
                 </span>
                 {item.slaHours != null && (
                   <span>
@@ -202,8 +224,8 @@ export function ApprovalList() {
                   size="sm"
                   onClick={() => setApproveItem(item as unknown as ApprovalItem)}
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                  Approve
+                  <OutcomeIcon outcomeType={item.currentStepOutcomeType} className="h-3.5 w-3.5 mr-1" />
+                  {outcomeActionLabel(item.currentStepOutcomeType)}
                 </Button>
                 <Button
                   variant="outline"
@@ -246,4 +268,71 @@ export function ApprovalList() {
       />
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// RecordLink — clickable link with human-readable record type label
+// ---------------------------------------------------------------------------
+
+function RecordLink({ recordType, recordId, projectId, recordReference }: { recordType: string; recordId: string; projectId: string; recordReference?: string | null | undefined }) {
+  const labels: Record<string, string> = {
+    rfq: 'RFQ',
+    ipa: 'IPA',
+    ipc: 'IPC',
+    variation: 'Variation',
+    cost_proposal: 'Cost Proposal',
+    tax_invoice: 'Tax Invoice',
+    correspondence: 'Correspondence',
+    quotation: 'Quotation',
+    purchase_order: 'Purchase Order',
+    supplier_invoice: 'Supplier Invoice',
+    expense: 'Expense',
+    credit_note: 'Credit Note',
+  };
+
+  const routes: Record<string, string> = {
+    rfq: `/projects/${projectId}/procurement/rfq/${recordId}`,
+    ipa: `/projects/${projectId}/commercial/ipa/${recordId}`,
+    ipc: `/projects/${projectId}/commercial/ipc/${recordId}`,
+    variation: `/projects/${projectId}/commercial/variations/${recordId}`,
+    cost_proposal: `/projects/${projectId}/commercial/cost-proposals/${recordId}`,
+    tax_invoice: `/projects/${projectId}/commercial/invoices/${recordId}`,
+    correspondence: `/projects/${projectId}/commercial/correspondence/${recordId}`,
+    quotation: `/projects/${projectId}/procurement/quotations/${recordId}`,
+    purchase_order: `/projects/${projectId}/procurement/purchase-orders/${recordId}`,
+    supplier_invoice: `/projects/${projectId}/procurement/supplier-invoices/${recordId}`,
+    expense: `/projects/${projectId}/procurement/expenses/${recordId}`,
+    credit_note: `/projects/${projectId}/procurement/credit-notes/${recordId}`,
+  };
+
+  const label = labels[recordType] ?? recordType;
+  const href = routes[recordType];
+  const displayRef = recordReference ?? recordId.slice(0, 8) + '...';
+
+  if (href) {
+    return (
+      <Link href={href} className="text-primary hover:underline">
+        {label} {displayRef}
+      </Link>
+    );
+  }
+
+  return <span>{label}: {displayRef}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// OutcomeIcon — icon matching the step's semantic purpose
+// ---------------------------------------------------------------------------
+
+function OutcomeIcon({ outcomeType, className }: { outcomeType?: string; className?: string }) {
+  switch (outcomeType) {
+    case 'review':
+      return <Eye className={className} />;
+    case 'sign':
+      return <FileSignature className={className} />;
+    case 'issue':
+      return <Send className={className} />;
+    default:
+      return <CheckCircle2 className={className} />;
+  }
 }

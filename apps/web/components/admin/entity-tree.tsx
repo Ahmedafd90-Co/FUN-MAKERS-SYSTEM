@@ -62,7 +62,7 @@ function EntityNode({
   onSelect: (entity: Entity) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const hasChildren = entity.children.length > 0;
+  const hasChildren = (entity.children?.length ?? 0) > 0;
 
   return (
     <>
@@ -100,7 +100,7 @@ function EntityNode({
         <td className="px-4 py-3">{statusBadge(entity.status)}</td>
       </tr>
       {hasChildren && expanded &&
-        entity.children.map((child) => (
+        (entity.children ?? []).map((child) => (
           <EntityNode
             key={child.id}
             entity={child}
@@ -123,8 +123,21 @@ type EntityTreeProps = {
 };
 
 export function EntityTree({ entities, onSelect, onCreateClick }: EntityTreeProps) {
-  // Build tree: group by parent
-  const roots = entities.filter((e) => !e.parentEntityId);
+  // Build tree from the flat list so all nesting levels have children populated.
+  // Prisma's `include: { children: true }` only populates one level deep, which
+  // causes crashes when EntityNode recurses into grandchildren.
+  const nodeMap = new Map<string, Entity>();
+  for (const e of entities) {
+    nodeMap.set(e.id, { ...e, children: [] });
+  }
+  for (const e of entities) {
+    if (e.parentEntityId && nodeMap.has(e.parentEntityId)) {
+      nodeMap.get(e.parentEntityId)!.children.push(nodeMap.get(e.id)!);
+    }
+  }
+  const roots = entities
+    .filter((e) => !e.parentEntityId)
+    .map((e) => nodeMap.get(e.id)!);
 
   return (
     <div className="space-y-4">

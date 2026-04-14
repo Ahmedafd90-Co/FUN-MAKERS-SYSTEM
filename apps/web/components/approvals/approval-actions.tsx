@@ -27,15 +27,31 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+import { outcomeActionLabel, outcomeProgressLabel, outcomeCompletedLabel } from '@/lib/outcome-labels';
 
 // ---------------------------------------------------------------------------
 // Approval item shape (from myApprovals query)
 // ---------------------------------------------------------------------------
 
+const RECORD_TYPE_LABELS: Record<string, string> = {
+  rfq: 'RFQ',
+  ipa: 'IPA',
+  ipc: 'IPC',
+  variation: 'Variation',
+  cost_proposal: 'Cost Proposal',
+  tax_invoice: 'Tax Invoice',
+  correspondence: 'Correspondence',
+  quotation: 'Quotation',
+};
+
 type ApprovalItem = {
   instanceId: string;
   projectId: string;
+  projectName?: string;
+  recordType?: string;
   currentStepId: string;
+  currentStepName?: string;
+  currentStepOutcomeType?: string;
   previousSteps: Array<{ id: string; name: string; orderIndex: number }>;
 };
 
@@ -53,9 +69,13 @@ export function ApproveDialog({ open, onOpenChange, item }: ApproveDialogProps) 
   const [comment, setComment] = useState('');
   const utils = trpc.useUtils();
 
+  const actionLabel = outcomeActionLabel(item?.currentStepOutcomeType);
+  const doneLabel = outcomeCompletedLabel(item?.currentStepOutcomeType);
+  const progressLabel = outcomeProgressLabel(item?.currentStepOutcomeType);
+
   const mutation = trpc.workflow.actions.approve.useMutation({
     onSuccess: () => {
-      toast.success('Step approved.');
+      toast.success(`Step ${doneLabel.toLowerCase()}.`);
       utils.workflow.myApprovals.invalidate();
       setComment('');
       onOpenChange(false);
@@ -71,9 +91,13 @@ export function ApproveDialog({ open, onOpenChange, item }: ApproveDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Approve Step</DialogTitle>
+          <DialogTitle>
+            {actionLabel}: {item.currentStepName ?? 'Step'}
+          </DialogTitle>
           <DialogDescription>
-            Approve this workflow step. An optional comment can be provided.
+            {item.recordType && item.projectName
+              ? `${actionLabel} the "${item.currentStepName ?? 'current'}" step for a ${RECORD_TYPE_LABELS[item.recordType] ?? item.recordType} in ${item.projectName}. An optional comment can be provided.`
+              : `${actionLabel} this workflow step. An optional comment can be provided.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -102,7 +126,7 @@ export function ApproveDialog({ open, onOpenChange, item }: ApproveDialogProps) 
               }}
               disabled={mutation.isPending}
             >
-              {mutation.isPending ? 'Approving...' : 'Approve'}
+              {mutation.isPending ? progressLabel : actionLabel}
             </Button>
           </DialogFooter>
         </div>
@@ -143,10 +167,13 @@ export function RejectDialog({ open, onOpenChange, item }: RejectDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Reject Step</DialogTitle>
+          <DialogTitle>
+            Reject: {item.currentStepName ?? 'Step'}
+          </DialogTitle>
           <DialogDescription>
-            Reject this workflow step. A comment explaining the reason is
-            required.
+            {item.recordType && item.projectName
+              ? `Rejecting the "${item.currentStepName ?? 'current'}" step for a ${RECORD_TYPE_LABELS[item.recordType] ?? item.recordType} in ${item.projectName}. This will end the approval process. A comment is required.`
+              : 'Reject this workflow step. This will end the approval process. A comment explaining the reason is required.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -225,10 +252,13 @@ export function ReturnDialog({ open, onOpenChange, item }: ReturnDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Return Step</DialogTitle>
+          <DialogTitle>
+            Return: {item.currentStepName ?? 'Step'}
+          </DialogTitle>
           <DialogDescription>
-            Return this workflow to a previous step. A comment explaining the
-            reason is required.
+            {item.recordType && item.projectName
+              ? `Returning the "${item.currentStepName ?? 'current'}" step for a ${RECORD_TYPE_LABELS[item.recordType] ?? item.recordType} in ${item.projectName}. The record owner will be asked to revise and re-submit. A comment is required.`
+              : 'Return this workflow to a previous step. The record owner will be asked to revise and re-submit. A comment is required.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

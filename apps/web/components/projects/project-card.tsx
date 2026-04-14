@@ -51,8 +51,8 @@ export function ProjectCard({
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-mono text-muted-foreground">{code}</p>
-              <CardTitle className="text-base mt-1">{name}</CardTitle>
+              <CardTitle className="text-base">{name}</CardTitle>
+              <p className="text-xs font-mono text-muted-foreground mt-0.5">{code}</p>
             </div>
             {projectStatusBadge(status)}
           </div>

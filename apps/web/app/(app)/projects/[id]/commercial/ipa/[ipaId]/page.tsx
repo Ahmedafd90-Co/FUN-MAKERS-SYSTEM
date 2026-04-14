@@ -1,53 +1,27 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@fmksa/ui/components/card';
-import { Separator } from '@fmksa/ui/components/separator';
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <p className="text-sm mt-0.5">{value ?? '-'}</p>
-    </div>
-  );
-}
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 export default function IpaDetailPage() {
   const params = useParams<{ id: string; ipaId: string }>();
-  const router = useRouter();
   const utils = trpc.useUtils();
+
+  const { data: me } = trpc.auth.me.useQuery();
 
   const { data, isLoading, error } = trpc.commercial.ipa.get.useQuery({
     projectId: params.id,
@@ -57,8 +31,20 @@ export default function IpaDetailPage() {
   const transitionMut = trpc.commercial.ipa.transition.useMutation({
     onSuccess: () => {
       utils.commercial.ipa.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'ipa', recordId: params.ipaId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -76,8 +62,21 @@ export default function IpaDetailPage() {
     );
   }
 
+  const workflowLabel = workflowData
+    ? workflowData.status === 'approved'
+      ? 'Approved'
+      : workflowData.status === 'rejected'
+        ? 'Rejected'
+        : workflowData.status === 'returned'
+          ? 'Returned'
+          : 'In Progress'
+    : data.status === 'draft'
+      ? 'Not started'
+      : '—';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Back link */}
       <Link
         href={`/projects/${params.id}/commercial/ipa`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -86,18 +85,34 @@ export default function IpaDetailPage() {
         Back to IPAs
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">
-            {data.referenceNumber ?? 'Draft IPA'}
-          </h1>
-          <CommercialStatusBadge status={data.status} />
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {data.referenceNumber ?? 'Draft IPA'}
+            </h1>
+            <CommercialStatusBadge status={data.status} />
+          </div>
+          {data.periodNumber != null && (
+            <p className="text-sm text-muted-foreground">
+              Period {data.periodNumber} &middot;{' '}
+              {new Date(data.periodFrom).toLocaleDateString()} &ndash;{' '}
+              {new Date(data.periodTo).toLocaleDateString()}
+            </p>
+          )}
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="IPA"
+          />
         </div>
         <TransitionActions
           currentStatus={data.status}
           recordFamily="ipa"
-          permissions={['ipa.transition']}
+          permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -109,12 +124,40 @@ export default function IpaDetailPage() {
         />
       </div>
 
-      <Separator />
+      {/* ── Summary Strip ── */}
+      <SummaryStrip>
+        <SummaryItem
+          label="Net Claimed"
+          value={`${formatMoney(data.netClaimed)} ${data.currency}`}
+          emphasis
+        />
+        <SummaryItem
+          label="Gross Amount"
+          value={`${formatMoney(data.grossAmount)} ${data.currency}`}
+        />
+        <SummaryItem
+          label="Retention"
+          value={`${formatMoney(data.retentionAmount)} ${data.currency}`}
+        />
+        <SummaryItem label="Status" value={<CommercialStatusBadge status={data.status} />} />
+        <SummaryItem label="Workflow" value={workflowLabel} />
+        <SummaryItem
+          label="Period"
+          value={
+            data.periodNumber != null
+              ? `Period ${data.periodNumber}`
+              : '—'
+          }
+        />
+      </SummaryStrip>
 
-      {/* Financial Summary */}
+      {/* ── Workflow ── */}
+      <WorkflowStatusCard recordType="ipa" recordId={params.ipaId} />
+
+      {/* ── Financial Detail ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Financial Summary</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Financial Detail</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field
@@ -130,7 +173,7 @@ export default function IpaDetailPage() {
             value={
               data.retentionRate != null
                 ? `${parseFloat(String(data.retentionRate)).toFixed(2)}%`
-                : '-'
+                : '—'
             }
           />
           <Field
@@ -164,15 +207,17 @@ export default function IpaDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Period Info */}
+      {/* ── Period Info ── */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-sm">Period Information</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field
             label="Period Number"
-            value={data.periodNumber != null ? `Period ${data.periodNumber}` : '-'}
+            value={
+              data.periodNumber != null ? `Period ${data.periodNumber}` : '—'
+            }
           />
           <Field
             label="Period From"
@@ -182,10 +227,7 @@ export default function IpaDetailPage() {
             label="Period To"
             value={new Date(data.periodTo).toLocaleDateString()}
           />
-          <Field
-            label="Currency"
-            value={data.currency}
-          />
+          <Field label="Currency" value={data.currency} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
@@ -193,10 +235,10 @@ export default function IpaDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Description */}
+      {/* ── Description ── */}
       {data.description && (
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle className="text-sm">Description</CardTitle>
           </CardHeader>
           <CardContent>

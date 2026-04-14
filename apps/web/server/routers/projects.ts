@@ -2,6 +2,8 @@
  * Projects tRPC router — CRUD, settings, and assignments.
  */
 import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
+import { prisma } from '@fmksa/db';
 import {
   CreateProjectSchema,
   UpdateProjectSchema,
@@ -130,6 +132,7 @@ export const projectsRouter = router({
         currencyCode: input.currencyCode,
         startDate: input.startDate,
         endDate: input.endDate ?? null,
+        contractValue: input.contractValue ?? null,
         createdBy: ctx.user.id,
       });
     }),
@@ -152,6 +155,8 @@ export const projectsRouter = router({
           startDate: rest.startDate,
           endDate: rest.endDate,
           status: rest.status,
+          contractValue: rest.contractValue,
+          revisedContractValue: rest.revisedContractValue,
         },
         ctx.user.id,
       );
@@ -169,6 +174,46 @@ export const projectsRouter = router({
         input.reason,
         ctx.user.id,
       );
+    }),
+
+  // ---------------------------------------------------------------------------
+  // User search — for assignment pickers
+  // ---------------------------------------------------------------------------
+
+  userSearch: protectedProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ input }) => {
+      const users = await prisma.user.findMany({
+        where: {
+          OR: [
+            { name: { contains: input.query, mode: 'insensitive' } },
+            { email: { contains: input.query, mode: 'insensitive' } },
+          ],
+          // Default: active users only. This is an explicit assumption —
+          // inactive/locked users should generally not be assigned to projects.
+          // If a business rule requires assigning non-active users, this
+          // filter should be removed or made configurable.
+          status: 'active',
+        },
+        select: { id: true, name: true, email: true, status: true },
+        take: 20,
+        orderBy: { name: 'asc' },
+      });
+      return users;
+    }),
+
+  // ---------------------------------------------------------------------------
+  // Role list — for assignment pickers
+  // ---------------------------------------------------------------------------
+
+  roleList: protectedProcedure
+    .query(async () => {
+      const roles = await prisma.role.findMany({
+        where: { isSystem: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+      return roles;
     }),
 
   settings: settingsRouter,

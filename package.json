@@ -15,9 +15,11 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "db:migrate": "pnpm --filter @fmksa/db db:migrate",
-    "db:seed": "pnpm --filter @fmksa/db db:seed"
+    "db:seed": "pnpm --filter @fmksa/db db:seed",
+    "postinstall": "pnpm --filter @fmksa/db exec prisma generate && node infra/scripts/copy-prisma-engine.mjs"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "turbo": "^2.3.0"
   }
 }

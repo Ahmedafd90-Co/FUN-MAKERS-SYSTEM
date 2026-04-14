@@ -26,12 +26,12 @@ const RESOURCES: { resource: string; label: string; actions: string[] }[] = [
   {
     resource: 'rfq',
     label: 'Request for Quotation',
-    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award'],
+    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate'],
   },
   {
     resource: 'quotation',
     label: 'Quotation',
-    actions: ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject'],
+    actions: ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject', 'terminate'],
   },
   {
     resource: 'purchase_order',

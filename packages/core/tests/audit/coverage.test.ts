@@ -177,7 +177,7 @@ describe('audit coverage — workflow', () => {
 
   beforeAll(async () => {
     templateCode = `AC-TPL-${ts}`;
-    await workflowTemplateService.createTemplate({
+    const templateResult = await workflowTemplateService.createTemplate({
       code: templateCode,
       name: 'Audit Coverage Template',
       recordType: 'test_record',
@@ -186,6 +186,7 @@ describe('audit coverage — workflow', () => {
       ],
       createdBy: testUserId,
     });
+    await workflowTemplateService.activateTemplate(templateResult.id, testUserId);
   });
 
   it('workflow template creation writes workflow_template.create', async () => {

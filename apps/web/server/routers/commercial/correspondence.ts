@@ -16,12 +16,14 @@ import {
 import {
   createCorrespondence,
   updateCorrespondence,
+  updateSettlementFields,
   transitionCorrespondence,
   getCorrespondence,
   listCorrespondences,
   deleteCorrespondence,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { getTransitionPermission, hasPerm } from './transition-permissions';
 
 // ---------------------------------------------------------------------------
 // Error mapping helper
@@ -58,7 +60,7 @@ export const correspondenceRouter = router({
       ),
     )
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('correspondence.list'))
+      if (!ctx.user.permissions.includes('correspondence.view'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -107,13 +109,43 @@ export const correspondenceRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('correspondence.update'))
+      if (!ctx.user.permissions.includes('correspondence.edit'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
         });
       try {
         return await updateCorrespondence(input, ctx.user.id, input.projectId);
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+  updateSettlement: projectProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        id: z.string().uuid(),
+        settledAmount: z.number().min(0).nullable().optional(),
+        settledTimeDays: z.number().int().min(0).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user.permissions.includes('correspondence.edit'))
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      try {
+        const fields: { settledAmount?: number | null; settledTimeDays?: number | null } = {};
+        if (input.settledAmount !== undefined) fields.settledAmount = input.settledAmount;
+        if (input.settledTimeDays !== undefined) fields.settledTimeDays = input.settledTimeDays;
+        return await updateSettlementFields(
+          input.id,
+          fields,
+          ctx.user.id,
+          input.projectId,
+        );
       } catch (err) {
         mapError(err);
       }
@@ -129,10 +161,11 @@ export const correspondenceRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('correspondence.transition'))
+      const requiredPerm = getTransitionPermission('correspondence', input.action);
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Insufficient permissions.',
+          message: `Insufficient permissions${requiredPerm ? ` (requires ${requiredPerm})` : ''}.`,
         });
       try {
         return await transitionCorrespondence(

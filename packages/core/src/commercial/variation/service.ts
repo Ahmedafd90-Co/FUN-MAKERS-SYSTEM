@@ -3,9 +3,10 @@ import type { VariationStatus } from '@fmksa/db';
 import type { CreateVariationInput, UpdateVariationInput, ListFilterInput } from '@fmksa/contracts';
 import type { VariationListFilter } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { workflowInstanceService, TemplateNotActiveError, DuplicateInstanceError, resolveTemplate } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
-import { getVariationTransitions, VARIATION_TERMINAL_STATUSES } from './transitions';
+import { getVariationTransitions, VARIATION_TERMINAL_STATUSES, VARIATION_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -157,6 +158,22 @@ export async function transitionVariation(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when workflow is active.
+  if (VARIATION_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'variation',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this Variation — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Transitions that require a transaction (posting, ref number, or assessment data)
   const needsTransaction =
     newStatus === 'approved_internal' ||
@@ -286,6 +303,35 @@ export async function transitionVariation(
       afterJson: updated as any,
       reason: comment ?? null,
     });
+
+    // Workflow bridge: start a workflow instance when variation is submitted.
+    // If no active template exists, the transition still succeeds (graceful skip).
+    if (newStatus === 'submitted') {
+      try {
+        const resolution = await resolveTemplate('variation', existing.projectId);
+        if (resolution) {
+          await workflowInstanceService.startInstance({
+            templateCode: resolution.code,
+            recordType: 'variation',
+            recordId: id,
+            projectId: existing.projectId,
+            startedBy: actorUserId,
+            resolutionSource: resolution.source,
+          });
+        } else {
+          console.warn(`[variation-workflow] No workflow template configured for Variation in project ${existing.projectId}`);
+        }
+      } catch (err) {
+        if (
+          err instanceof TemplateNotActiveError ||
+          err instanceof DuplicateInstanceError
+        ) {
+          console.warn(`[variation-workflow] Skipped workflow start for Variation ${id}: ${(err as Error).message}`);
+        } else {
+          throw err;
+        }
+      }
+    }
   }
 
   return updated;

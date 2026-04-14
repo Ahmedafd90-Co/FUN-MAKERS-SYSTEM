@@ -17,6 +17,104 @@ import { assertProjectScope } from '../../scope-binding';
 // ---------------------------------------------------------------------------
 
 export async function createQuotation(input: CreateQuotationInput, actorUserId: string) {
+  // ---------------------------------------------------------------------------
+  // Pre-create guards (Stabilization Slice B)
+  // ---------------------------------------------------------------------------
+
+  // 1. Scope binding: verify the RFQ belongs to the stated project.
+  //    This closes the gap where projectProcedure enforces caller access
+  //    to the project, but nothing validated the RFQ actually belongs there.
+  const rfq = await prisma.rFQ.findUniqueOrThrow({
+    where: { id: input.rfqId },
+    select: { projectId: true, status: true },
+    // Also fetch rfqVendors for vendor-eligibility check (guard #3)
+  });
+
+  // Fetch RFQ vendors separately (needed for guard #3)
+  const rfqVendors = await prisma.rFQVendor.findMany({
+    where: { rfqId: input.rfqId },
+    select: { vendorId: true },
+  });
+
+  if (input.projectId && rfq.projectId !== input.projectId) {
+    throw new Error(
+      `RFQ '${input.rfqId}' belongs to project '${rfq.projectId}', not '${input.projectId}'. ` +
+      'Cannot create quotation with mismatched project scope.',
+    );
+  }
+
+  // 1b. RFQ-state guard (Stabilization Slice C): quotations can only be
+  //     created when the RFQ has been issued and is accepting responses.
+  const QUOTATION_ACCEPTING_STATUSES = ['issued', 'responses_received', 'evaluation'];
+  if (!QUOTATION_ACCEPTING_STATUSES.includes(rfq.status)) {
+    throw new Error(
+      `Cannot create quotation for RFQ '${input.rfqId}' in status '${rfq.status}'. ` +
+      `RFQ must be in one of: [${QUOTATION_ACCEPTING_STATUSES.join(', ')}].`,
+    );
+  }
+
+  // 1c. Vendor-eligibility guard (Stabilization Slice C): the vendor must
+  //     be invited on this RFQ (exist in rfq_vendors join table).
+  const invitedVendorIds = rfqVendors.map((rv) => rv.vendorId);
+  if (!invitedVendorIds.includes(input.vendorId)) {
+    throw new Error(
+      `Vendor '${input.vendorId}' is not invited on RFQ '${input.rfqId}'. ` +
+      'Only invited vendors can submit quotations.',
+    );
+  }
+
+  // 2. Identity invariant: one quotation per vendor per RFQ.
+  //    If a non-terminal quotation from this vendor already exists for this
+  //    RFQ, reject the create. Terminal quotations (rejected/expired) don't
+  //    block — the vendor can re-quote if a previous response was withdrawn.
+  const QUOTATION_TERMINAL: QuotationStatus[] = ['awarded', 'rejected', 'expired'];
+  const existing = await prisma.quotation.findFirst({
+    where: {
+      rfqId: input.rfqId,
+      vendorId: input.vendorId,
+      status: { notIn: QUOTATION_TERMINAL },
+    },
+    select: { id: true, status: true },
+  });
+
+  if (existing) {
+    throw new Error(
+      `Vendor '${input.vendorId}' already has an active quotation (${existing.id}, ` +
+      `status: ${existing.status}) for RFQ '${input.rfqId}'. ` +
+      'One quotation per vendor per RFQ is enforced.',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. rfqItemId validation (Stabilization Slice C): every quotation line
+  //    item that references an rfqItemId must point to an actual item on
+  //    this RFQ. This ensures comparison/award logic gets valid linkage.
+  // ---------------------------------------------------------------------------
+  if (input.items && input.items.length > 0) {
+    const referencedRfqItemIds = input.items
+      .filter((item) => item.rfqItemId)
+      .map((item) => item.rfqItemId as string);
+
+    if (referencedRfqItemIds.length > 0) {
+      const validRfqItems = await prisma.rFQItem.findMany({
+        where: { rfqId: input.rfqId, id: { in: referencedRfqItemIds } },
+        select: { id: true },
+      });
+      const validIds = new Set(validRfqItems.map((r) => r.id));
+      const invalidIds = referencedRfqItemIds.filter((id) => !validIds.has(id));
+      if (invalidIds.length > 0) {
+        throw new Error(
+          `Quotation references invalid RFQ item IDs: [${invalidIds.join(', ')}]. ` +
+          `These items do not belong to RFQ '${input.rfqId}'.`,
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Create
+  // ---------------------------------------------------------------------------
+
   const record = await prisma.quotation.create({
     data: {
       rfqId: input.rfqId,
@@ -43,12 +141,6 @@ export async function createQuotation(input: CreateQuotationInput, actorUserId: 
         : {}),
     },
     include: { lineItems: true },
-  });
-
-  // Get project scope from RFQ for audit
-  const rfq = await prisma.rFQ.findUniqueOrThrow({
-    where: { id: input.rfqId },
-    select: { projectId: true },
   });
 
   await auditService.log({
@@ -83,9 +175,16 @@ export async function updateQuotation(input: UpdateQuotationInput, actorUserId: 
   const { id, items, ...updateFields } = input;
   const data: Record<string, unknown> = {};
 
+  // Map contract field names to Prisma model fields.
+  // Ghost fields (deliveryDate, notes) are excluded via allowlist.
+  const ALLOWED_UPDATE_FIELDS = new Set([
+    'currency', 'totalAmount', 'validUntil', 'paymentTerms', 'deliveryTerms',
+  ]);
+
   for (const [key, value] of Object.entries(updateFields)) {
     if (value === undefined) continue;
-    if (key === 'validUntil' || key === 'deliveryDate') {
+    if (!ALLOWED_UPDATE_FIELDS.has(key)) continue;
+    if (key === 'validUntil') {
       data[key] = value ? new Date(value as string) : null;
     } else {
       data[key] = value;
@@ -291,9 +390,15 @@ export async function compareQuotations(rfqId: string, projectId?: string) {
     });
     assertProjectScope(rfq, projectId, 'RFQ', rfqId);
   }
-  // Get all quotations with line items and vendor info for this RFQ
+  // Get only non-terminal quotations for comparison (Stabilization Slice C).
+  // Terminal quotations (awarded, rejected, expired) are historical — only
+  // the current active quotation per vendor participates in compare/award.
+  const COMPARE_EXCLUDE_STATUSES: QuotationStatus[] = ['awarded', 'rejected', 'expired'];
   const quotations = await prisma.quotation.findMany({
-    where: { rfqId },
+    where: {
+      rfqId,
+      status: { notIn: COMPARE_EXCLUDE_STATUSES },
+    },
     include: {
       vendor: true,
       lineItems: true,

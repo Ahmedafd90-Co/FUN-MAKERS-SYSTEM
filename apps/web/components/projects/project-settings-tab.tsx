@@ -2,10 +2,12 @@
 
 import { Button } from '@fmksa/ui/components/button';
 import { Input } from '@fmksa/ui/components/input';
+import { Separator } from '@fmksa/ui/components/separator';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+import { WorkflowTemplateSettings } from './workflow-template-settings';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -33,11 +35,21 @@ export function ProjectSettingsTab({ projectId }: ProjectSettingsTabProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Project-level settings. Changes are saved per key.
-      </p>
-      <SettingsEntries projectId={projectId} settings={settings} />
+    <div className="space-y-6">
+      {/* Workflow template overrides — purpose-built UI */}
+      <WorkflowTemplateSettings projectId={projectId} />
+
+      <Separator />
+
+      {/* Raw settings table */}
+      {settings && Object.keys(settings).length > 0 && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            All project settings (raw key-value pairs).
+          </p>
+          <SettingsEntries projectId={projectId} settings={settings} />
+        </>
+      )}
     </div>
   );
 }

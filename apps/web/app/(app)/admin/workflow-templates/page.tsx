@@ -6,7 +6,6 @@
  */
 
 import { useState } from 'react';
-import { Toaster } from 'sonner';
 
 import { CreateTemplateDialog } from '@/components/admin/workflow-template-form';
 import { WorkflowTemplateList } from '@/components/admin/workflow-template-list';
@@ -16,7 +15,6 @@ export default function WorkflowTemplatesPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
       <WorkflowTemplateList onCreateClick={() => setCreateOpen(true)} />
       <CreateTemplateDialog
         open={createOpen}

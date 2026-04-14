@@ -42,11 +42,14 @@ export function ProjectHeader({
   return (
     <div className="flex items-start justify-between">
       <div>
-        <p className="text-xs font-mono text-muted-foreground">{code}</p>
-        <h1 className="text-xl font-semibold tracking-tight mt-0.5">{name}</h1>
-        <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
-          <Building2 className="h-3.5 w-3.5" />
-          <span>{entityName}</span>
+        <h1 className="text-xl font-semibold tracking-tight">{name}</h1>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs font-mono text-muted-foreground">{code}</span>
+          <span className="text-muted-foreground/30">|</span>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Building2 className="h-3.5 w-3.5" />
+            <span>{entityName}</span>
+          </div>
         </div>
       </div>
       <div>{projectStatusBadge(status)}</div>

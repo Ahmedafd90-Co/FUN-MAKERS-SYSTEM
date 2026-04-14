@@ -1,6 +1,6 @@
 export const VO_TRANSITIONS: Record<string, string[]> = {
   draft: ['submitted'],
-  submitted: ['under_review', 'returned', 'rejected'],
+  submitted: ['under_review', 'returned', 'rejected', 'approved_internal'],
   under_review: ['approved_internal', 'returned', 'rejected'],
   returned: ['submitted'],
   approved_internal: ['signed'],
@@ -12,7 +12,7 @@ export const VO_TRANSITIONS: Record<string, string[]> = {
 
 export const CO_TRANSITIONS: Record<string, string[]> = {
   draft: ['submitted'],
-  submitted: ['under_review', 'returned', 'rejected'],
+  submitted: ['under_review', 'returned', 'rejected', 'approved_internal'],
   under_review: ['approved_internal', 'returned', 'rejected'],
   returned: ['submitted'],
   approved_internal: ['signed'],
@@ -26,6 +26,12 @@ export const VARIATION_TERMINAL_STATUSES = [
   'superseded',
   'closed',
 ];
+
+/**
+ * Actions managed by the workflow engine when a workflow instance is active.
+ * Blocked at the backend and hidden from the UI.
+ */
+export const VARIATION_WORKFLOW_MANAGED_ACTIONS = ['review', 'approve', 'reject', 'return'];
 
 export function getVariationTransitions(
   subtype: 'vo' | 'change_order',

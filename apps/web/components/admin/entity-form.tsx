@@ -32,6 +32,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+import { EntityWorkflowDefaults } from './entity-workflow-defaults';
 
 // ---------------------------------------------------------------------------
 // Entity types
@@ -161,7 +162,7 @@ export function CreateEntityDialog({
                 <SelectItem value="none">No parent</SelectItem>
                 {entities.map((e) => (
                   <SelectItem key={e.id} value={e.id}>
-                    {e.code} - {e.name}
+                    {e.name} <span className="text-muted-foreground">({e.code})</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -199,6 +200,7 @@ type EntityDetailSheetProps = {
     parentEntityId: string | null;
     parent: EntityBasic | null;
     children: EntityBasic[];
+    metadataJson?: Record<string, unknown> | null;
   } | null;
 };
 
@@ -253,7 +255,7 @@ export function EntityDetailSheet({
               <p className="text-sm font-medium mb-2">Parent</p>
               {entity.parent ? (
                 <p className="text-sm text-muted-foreground">
-                  {entity.parent.code} - {entity.parent.name}
+                  {entity.parent.name} <span className="font-mono text-xs">({entity.parent.code})</span>
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">No parent (root entity)</p>
@@ -271,12 +273,25 @@ export function EntityDetailSheet({
                 <ul className="space-y-1">
                   {entity.children.map((child) => (
                     <li key={child.id} className="text-sm text-muted-foreground">
-                      {child.code} - {child.name}
+                      {child.name} <span className="font-mono text-xs">({child.code})</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
+
+            <Separator />
+
+            {/* Workflow template defaults */}
+            {entity.status === 'active' && (
+              <EntityWorkflowDefaults
+                entityId={entity.id}
+                entityCode={entity.code}
+                metadata={
+                  (entity.metadataJson as Record<string, unknown>) ?? null
+                }
+              />
+            )}
 
             <Separator />
 

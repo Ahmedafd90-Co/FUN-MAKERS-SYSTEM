@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Toaster } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
 
@@ -162,8 +161,6 @@ export function DocumentViewer({ projectId, documentId }: DocumentViewerProps) {
 
   return (
     <>
-      <Toaster position="top-right" />
-
       {/* Back link */}
       <Link
         href={`/projects/${projectId}`}

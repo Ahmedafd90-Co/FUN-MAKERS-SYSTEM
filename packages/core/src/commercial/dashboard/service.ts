@@ -6,7 +6,8 @@ import type { IpaStatus, IpcStatus, TaxInvoiceStatus, VariationStatus, CostPropo
 
 const IPA_APPROVED_PLUS = ['approved_internal', 'signed', 'issued', 'superseded', 'closed'];
 const IPC_SIGNED_PLUS = ['signed', 'issued', 'superseded', 'closed'];
-const TI_ISSUED_PLUS = ['issued', 'submitted', 'partially_collected', 'collected', 'overdue', 'cancelled', 'superseded'];
+// Cancelled = void (no real invoiced value). Superseded = replaced (would double-count).
+const TI_ISSUED_PLUS = ['issued', 'submitted', 'partially_collected', 'collected', 'overdue'];
 const VAR_APPROVED_PLUS = ['approved_internal', 'signed', 'issued', 'client_pending', 'client_approved', 'client_rejected', 'superseded', 'closed'];
 const CP_APPROVED_PLUS = ['approved_internal', 'issued', 'linked_to_variation', 'superseded', 'closed'];
 
@@ -54,6 +55,8 @@ function computeVariance(submitted: string, approved: string) {
 
 export async function getCommercialDashboard(projectId: string) {
   const [
+    // Project metadata
+    project,
     // Register summary groupBy queries
     ipaByStatus,
     ipcByStatus,
@@ -74,6 +77,11 @@ export async function getCommercialDashboard(projectId: string) {
     // Recent activity
     recentActivity,
   ] = await Promise.all([
+    // --- Project currency ---
+    prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { currencyCode: true },
+    }),
     // --- Register summary ---
     prisma.ipa.groupBy({
       by: ['status'],
@@ -133,16 +141,19 @@ export async function getCommercialDashboard(projectId: string) {
       where: { projectId, status: { in: VAR_APPROVED_PLUS as VariationStatus[] } },
       _sum: { costImpact: true },
     }),
+    // Status-gated: only count approved amounts from records still in approved+ statuses.
+    // A variation that was rejected after having approvedCostImpact set must not count.
     prisma.variation.aggregate({
-      where: { projectId, approvedCostImpact: { not: null } },
+      where: { projectId, status: { in: VAR_APPROVED_PLUS as VariationStatus[] }, approvedCostImpact: { not: null } },
       _sum: { approvedCostImpact: true },
     }),
     prisma.costProposal.aggregate({
       where: { projectId, status: { in: CP_APPROVED_PLUS as CostProposalStatus[] } },
       _sum: { estimatedCost: true },
     }),
+    // Status-gated: same rationale as variation above.
     prisma.costProposal.aggregate({
-      where: { projectId, approvedCost: { not: null } },
+      where: { projectId, status: { in: CP_APPROVED_PLUS as CostProposalStatus[] }, approvedCost: { not: null } },
       _sum: { approvedCost: true },
     }),
 
@@ -188,6 +199,7 @@ export async function getCommercialDashboard(projectId: string) {
   const cpVar = computeVariance(totalCpEstimated, totalCpApproved);
 
   return {
+    projectCurrency: project.currencyCode,
     registerSummary: {
       ipa: ipaSummary,
       ipc: ipcSummary,

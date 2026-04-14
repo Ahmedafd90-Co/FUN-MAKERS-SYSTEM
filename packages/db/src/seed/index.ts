@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { cleanTestData } from './clean-test-data';
 import { seedCountries } from './countries';
 import { seedCurrencies } from './currencies';
 import { seedAppSettings } from './app-settings';
@@ -20,11 +21,16 @@ import { seedProcurementRolePermissions } from './procurement-role-permissions';
 import { seedProcurementWorkflowTemplates } from './procurement-workflow-templates';
 import { seedProcurementNotificationTemplates } from './procurement-notification-templates';
 import { seedProcurementCategories } from './procurement-categories';
+import { seedCommercialDemoData } from './commercial-demo-data';
+import { seedBudgetCategories } from './budget-categories';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Seeding database...');
+
+  // Clean orphaned test data before seeding demo records
+  await cleanTestData(prisma);
 
   // Order matters: no-FK tables first, then FK-dependent tables
   await seedCountries(prisma);
@@ -48,6 +54,8 @@ async function main() {
   await seedProcurementWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);
   await seedProcurementCategories(prisma);
+  await seedBudgetCategories(prisma);
+  await seedCommercialDemoData(prisma);
 
   console.log('✅ Seeding complete.');
 }

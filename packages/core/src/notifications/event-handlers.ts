@@ -20,6 +20,7 @@ import * as workflowEvents from '../workflow/events';
 import type { WorkflowEventPayload } from '@fmksa/contracts';
 import { notify } from './service';
 import { resolveApprovers } from '../workflow/approver-resolution';
+import { registerConvergenceHandlers } from '../workflow/convergence-handlers';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -262,14 +263,23 @@ export async function notifyPostingException(
 // Registration
 // ---------------------------------------------------------------------------
 
+let notificationHandlersRegistered = false;
+
 /**
  * Register all workflow notification handlers on the event bus.
  *
- * Call once during application initialization (e.g. in `apps/api/src/main.ts`).
- * Idempotent — re-registering adds duplicate handlers. Call
- * `workflowEvents.clearHandlers()` before calling this in tests.
+ * Call once during application initialization.
+ * Idempotent — safe to call multiple times (e.g. Next.js HMR re-evaluation).
+ * Call `workflowEvents.clearHandlers()` before calling this in tests.
  */
 export function registerWorkflowNotificationHandlers(): void {
+  if (notificationHandlersRegistered) return;
+  notificationHandlersRegistered = true;
+
+  // Convergence handlers FIRST — record status must be synced before
+  // notifications reference the record. (Event bus executes in registration order.)
+  registerConvergenceHandlers();
+
   workflowEvents.on('workflow.stepApproved', handleStepApproved);
   workflowEvents.on('workflow.approved', handleWorkflowApproved);
   workflowEvents.on('workflow.rejected', handleWorkflowRejected);

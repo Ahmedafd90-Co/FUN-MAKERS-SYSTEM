@@ -88,7 +88,7 @@ beforeAll(async () => {
 
   // Create a template
   templateCode = `INST-TPL-${ts}`;
-  await workflowTemplateService.createTemplate({
+  const templateResult = await workflowTemplateService.createTemplate({
     code: templateCode,
     name: 'Instance Test Template',
     recordType: 'test_record',
@@ -109,6 +109,7 @@ beforeAll(async () => {
     ],
     createdBy: testUser.id,
   });
+  await workflowTemplateService.activateTemplate(templateResult.id, testUser.id);
 });
 
 beforeEach(() => {
@@ -256,7 +257,7 @@ describe('workflowInstanceService', () => {
     it('returns null SLA info for completed instances', async () => {
       // Create a single-step template for this test
       const singleCode = `SLA-SINGLE-${ts}`;
-      await workflowTemplateService.createTemplate({
+      const singleResult = await workflowTemplateService.createTemplate({
         code: singleCode,
         name: 'Single Step',
         recordType: 'test_record',
@@ -270,6 +271,7 @@ describe('workflowInstanceService', () => {
         ],
         createdBy: testUser.id,
       });
+      await workflowTemplateService.activateTemplate(singleResult.id, testUser.id);
 
       const instance = await workflowInstanceService.startInstance({
         templateCode: singleCode,

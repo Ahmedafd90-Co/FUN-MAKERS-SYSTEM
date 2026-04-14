@@ -23,6 +23,31 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
       deleteMany: vi.fn().mockResolvedValue({}),
       upsert: vi.fn(),
     },
+    quotation: {
+      findUniqueOrThrow: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    // Used by resolveTemplateCode (workflow bridge)
+    projectSetting: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    project: {
+      findUnique: vi.fn().mockResolvedValue({ entityId: 'entity-1' }),
+    },
+    entity: {
+      findUnique: vi.fn().mockResolvedValue({ metadataJson: null }),
+    },
+    workflowTemplate: {
+      findFirst: vi.fn().mockResolvedValue({ code: 'rfq_standard' }),
+    },
+    workflowInstance: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 'wf-inst-1' }),
+    },
+    workflowAction: {
+      create: vi.fn().mockResolvedValue({}),
+    },
   };
   mockPrisma.$transaction = vi.fn().mockImplementation((cbOrArr: any) => {
     if (typeof cbOrArr === 'function') return cbOrArr(mockPrisma);
@@ -42,6 +67,17 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
 vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace }));
 vi.mock('../../src/audit/service', () => ({
   auditService: { log: (...args: unknown[]) => mockAuditLog(...args) },
+}));
+// Mock workflow module — workflow start is tested separately; RFQ unit tests
+// only care about the RFQ status transition, not the downstream workflow.
+vi.mock('../../src/workflow', () => ({
+  workflowInstanceService: {
+    startInstance: vi.fn().mockResolvedValue({ id: 'wf-mock' }),
+    getInstance: vi.fn().mockResolvedValue(null),
+  },
+  resolveTemplateCode: vi.fn().mockResolvedValue('rfq_standard'),
+  TemplateNotActiveError: class extends Error { override name = 'TemplateNotActiveError'; },
+  DuplicateInstanceError: class extends Error { override name = 'DuplicateInstanceError'; },
 }));
 
 // ---------------------------------------------------------------------------
@@ -216,14 +252,67 @@ describe('RFQ Service', () => {
     expect(result.status).toBe('responses_received');
   });
 
-  it('transitions evaluation -> awarded (award)', async () => {
+  it('transitions evaluation -> awarded (award) with quotationId', async () => {
     const existing = fakeRfq({ status: 'evaluation' });
     mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
+    mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue({
+      id: 'q1',
+      rfqId: 'rfq1',
+      status: 'shortlisted',
+    });
+    mockPrisma.quotation.update.mockResolvedValue({ id: 'q1', status: 'awarded' });
+    mockPrisma.quotation.updateMany.mockResolvedValue({ count: 2 });
     const updated = fakeRfq({ status: 'awarded' });
     mockPrisma.rFQ.update.mockResolvedValue(updated);
 
-    const result = await transitionRfq('rfq1', 'award', ACTOR);
+    const result = await transitionRfq('rfq1', 'award', ACTOR, undefined, undefined, 'q1');
     expect(result.status).toBe('awarded');
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'q1' }, data: { status: 'awarded' } }),
+    );
+    expect(mockPrisma.quotation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ rfqId: 'rfq1', id: { not: 'q1' } }),
+        data: { status: 'rejected' },
+      }),
+    );
+  });
+
+  it('rejects award without quotationId', async () => {
+    const existing = fakeRfq({ status: 'evaluation' });
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
+
+    await expect(transitionRfq('rfq1', 'award', ACTOR)).rejects.toThrow(
+      /quotationId/,
+    );
+  });
+
+  it('rejects award of quotation from wrong RFQ', async () => {
+    const existing = fakeRfq({ status: 'evaluation' });
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
+    mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue({
+      id: 'q1',
+      rfqId: 'other-rfq',
+      status: 'shortlisted',
+    });
+
+    await expect(transitionRfq('rfq1', 'award', ACTOR, undefined, undefined, 'q1')).rejects.toThrow(
+      /does not belong/,
+    );
+  });
+
+  it('rejects award of non-shortlisted quotation', async () => {
+    const existing = fakeRfq({ status: 'evaluation' });
+    mockPrisma.rFQ.findUniqueOrThrow.mockResolvedValue(existing);
+    mockPrisma.quotation.findUniqueOrThrow.mockResolvedValue({
+      id: 'q1',
+      rfqId: 'rfq1',
+      status: 'received',
+    });
+
+    await expect(transitionRfq('rfq1', 'award', ACTOR, undefined, undefined, 'q1')).rejects.toThrow(
+      /only shortlisted/,
+    );
   });
 
   it('transitions evaluation -> cancelled (cancel)', async () => {

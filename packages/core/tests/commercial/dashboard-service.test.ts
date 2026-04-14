@@ -9,9 +9,19 @@ import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks
 describe('Dashboard Service', () => {
   let testProject: { id: string };
   const ts = Date.now();
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate all commercial workflow templates so manual transitions work (legacy path)
+    const templates = await prisma.workflowTemplate.findMany({
+      where: { recordType: { in: ['ipa', 'ipc', 'variation'] }, isActive: true },
+    });
+    for (const t of templates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-DASH-${ts}`, name: 'Dashboard Test Entity', type: 'parent', status: 'active' },

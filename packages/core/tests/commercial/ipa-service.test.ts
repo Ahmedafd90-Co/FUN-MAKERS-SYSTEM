@@ -6,9 +6,20 @@ import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks
 describe('IPA Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
+  /** IDs of ipa_standard templates deactivated for this test (legacy manual path) */
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate IPA workflow templates so manual transitions work (legacy path)
+    const ipaTemplates = await prisma.workflowTemplate.findMany({
+      where: { recordType: 'ipa', isActive: true },
+    });
+    for (const t of ipaTemplates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-IPA-${ts}`, name: 'IPA Test Entity', type: 'parent', status: 'active' },

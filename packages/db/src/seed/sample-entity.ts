@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 export async function seedSampleEntity(prisma: PrismaClient) {
   console.log('  Seeding sample entities...');
 
-  // Parent entity
+  // Parent holding company
   const parent = await prisma.entity.upsert({
     where: { code: 'PICOPLAY-KSA' },
     create: {
@@ -20,7 +20,7 @@ export async function seedSampleEntity(prisma: PrismaClient) {
   });
 
   // Operating subsidiary
-  await prisma.entity.upsert({
+  const ops = await prisma.entity.upsert({
     where: { code: 'FMKSA-OPS' },
     create: {
       code: 'FMKSA-OPS',
@@ -37,5 +37,41 @@ export async function seedSampleEntity(prisma: PrismaClient) {
     },
   });
 
-  console.log('  ✓ 2 entities seeded (PICOPLAY-KSA, FMKSA-OPS)');
+  // Riyadh branch
+  await prisma.entity.upsert({
+    where: { code: 'FMKSA-RUH' },
+    create: {
+      code: 'FMKSA-RUH',
+      name: 'Fun Makers Riyadh',
+      type: 'branch',
+      parentEntityId: ops.id,
+      status: 'active',
+    },
+    update: {
+      name: 'Fun Makers Riyadh',
+      type: 'branch',
+      parentEntityId: ops.id,
+      status: 'active',
+    },
+  });
+
+  // Jeddah branch
+  await prisma.entity.upsert({
+    where: { code: 'FMKSA-JED' },
+    create: {
+      code: 'FMKSA-JED',
+      name: 'Fun Makers Jeddah',
+      type: 'branch',
+      parentEntityId: ops.id,
+      status: 'active',
+    },
+    update: {
+      name: 'Fun Makers Jeddah',
+      type: 'branch',
+      parentEntityId: ops.id,
+      status: 'active',
+    },
+  });
+
+  console.log('  ✓ 4 entities seeded (PICOPLAY-KSA, FMKSA-OPS, FMKSA-RUH, FMKSA-JED)');
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { createIpc, transitionIpc, getIpc, listIpcs, deleteIpc } from '../../src/commercial/ipc/service';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
@@ -8,9 +8,20 @@ describe('IPC Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   let approvedIpa: { id: string };
   const ts = Date.now();
+  /** IDs of workflow templates deactivated for this test (legacy manual path) */
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate IPA + IPC workflow templates so manual transitions work (legacy path)
+    const templates = await prisma.workflowTemplate.findMany({
+      where: { recordType: { in: ['ipa', 'ipc'] }, isActive: true },
+    });
+    for (const t of templates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-IPC-${ts}`, name: 'IPC Test Entity', type: 'parent', status: 'active' },
@@ -46,6 +57,13 @@ describe('IPC Service', () => {
     await transitionIpa(ipa.id, 'review', 'test-user');
     await transitionIpa(ipa.id, 'approve', 'test-user');
     approvedIpa = { id: ipa.id };
+  });
+
+  afterAll(async () => {
+    // Reactivate templates for other tests
+    for (const id of deactivatedTemplateIds) {
+      await prisma.workflowTemplate.update({ where: { id }, data: { isActive: true } });
+    }
   });
 
   const makeInput = (overrides = {}) => ({

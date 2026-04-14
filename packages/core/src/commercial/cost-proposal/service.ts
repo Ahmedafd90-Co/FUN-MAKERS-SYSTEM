@@ -228,7 +228,10 @@ export async function transitionCostProposal(
 export async function getCostProposal(id: string, projectId: string) {
   const record = await prisma.costProposal.findUniqueOrThrow({
     where: { id },
-    include: { project: true },
+    include: {
+      project: true,
+      variation: { select: { id: true, referenceNumber: true, subtype: true } },
+    },
   });
   assertProjectScope(record, projectId, 'CostProposal', id);
   return record;

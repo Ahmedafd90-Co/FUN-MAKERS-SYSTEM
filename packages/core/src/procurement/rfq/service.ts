@@ -7,7 +7,8 @@ import { prisma, Prisma } from '@fmksa/db';
 import type { RfqStatus } from '@fmksa/db';
 import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
-import { RFQ_TRANSITIONS, RFQ_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
+import { workflowInstanceService, TemplateNotActiveError, DuplicateInstanceError, resolveTemplateCode } from '../../workflow';
+import { RFQ_TRANSITIONS, RFQ_TERMINAL_STATUSES, ACTION_TO_STATUS, RFQ_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { nextRfqNumber, nextRfqReferenceNumber, EDITABLE_STATUSES } from './validation';
 import { assertProjectScope } from '../../scope-binding';
 
@@ -107,12 +108,19 @@ export async function updateRfq(input: UpdateRfqInput, actorUserId: string, proj
   const { id, items, invitedVendorIds, ...updateFields } = input;
   const data: Record<string, unknown> = {};
 
+  // Map contract field names to Prisma model fields.
+  // Ghost fields (deliveryDate, deliveryLocation, paymentTerms, notes) are
+  // excluded — they have no Prisma column and would cause a runtime error.
+  const ALLOWED_UPDATE_FIELDS = new Set([
+    'title', 'description', 'categoryId', 'currency',
+    'deadline', 'estimatedBudget',
+  ]);
+
   for (const [key, value] of Object.entries(updateFields)) {
     if (value === undefined) continue;
+    if (!ALLOWED_UPDATE_FIELDS.has(key)) continue;
     if (key === 'deadline') {
       data.requiredByDate = new Date(value as string);
-    } else if (key === 'deliveryDate') {
-      data[key] = value ? new Date(value as string) : null;
     } else {
       data[key] = value;
     }
@@ -170,6 +178,8 @@ export async function transitionRfq(
   actorUserId: string,
   comment?: string,
   projectId?: string,
+  /** Required for 'award' action — the winning quotation to award. */
+  quotationId?: string,
 ) {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
@@ -193,6 +203,23 @@ export async function transitionRfq(
     throw new Error(
       `Invalid RFQ transition: '${existing.status}' -> '${newStatus}'. Allowed: [${(allowed ?? []).join(', ')}]`,
     );
+  }
+
+  // Workflow guard: block manual approval-phase actions when workflow is active.
+  // These actions are driven by the workflow step service, not direct transitions.
+  if (RFQ_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'rfq',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this RFQ — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
   }
 
   // On issued transition: assign referenceNumber in a transaction
@@ -227,6 +254,74 @@ export async function transitionRfq(
     return updated;
   }
 
+  // ---------------------------------------------------------------------------
+  // Award integrity invariant: RFQ award requires a quotationId.
+  // In one atomic transaction: award the winning quotation, reject all
+  // non-terminal siblings, and set the RFQ to awarded.
+  // Quotation cannot be awarded standalone — this is the only entry point.
+  // RFQ_AWARDED remains informational only (no financial posting).
+  // ---------------------------------------------------------------------------
+  if (newStatus === 'awarded') {
+    if (!quotationId) {
+      throw new Error('RFQ award requires a quotationId — the winning quotation must be specified.');
+    }
+
+    const winner = await prisma.quotation.findUniqueOrThrow({
+      where: { id: quotationId },
+    });
+
+    if (winner.rfqId !== id) {
+      throw new Error(`Quotation '${quotationId}' does not belong to RFQ '${id}'.`);
+    }
+
+    if (winner.status !== 'shortlisted') {
+      throw new Error(
+        `Quotation '${quotationId}' is in status '${winner.status}' — only shortlisted quotations can be awarded.`,
+      );
+    }
+
+    const QUOTATION_TERMINAL = ['awarded', 'rejected', 'expired'];
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Award the winning quotation
+      await (tx as any).quotation.update({
+        where: { id: quotationId },
+        data: { status: 'awarded' },
+      });
+
+      // 2. Reject all non-terminal sibling quotations
+      await (tx as any).quotation.updateMany({
+        where: {
+          rfqId: id,
+          id: { not: quotationId },
+          status: { notIn: QUOTATION_TERMINAL },
+        },
+        data: { status: 'rejected' },
+      });
+
+      // 3. Set RFQ to awarded
+      return (tx as any).rFQ.update({
+        where: { id },
+        data: { status: 'awarded' as RfqStatus },
+        include: { project: true },
+      });
+    });
+
+    await auditService.log({
+      actorUserId,
+      actorSource: 'user',
+      action: 'rfq.transition.award',
+      resourceType: 'rfq',
+      resourceId: id,
+      projectId: existing.projectId,
+      beforeJson: existing as any,
+      afterJson: { ...updated, awardedQuotationId: quotationId } as any,
+      reason: comment ?? null,
+    });
+
+    return updated;
+  }
+
   // Simple status update
   const updated = await prisma.rFQ.update({
     where: { id },
@@ -245,6 +340,37 @@ export async function transitionRfq(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // After the status update succeeds, try to start a workflow instance.
+  // If no active template exists for 'rfq', this is graceful — the transition
+  // still succeeds. Workflows are optional infrastructure.
+  if (newStatus === 'under_review') {
+    try {
+      const templateCode = await resolveTemplateCode('rfq', existing.projectId);
+      if (templateCode) {
+        await workflowInstanceService.startInstance({
+          templateCode,
+          recordType: 'rfq',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+        });
+      } else {
+        console.warn(`[rfq-workflow] No workflow template configured for RFQ in project ${existing.projectId}`);
+      }
+    } catch (err) {
+      // Graceful: if no template exists or duplicate instance, log but don't fail
+      // the transition. The record status is the source of truth.
+      if (
+        err instanceof TemplateNotActiveError ||
+        err instanceof DuplicateInstanceError
+      ) {
+        console.warn(`[rfq-workflow] Skipped workflow start for RFQ ${id}: ${(err as Error).message}`);
+      } else {
+        throw err; // Unexpected errors should still propagate
+      }
+    }
+  }
 
   return updated;
 }

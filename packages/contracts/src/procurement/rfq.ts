@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+/**
+ * RFQ contract schemas — aligned with Prisma model.
+ *
+ * Ghost fields removed (deliveryDate, deliveryLocation, paymentTerms, notes,
+ * items[].notes) — these have no Prisma column and were silently dropped on
+ * create or would cause errors on update. Stabilization Slice A.
+ */
 export const CreateRfqInputSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().min(1),
@@ -7,10 +14,6 @@ export const CreateRfqInputSchema = z.object({
   categoryId: z.string().uuid().optional(),
   currency: z.string().min(1),
   deadline: z.string().datetime(),
-  deliveryDate: z.string().datetime().optional(),
-  deliveryLocation: z.string().optional(),
-  paymentTerms: z.string().optional(),
-  notes: z.string().optional(),
   estimatedBudget: z.number().positive().optional(),
   items: z.array(z.object({
     itemCatalogId: z.string().uuid().optional(),
@@ -18,7 +21,6 @@ export const CreateRfqInputSchema = z.object({
     unit: z.string().min(1),
     quantity: z.number().positive(),
     estimatedUnitPrice: z.number().positive().optional(),
-    notes: z.string().optional(),
   })).optional(),
   invitedVendorIds: z.array(z.string().uuid()).optional(),
 });
@@ -31,17 +33,13 @@ export const UpdateRfqInputSchema = z.object({
   categoryId: z.string().uuid().nullable().optional(),
   currency: z.string().min(1).optional(),
   deadline: z.string().datetime().optional(),
-  deliveryDate: z.string().datetime().nullable().optional(),
-  deliveryLocation: z.string().nullable().optional(),
-  paymentTerms: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  estimatedBudget: z.number().positive().nullable().optional(),
   items: z.array(z.object({
     itemCatalogId: z.string().uuid().optional(),
     itemDescription: z.string().min(1),
     unit: z.string().min(1),
     quantity: z.number().positive(),
     estimatedUnitPrice: z.number().positive().optional(),
-    notes: z.string().optional(),
   })).optional(),
   invitedVendorIds: z.array(z.string().uuid()).optional(),
 });

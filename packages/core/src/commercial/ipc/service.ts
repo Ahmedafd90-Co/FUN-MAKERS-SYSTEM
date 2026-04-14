@@ -2,9 +2,10 @@ import { prisma } from '@fmksa/db';
 import type { IpcStatus } from '@fmksa/db';
 import type { CreateIpcInput, UpdateIpcInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { workflowInstanceService, TemplateNotActiveError, DuplicateInstanceError, resolveTemplate } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
-import { IPC_TRANSITIONS, IPC_TERMINAL_STATUSES } from './transitions';
+import { IPC_TRANSITIONS, IPC_TERMINAL_STATUSES, IPC_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -160,6 +161,23 @@ export async function transitionIpc(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when workflow is active.
+  // These actions are driven by the workflow step service, not direct transitions.
+  if (IPC_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'ipc',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this IPC — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Transitions that require a transaction (posting or ref number)
   const needsTransaction = newStatus === 'signed' || newStatus === 'issued';
 
@@ -240,6 +258,36 @@ export async function transitionIpc(
       afterJson: updated as any,
       reason: comment ?? null,
     });
+
+    // After the status update succeeds, try to start a workflow instance.
+    // If no active template exists for 'ipc', this is graceful — the transition
+    // still succeeds. Workflows are optional infrastructure.
+    if (newStatus === 'submitted') {
+      try {
+        const resolution = await resolveTemplate('ipc', existing.projectId);
+        if (resolution) {
+          await workflowInstanceService.startInstance({
+            templateCode: resolution.code,
+            recordType: 'ipc',
+            recordId: id,
+            projectId: existing.projectId,
+            startedBy: actorUserId,
+            resolutionSource: resolution.source,
+          });
+        } else {
+          console.warn(`[ipc-workflow] No workflow template configured for IPC in project ${existing.projectId}`);
+        }
+      } catch (err) {
+        if (
+          err instanceof TemplateNotActiveError ||
+          err instanceof DuplicateInstanceError
+        ) {
+          console.warn(`[ipc-workflow] Skipped workflow start for IPC ${id}: ${(err as Error).message}`);
+        } else {
+          throw err;
+        }
+      }
+    }
   }
 
   return updated;
@@ -252,7 +300,10 @@ export async function transitionIpc(
 export async function getIpc(id: string, projectId: string) {
   const record = await prisma.ipc.findUniqueOrThrow({
     where: { id },
-    include: { project: true },
+    include: {
+      project: true,
+      ipa: { select: { id: true, referenceNumber: true } },
+    },
   });
   assertProjectScope(record, projectId, 'IPC', id);
   return record;
@@ -296,7 +347,10 @@ export async function listIpcs(input: ListFilterInput) {
       orderBy,
       skip: input.skip ?? 0,
       take: input.take ?? 20,
-      include: { project: true },
+      include: {
+        project: true,
+        ipa: { select: { id: true, referenceNumber: true } },
+      },
     }),
     prisma.ipc.count({ where }),
   ]);

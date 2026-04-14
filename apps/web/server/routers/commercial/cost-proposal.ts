@@ -21,6 +21,7 @@ import {
   deleteCostProposal,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { getTransitionPermission, hasPerm } from './transition-permissions';
 
 // ---------------------------------------------------------------------------
 // Error mapping helper
@@ -53,7 +54,7 @@ export const costProposalRouter = router({
   list: projectProcedure
     .input(ListFilterInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('cost_proposal.list'))
+      if (!ctx.user.permissions.includes('cost_proposal.view'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -98,7 +99,7 @@ export const costProposalRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('cost_proposal.update'))
+      if (!ctx.user.permissions.includes('cost_proposal.edit'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -129,10 +130,11 @@ export const costProposalRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('cost_proposal.transition'))
+      const requiredPerm = getTransitionPermission('cost_proposal', input.action);
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Insufficient permissions.',
+          message: `Insufficient permissions${requiredPerm ? ` (requires ${requiredPerm})` : ''}.`,
         });
       try {
         // Strip undefined values for exactOptionalPropertyTypes compat

@@ -21,7 +21,7 @@ import {
   inviteVendors,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-import { mapError, getTransitionPermission } from './_helpers';
+import { mapError, getTransitionPermission, hasPerm } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -78,13 +78,18 @@ export const rfqRouter = router({
       id: z.string().uuid(),
       action: z.string(),
       comment: z.string().optional(),
+      /** Required for 'award' action — the winning quotation to award. */
+      quotationId: z.string().uuid().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const requiredPerm = getTransitionPermission('rfq', input.action);
-      if (!ctx.user.permissions.includes(requiredPerm))
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await transitionRfq(input.id, input.action, ctx.user.id, input.comment, input.projectId);
+        return await transitionRfq(
+          input.id, input.action, ctx.user.id,
+          input.comment, input.projectId, input.quotationId,
+        );
       } catch (err) {
         mapError(err);
       }

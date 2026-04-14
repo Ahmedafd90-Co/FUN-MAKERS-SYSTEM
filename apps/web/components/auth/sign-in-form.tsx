@@ -4,10 +4,8 @@ import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from '@fmksa/ui/components/card';
 import { Input } from '@fmksa/ui/components/input';
 import { Label } from '@fmksa/ui/components/label';
@@ -81,32 +79,38 @@ export function SignInForm() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border bg-card">
-      <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl font-bold tracking-tight">
-          Pico Play Fun Makers KSA
-        </CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+    <Card className="w-full max-w-sm border-border bg-card shadow-lg">
+      <CardHeader className="space-y-3 text-center pb-2">
+        {/* Brand accent line */}
+        <div className="mx-auto h-1 w-12 rounded-full bg-primary" />
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Fun Makers KSA
+          </h1>
+          <p className="text-sm text-muted-foreground leading-snug">
+            Project Operations &amp; Commercial Workflow Platform
+          </p>
+        </div>
       </CardHeader>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-2">
           {serverError && (
             <div
               role="alert"
-              className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+              className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive"
             >
               {serverError}
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="you@funmakers.sa"
               {...register('email')}
             />
             {errors.email && (
@@ -114,7 +118,7 @@ export function SignInForm() {
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
             <Input
               id="password"
@@ -131,7 +135,7 @@ export function SignInForm() {
           </div>
         </CardContent>
 
-        <CardFooter className="flex flex-col space-y-4">
+        <CardFooter className="flex flex-col gap-3 pt-2">
           <Button
             type="submit"
             className="w-full"
@@ -149,7 +153,7 @@ export function SignInForm() {
 
           <Link
             href="/forgot-password"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
           >
             Forgot your password?
           </Link>

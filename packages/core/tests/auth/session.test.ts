@@ -24,6 +24,7 @@ beforeAll(async () => {
     await (prisma as any).$executeRaw`DELETE FROM user_sessions WHERE user_id = ${existingUser.id}`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).$executeRaw`TRUNCATE TABLE audit_logs CASCADE`;
+    await prisma.notification.deleteMany({ where: { userId: existingUser.id } });
     await prisma.userRole.deleteMany({ where: { userId: existingUser.id } });
     await prisma.user.delete({ where: { id: existingUser.id } });
   }

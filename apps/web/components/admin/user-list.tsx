@@ -40,15 +40,6 @@ export function UserList({ onCreateClick }: UserListProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
-  // Fetch all users via the me endpoint — in a full implementation this would
-  // be a dedicated admin.users.list endpoint. For Phase 1.4 we use Prisma
-  // directly via a server component or a new tRPC route. Since we don't want
-  // to modify backend, we simulate with the current auth.me plus a client-side
-  // list that the admin page will hydrate via server props.
-  //
-  // For now, the parent page will pass users as props or we query them.
-  // We'll use a placeholder tRPC query pattern.
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -111,7 +102,7 @@ export function UserList({ onCreateClick }: UserListProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Table body — uses tRPC to fetch user data
+// Table body — uses real admin tRPC query
 // ---------------------------------------------------------------------------
 
 function UserTableBody({
@@ -121,14 +112,12 @@ function UserTableBody({
   search: string;
   statusFilter: string;
 }) {
-  // Use the auth.me query to get the current user info for now.
-  // In a real admin screen, we'd have a dedicated users.list endpoint.
-  // The page.tsx server component will fetch users from Prisma and pass them.
-  const { data: me } = trpc.auth.me.useQuery();
+  const { data: users, isLoading } = trpc.adminUsers.userList.useQuery({
+    search: search || undefined,
+    status: statusFilter !== 'all' ? statusFilter as 'active' | 'inactive' | 'locked' : undefined,
+  });
 
-  // Placeholder: show the current user as the only row
-  // The actual page will use server-fetched data
-  if (!me) {
+  if (isLoading) {
     return (
       <tr>
         <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -138,18 +127,7 @@ function UserTableBody({
     );
   }
 
-  const users = [me]; // Placeholder — replaced by server data in page
-
-  const filtered = users.filter((u) => {
-    if (statusFilter !== 'all' && u.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-    }
-    return true;
-  });
-
-  if (filtered.length === 0) {
+  if (!users || users.length === 0) {
     return (
       <tr>
         <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -161,7 +139,7 @@ function UserTableBody({
 
   return (
     <>
-      {filtered.map((user) => (
+      {users.map((user) => (
         <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
           <td className="px-4 py-3">
             <Link
@@ -174,9 +152,11 @@ function UserTableBody({
           <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
           <td className="px-4 py-3">{statusBadge(user.status)}</td>
           <td className="px-4 py-3 text-muted-foreground">
-            {user.roles.length} {user.roles.length === 1 ? 'role' : 'roles'}
+            {user.userRoles?.length ?? 0} {(user.userRoles?.length ?? 0) === 1 ? 'role' : 'roles'}
           </td>
-          <td className="px-4 py-3 text-muted-foreground">-</td>
+          <td className="px-4 py-3 text-muted-foreground">
+            {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : '-'}
+          </td>
         </tr>
       ))}
     </>

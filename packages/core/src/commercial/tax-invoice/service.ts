@@ -1,6 +1,6 @@
 import { prisma } from '@fmksa/db';
 import type { TaxInvoiceStatus } from '@fmksa/db';
-import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, ListFilterInput } from '@fmksa/contracts';
+import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, TaxInvoiceListInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
@@ -263,7 +263,10 @@ export async function transitionTaxInvoice(
 export async function getTaxInvoice(id: string, projectId: string) {
   const record = await prisma.taxInvoice.findUniqueOrThrow({
     where: { id },
-    include: { project: true },
+    include: {
+      project: true,
+      ipc: { select: { id: true, referenceNumber: true } },
+    },
   });
   assertProjectScope(record, projectId, 'TaxInvoice', id);
   return record;
@@ -273,11 +276,17 @@ export async function getTaxInvoice(id: string, projectId: string) {
 // List (paginated + filters)
 // ---------------------------------------------------------------------------
 
-export async function listTaxInvoices(input: ListFilterInput) {
+export async function listTaxInvoices(input: TaxInvoiceListInput) {
   const where: Record<string, unknown> = { projectId: input.projectId };
 
   if (input.statusFilter && input.statusFilter.length > 0) {
     where.status = { in: input.statusFilter };
+  }
+
+  // Overdue drilldown filter — show only invoices with dueDate in the past.
+  // Used by the Overdue Receivable KPI drilldown (additionalFilters.overdue=true).
+  if (input.overdueOnly) {
+    where.dueDate = { lt: new Date() };
   }
 
   if (input.dateFrom || input.dateTo) {

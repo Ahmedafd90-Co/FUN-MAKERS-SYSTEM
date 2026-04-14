@@ -2,7 +2,8 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Pencil, Check, X, Loader2 } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -10,40 +11,16 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { Badge } from '@fmksa/ui/components/badge';
-import { Separator } from '@fmksa/ui/components/separator';
+import { Button } from '@fmksa/ui/components/button';
+import { Input } from '@fmksa/ui/components/input';
+import { Label } from '@fmksa/ui/components/label';
+import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <p className="text-sm mt-0.5">{value ?? '-'}</p>
-    </div>
-  );
-}
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 const SUBTYPE_LABELS: Record<string, string> = {
   letter: 'Letter',
@@ -52,12 +29,27 @@ const SUBTYPE_LABELS: Record<string, string> = {
   back_charge: 'Back Charge',
 };
 
-// Post-issuance tracking subtypes
 const POST_ISSUANCE_SUBTYPES = ['notice', 'claim', 'back_charge'];
+
+const CLAIM_SETTLEMENT_STATES = [
+  'under_evaluation',
+  'partially_accepted',
+  'accepted',
+  'disputed',
+];
+
+const BC_RECOVERY_STATES = [
+  'acknowledged',
+  'disputed',
+  'partially_recovered',
+  'recovered',
+];
 
 export default function CorrespondenceDetailPage() {
   const params = useParams<{ id: string; correspondenceId: string }>();
   const utils = trpc.useUtils();
+
+  const { data: me } = trpc.auth.me.useQuery();
 
   const { data, isLoading, error } =
     trpc.commercial.correspondence.get.useQuery({
@@ -68,8 +60,34 @@ export default function CorrespondenceDetailPage() {
   const transitionMut = trpc.commercial.correspondence.transition.useMutation({
     onSuccess: () => {
       utils.commercial.correspondence.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  const [editingSettlement, setEditingSettlement] = useState(false);
+  const [settlementAmount, setSettlementAmount] = useState('');
+  const [settlementDays, setSettlementDays] = useState('');
+
+  const settlementMut =
+    trpc.commercial.correspondence.updateSettlement.useMutation({
+      onSuccess: () => {
+        toast.success('Settlement values saved.');
+        utils.commercial.correspondence.get.invalidate();
+        setEditingSettlement(false);
+      },
+      onError: (err) => toast.error(err.message),
+    });
+
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'correspondence', recordId: params.correspondenceId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -89,190 +107,528 @@ export default function CorrespondenceDetailPage() {
 
   const isPostIssuance = POST_ISSUANCE_SUBTYPES.includes(data.subtype);
 
+  const canEditSettlement =
+    (data?.subtype === 'claim' &&
+      CLAIM_SETTLEMENT_STATES.includes(data?.status ?? '')) ||
+    (data?.subtype === 'back_charge' &&
+      BC_RECOVERY_STATES.includes(data?.status ?? ''));
+
+  function startEditingSettlement() {
+    if (!data) return;
+    setSettlementAmount(
+      data.settledAmount != null ? String(data.settledAmount) : '',
+    );
+    setSettlementDays(
+      data.settledTimeDays != null ? String(data.settledTimeDays) : '',
+    );
+    setEditingSettlement(true);
+  }
+
+  function saveSettlement() {
+    if (!data) return;
+    const amount = settlementAmount.trim()
+      ? parseFloat(settlementAmount)
+      : null;
+    const days = settlementDays.trim()
+      ? parseInt(settlementDays, 10)
+      : null;
+
+    if (amount !== null && (isNaN(amount) || amount < 0)) {
+      toast.error('Amount must be a non-negative number.');
+      return;
+    }
+    if (days !== null && (isNaN(days) || days < 0)) {
+      toast.error('Days must be a non-negative integer.');
+      return;
+    }
+
+    settlementMut.mutate({
+      projectId: params.id,
+      id: params.correspondenceId,
+      settledAmount: amount,
+      settledTimeDays: days,
+    });
+  }
+
+  const workflowLabel = workflowData
+    ? workflowData.status === 'approved'
+      ? 'Approved'
+      : workflowData.status === 'rejected'
+        ? 'Rejected'
+        : workflowData.status === 'returned'
+          ? 'Returned'
+          : 'In Progress'
+    : data.status === 'draft'
+      ? 'Not started'
+      : '—';
+
+  // Primary financial figure for the summary
+  const primaryAmount =
+    data.subtype === 'claim'
+      ? data.claimedAmount
+      : data.subtype === 'back_charge'
+        ? data.chargedAmount
+        : null;
+  const primaryAmountLabel =
+    data.subtype === 'claim'
+      ? 'Claimed'
+      : data.subtype === 'back_charge'
+        ? 'Charged'
+        : null;
+
   return (
-    <div className="space-y-6">
-      <Link
-        href={`/projects/${params.id}/commercial/correspondence`}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to Correspondence
-      </Link>
+    <>
+      <div className="space-y-4">
+        <Link
+          href={`/projects/${params.id}/commercial/correspondence`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Correspondence
+        </Link>
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">
-              {data.referenceNumber ?? 'Draft Correspondence'}
-            </h1>
-            <Badge variant="outline">
-              {SUBTYPE_LABELS[data.subtype] ?? data.subtype}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">{data.subject}</p>
-          <CommercialStatusBadge status={data.status} />
-        </div>
-        <TransitionActions
-          currentStatus={data.status}
-          recordFamily="correspondence"
-          permissions={['correspondence.transition']}
-          isLoading={transitionMut.isPending}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.correspondenceId,
-              action,
-              comment,
-            });
-          }}
-        />
-      </div>
-
-      <Separator />
-
-      {/* Header info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Correspondence Details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Recipient" value={data.recipientName} />
-          {data.recipientOrg && (
-            <Field label="Organisation" value={data.recipientOrg} />
-          )}
-          <Field
-            label="Created"
-            value={new Date(data.createdAt).toLocaleDateString()}
-          />
-          {data.currency && (
-            <Field label="Currency" value={data.currency} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Notice-specific fields */}
-      {data.subtype === 'notice' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Notice Details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {data.noticeType && (
-              <Field
-                label="Notice Type"
-                value={String(data.noticeType).replace(/_/g, ' ')}
-              />
-            )}
-            {data.contractClause && (
-              <Field label="Contract Clause" value={data.contractClause} />
-            )}
-            {data.responseDeadline && (
-              <Field
-                label="Response Deadline"
-                value={new Date(data.responseDeadline).toLocaleDateString()}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Claim-specific fields */}
-      {data.subtype === 'claim' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Claim Details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {data.claimType && (
-              <Field
-                label="Claim Type"
-                value={String(data.claimType).replace(/_/g, ' ')}
-              />
-            )}
-            {data.claimedAmount != null && (
-              <Field
-                label="Claimed Amount"
-                value={`${formatMoney(data.claimedAmount)} ${data.currency ?? ''}`}
-              />
-            )}
-            {data.claimedTimeDays != null && (
-              <Field
-                label="Claimed Time (days)"
-                value={String(data.claimedTimeDays)}
-              />
-            )}
-            {data.settledAmount != null && (
-              <Field
-                label="Settled Amount"
-                value={`${formatMoney(data.settledAmount)} ${data.currency ?? ''}`}
-              />
-            )}
-            {data.settledTimeDays != null && (
-              <Field
-                label="Settled Time (days)"
-                value={String(data.settledTimeDays)}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Back charge-specific fields */}
-      {data.subtype === 'back_charge' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Back Charge Details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {data.targetName && (
-              <Field label="Target" value={data.targetName} />
-            )}
-            {data.category && (
-              <Field
-                label="Category"
-                value={String(data.category).replace(/_/g, ' ')}
-              />
-            )}
-            {data.chargedAmount != null && (
-              <Field
-                label="Charged Amount"
-                value={`${formatMoney(data.chargedAmount)} ${data.currency ?? ''}`}
-              />
-            )}
-            {data.evidenceDescription && (
-              <Field
-                label="Evidence"
-                value={data.evidenceDescription}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Body */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Body</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm whitespace-pre-wrap">{data.body}</p>
-        </CardContent>
-      </Card>
-
-      {/* Post-issuance tracking note */}
-      {isPostIssuance && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Post-Issuance Tracking</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Current status:{' '}
+        {/* ── Record Header ── */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl font-semibold tracking-tight">
+                {data.referenceNumber ?? 'Draft Correspondence'}
+              </h1>
+              <Badge
+                variant={data.subtype === 'claim' || data.subtype === 'back_charge' ? 'default' : 'secondary'}
+                className="text-xs"
+              >
+                {SUBTYPE_LABELS[data.subtype] ?? data.subtype}
+              </Badge>
               <CommercialStatusBadge status={data.status} />
-            </p>
+            </div>
+            {data.subject && (
+              <p className="text-sm text-muted-foreground">{data.subject}</p>
+            )}
+            <WorkflowStatusHint
+              recordStatus={data.status}
+              hasActiveWorkflow={hasActiveWorkflow}
+              recordLabel="Correspondence"
+            />
+          </div>
+          <TransitionActions
+            currentStatus={data.status}
+            recordFamily="correspondence"
+            permissions={me?.permissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.correspondenceId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
+
+        {/* ── Summary Strip ── */}
+        <SummaryStrip>
+          <SummaryItem
+            label="Type"
+            value={SUBTYPE_LABELS[data.subtype] ?? data.subtype}
+          />
+          {primaryAmount != null && primaryAmountLabel && (
+            <SummaryItem
+              label={`${primaryAmountLabel} Amount`}
+              value={`${formatMoney(primaryAmount)} ${data.currency ?? ''}`}
+              emphasis
+            />
+          )}
+          <SummaryItem
+            label="Status"
+            value={<CommercialStatusBadge status={data.status} />}
+          />
+          <SummaryItem label="Workflow" value={workflowLabel} />
+          <SummaryItem label="Recipient" value={data.recipientName ?? '—'} />
+          {data.settledAmount != null && (
+            <SummaryItem
+              label="Settled"
+              value={`${formatMoney(data.settledAmount)} ${data.currency ?? ''}`}
+            />
+          )}
+        </SummaryStrip>
+
+        {/* ── Workflow ── */}
+        <WorkflowStatusCard
+          recordType="correspondence"
+          recordId={params.correspondenceId}
+        />
+
+        {/* ── Correspondence Details ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Correspondence Details</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <Field label="Recipient" value={data.recipientName} />
+            {data.recipientOrg && (
+              <Field label="Organisation" value={data.recipientOrg} />
+            )}
+            <Field
+              label="Created"
+              value={new Date(data.createdAt).toLocaleDateString()}
+            />
+            {data.currency && (
+              <Field label="Currency" value={data.currency} />
+            )}
           </CardContent>
         </Card>
-      )}
-    </div>
+
+        {/* ── Notice-specific fields ── */}
+        {data.subtype === 'notice' && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Notice Details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {data.noticeType && (
+                <Field
+                  label="Notice Type"
+                  value={String(data.noticeType).replace(/_/g, ' ')}
+                />
+              )}
+              {data.contractClause && (
+                <Field label="Contract Clause" value={data.contractClause} />
+              )}
+              {data.responseDeadline && (
+                <Field
+                  label="Response Deadline"
+                  value={new Date(data.responseDeadline).toLocaleDateString()}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Claim-specific fields ── */}
+        {data.subtype === 'claim' && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Claim Details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {data.claimType && (
+                <Field
+                  label="Claim Type"
+                  value={String(data.claimType).replace(/_/g, ' ')}
+                />
+              )}
+              {data.claimedAmount != null && (
+                <Field
+                  label="Claimed Amount"
+                  value={`${formatMoney(data.claimedAmount)} ${data.currency ?? ''}`}
+                />
+              )}
+              {data.claimedTimeDays != null && (
+                <Field
+                  label="Claimed Time (days)"
+                  value={String(data.claimedTimeDays)}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Claim settlement form (post-issuance) ── */}
+        {data.subtype === 'claim' && canEditSettlement && (
+          <Card>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm">Settlement Evaluation</CardTitle>
+              {!editingSettlement && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={startEditingSettlement}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {data.settledAmount != null ? 'Edit' : 'Enter Values'}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {editingSettlement ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="settled-amount">
+                        Settled Amount ({data.currency ?? 'SAR'})
+                      </Label>
+                      <Input
+                        id="settled-amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={settlementAmount}
+                        onChange={(e) => setSettlementAmount(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="settled-days">Settled Time (days)</Label>
+                      <Input
+                        id="settled-days"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={settlementDays}
+                        onChange={(e) => setSettlementDays(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={saveSettlement}
+                      disabled={settlementMut.isPending}
+                    >
+                      {settlementMut.isPending ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3 w-3 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingSettlement(false)}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <Field
+                    label="Settled Amount"
+                    value={
+                      data.settledAmount != null
+                        ? `${formatMoney(data.settledAmount)} ${data.currency ?? ''}`
+                        : 'Not yet entered'
+                    }
+                  />
+                  <Field
+                    label="Settled Time (days)"
+                    value={
+                      data.settledTimeDays != null
+                        ? String(data.settledTimeDays)
+                        : 'Not yet entered'
+                    }
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Claim settlement display (non-editable) ── */}
+        {data.subtype === 'claim' &&
+          !canEditSettlement &&
+          (data.settledAmount != null || data.settledTimeDays != null) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Settlement</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {data.settledAmount != null && (
+                  <Field
+                    label="Settled Amount"
+                    value={`${formatMoney(data.settledAmount)} ${data.currency ?? ''}`}
+                  />
+                )}
+                {data.settledTimeDays != null && (
+                  <Field
+                    label="Settled Time (days)"
+                    value={String(data.settledTimeDays)}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+        {/* ── Back charge-specific fields ── */}
+        {data.subtype === 'back_charge' && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Back Charge Details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {data.targetName && (
+                <Field label="Target" value={data.targetName} />
+              )}
+              {data.category && (
+                <Field
+                  label="Category"
+                  value={String(data.category).replace(/_/g, ' ')}
+                />
+              )}
+              {data.chargedAmount != null && (
+                <Field
+                  label="Charged Amount"
+                  value={`${formatMoney(data.chargedAmount)} ${data.currency ?? ''}`}
+                />
+              )}
+              {data.evidenceDescription && (
+                <Field label="Evidence" value={data.evidenceDescription} />
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Back charge recovery form (post-issuance) ── */}
+        {data.subtype === 'back_charge' && canEditSettlement && (
+          <Card>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm">Recovery Tracking</CardTitle>
+              {!editingSettlement && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={startEditingSettlement}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {data.settledAmount != null ? 'Edit' : 'Enter Values'}
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {editingSettlement ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="recovered-amount">
+                        Recovered Amount ({data.currency ?? 'SAR'})
+                      </Label>
+                      <Input
+                        id="recovered-amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={settlementAmount}
+                        onChange={(e) => setSettlementAmount(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="recovery-days">
+                        Recovery Time (days)
+                      </Label>
+                      <Input
+                        id="recovery-days"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={settlementDays}
+                        onChange={(e) => setSettlementDays(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={saveSettlement}
+                      disabled={settlementMut.isPending}
+                    >
+                      {settlementMut.isPending ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3 w-3 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingSettlement(false)}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <Field
+                    label="Recovered Amount"
+                    value={
+                      data.settledAmount != null
+                        ? `${formatMoney(data.settledAmount)} ${data.currency ?? ''}`
+                        : 'Not yet entered'
+                    }
+                  />
+                  <Field
+                    label="Recovery Time (days)"
+                    value={
+                      data.settledTimeDays != null
+                        ? String(data.settledTimeDays)
+                        : 'Not yet entered'
+                    }
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Back charge recovery display (non-editable) ── */}
+        {data.subtype === 'back_charge' &&
+          !canEditSettlement &&
+          (data.settledAmount != null || data.settledTimeDays != null) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Recovery</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {data.settledAmount != null && (
+                  <Field
+                    label="Recovered Amount"
+                    value={`${formatMoney(data.settledAmount)} ${data.currency ?? ''}`}
+                  />
+                )}
+                {data.settledTimeDays != null && (
+                  <Field
+                    label="Recovery Time (days)"
+                    value={String(data.settledTimeDays)}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+        {/* ── Body ── */}
+        {data.body && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Body</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm whitespace-pre-wrap">{data.body}</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </>
   );
 }

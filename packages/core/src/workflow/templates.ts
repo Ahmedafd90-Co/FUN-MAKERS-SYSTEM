@@ -43,8 +43,9 @@ export const worfklowTemplateService = {
   /**
    * Create a new workflow template with steps.
    *
-   * Validates unique code, creates template (version = 1) + steps in a
-   * transaction, writes audit log, and returns the template with steps.
+   * Creates as DRAFT (isActive = false). Templates are NOT immediately
+   * resolvable for submissions. An explicit activateTemplate() call is
+   * required — this is a governance requirement, not UX convenience.
    */
   async createTemplate(input: CreateWorkflowTemplateInput) {
     const parsed = CreateWorkflowTemplateSchema.parse(input);
@@ -73,7 +74,7 @@ export const worfklowTemplateService = {
           name: parsed.name,
           recordType: parsed.recordType,
           version: 1,
-          isActive: true,
+          isActive: false, // DRAFT — requires explicit activation
           configJson: config as any,
           createdBy: parsed.createdBy,
         },
@@ -89,6 +90,7 @@ export const worfklowTemplateService = {
             approverRuleJson: step.approverRule as any,
             slaHours: step.slaHours ?? null,
             isOptional: step.isOptional,
+            outcomeType: (step as any).outcomeType ?? 'approve',
             requirementFlagsJson: step.requirementFlags as any,
           },
         });
@@ -227,6 +229,7 @@ export const worfklowTemplateService = {
             approverRuleJson: step.approverRule as any,
             slaHours: step.slaHours ?? null,
             isOptional: step.isOptional ?? false,
+            outcomeType: (step as any).outcomeType ?? 'approve',
             requirementFlagsJson: (step.requirementFlags ?? {}) as any,
           },
         });
@@ -287,6 +290,170 @@ export const worfklowTemplateService = {
           resourceId: id,
           beforeJson: { isActive: true },
           afterJson: { isActive: false },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+
+    return result;
+  },
+
+  /**
+   * Activate a draft or previously deactivated template.
+   *
+   * Governance gate: requires at least one step. A template with zero steps
+   * cannot be activated — it would create workflow instances with no approval path.
+   */
+  async activateTemplate(id: string, activatedBy: string) {
+    const existing = await prisma.workflowTemplate.findUnique({
+      where: { id },
+      include: { steps: true },
+    });
+
+    if (!existing) throw new TemplateNotFoundError(id);
+    if (existing.isActive) {
+      throw new Error(`Template "${existing.code}" is already active.`);
+    }
+    if (!existing.steps || existing.steps.length === 0) {
+      throw new Error(`Cannot activate template "${existing.code}" — it has no approval steps.`);
+    }
+
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      const updated = await tx.workflowTemplate.update({
+        where: { id },
+        data: { isActive: true },
+      });
+
+      await auditService.log(
+        {
+          actorUserId: activatedBy,
+          actorSource: 'user',
+          action: 'workflow_template.activate',
+          resourceType: 'workflow_template',
+          resourceId: id,
+          beforeJson: { isActive: false, stepCount: existing.steps.length },
+          afterJson: { isActive: true },
+        },
+        tx,
+      );
+
+      return updated;
+    });
+
+    return result;
+  },
+
+  /**
+   * Clone a template into a new draft.
+   *
+   * Creates a new template with the given code, copying all steps from the
+   * source. The clone is always draft (isActive = false) — requires explicit
+   * activation after review.
+   */
+  async cloneTemplate(sourceId: string, newCode: string, clonedBy: string) {
+    const source = await prisma.workflowTemplate.findUnique({
+      where: { id: sourceId },
+      include: { steps: { orderBy: { orderIndex: 'asc' } } },
+    });
+
+    if (!source) throw new TemplateNotFoundError(sourceId);
+
+    // Validate unique code
+    const codeConflict = await prisma.workflowTemplate.findUnique({
+      where: { code: newCode },
+    });
+    if (codeConflict) {
+      throw new DuplicateTemplateCodeError(newCode);
+    }
+
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      const newTemplate = await tx.workflowTemplate.create({
+        data: {
+          code: newCode,
+          name: `${source.name} (copy)`,
+          recordType: source.recordType,
+          version: 1,
+          isActive: false, // Draft — requires explicit activation
+          configJson: source.configJson as any,
+          createdBy: clonedBy,
+        },
+      });
+
+      const createdSteps = [];
+      for (const step of source.steps) {
+        const created = await tx.workflowStep.create({
+          data: {
+            templateId: newTemplate.id,
+            orderIndex: step.orderIndex,
+            name: step.name,
+            approverRuleJson: step.approverRuleJson as any,
+            slaHours: step.slaHours ?? null,
+            isOptional: step.isOptional,
+            outcomeType: (step as any).outcomeType ?? 'approve',
+            requirementFlagsJson: (step.requirementFlagsJson ?? {}) as any,
+          },
+        });
+        createdSteps.push(created);
+      }
+
+      await auditService.log(
+        {
+          actorUserId: clonedBy,
+          actorSource: 'user',
+          action: 'workflow_template.clone',
+          resourceType: 'workflow_template',
+          resourceId: newTemplate.id,
+          beforeJson: {
+            sourceId: source.id,
+            sourceCode: source.code,
+            sourceVersion: source.version,
+          },
+          afterJson: {
+            code: newTemplate.code,
+            name: newTemplate.name,
+            version: newTemplate.version,
+            stepCount: createdSteps.length,
+          },
+        },
+        tx,
+      );
+
+      return { ...newTemplate, steps: createdSteps };
+    });
+
+    return result;
+  },
+
+  /**
+   * Reactivate a previously deactivated template.
+   */
+  async reactivateTemplate(id: string, reactivatedBy: string) {
+    const existing = await prisma.workflowTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!existing) throw new TemplateNotFoundError(id);
+    if (existing.isActive) {
+      throw new Error(`Template "${existing.code}" is already active.`);
+    }
+
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      const updated = await tx.workflowTemplate.update({
+        where: { id },
+        data: { isActive: true },
+      });
+
+      await auditService.log(
+        {
+          actorUserId: reactivatedBy,
+          actorSource: 'user',
+          action: 'workflow_template.reactivate',
+          resourceType: 'workflow_template',
+          resourceId: id,
+          beforeJson: { isActive: false },
+          afterJson: { isActive: true },
         },
         tx,
       );

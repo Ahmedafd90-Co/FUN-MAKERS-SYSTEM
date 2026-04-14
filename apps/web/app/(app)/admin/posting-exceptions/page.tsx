@@ -6,7 +6,6 @@
  */
 
 import { useState } from 'react';
-import { Toaster } from 'sonner';
 
 import { PostingExceptionDetail } from '@/components/admin/posting-exception-detail';
 import { PostingExceptionList } from '@/components/admin/posting-exception-list';
@@ -16,7 +15,6 @@ export default function PostingExceptionsPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
       <PostingExceptionList
         onSelectException={(id) => setSelectedId(id)}
       />

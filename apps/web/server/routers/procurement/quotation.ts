@@ -20,7 +20,7 @@ import {
   compareQuotations,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-import { mapError, getTransitionPermission } from './_helpers';
+import { mapError, getTransitionPermission, hasPerm } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -89,7 +89,7 @@ export const quotationRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const requiredPerm = getTransitionPermission('quotation', input.action);
-      if (!ctx.user.permissions.includes(requiredPerm))
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionQuotation(input.id, input.action, ctx.user.id, input.comment, input.projectId);

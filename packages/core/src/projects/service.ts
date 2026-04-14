@@ -22,6 +22,8 @@ export type CreateProjectInput = {
   startDate: Date;
   endDate?: Date | null | undefined;
   createdBy: string;
+  // Phase D2 — financial control baseline
+  contractValue?: number | null | undefined;
 };
 
 export type UpdateProjectInput = {
@@ -31,6 +33,9 @@ export type UpdateProjectInput = {
   startDate?: Date | undefined;
   endDate?: Date | null | undefined;
   status?: 'active' | 'on_hold' | 'completed' | undefined;
+  // Phase D2 — financial control baseline
+  contractValue?: number | null | undefined;
+  revisedContractValue?: number | null | undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -79,6 +84,7 @@ export const projectsService = {
           status: 'active',
           startDate: input.startDate,
           endDate: input.endDate ?? null,
+          contractValue: input.contractValue ?? null,
           createdBy: input.createdBy,
         },
         include: {
@@ -120,6 +126,7 @@ export const projectsService = {
             entityId: p.entityId,
             currencyCode: p.currencyCode,
             status: p.status,
+            contractValue: p.contractValue?.toString() ?? null,
           },
         },
         tx,
@@ -204,6 +211,8 @@ export const projectsService = {
           ...(data.startDate !== undefined && { startDate: data.startDate }),
           ...(data.endDate !== undefined && { endDate: data.endDate }),
           ...(data.status !== undefined && { status: data.status }),
+          ...(data.contractValue !== undefined && { contractValue: data.contractValue }),
+          ...(data.revisedContractValue !== undefined && { revisedContractValue: data.revisedContractValue }),
         },
         include: {
           entity: true,
@@ -226,6 +235,8 @@ export const projectsService = {
             status: before.status,
             startDate: before.startDate.toISOString(),
             endDate: before.endDate?.toISOString() ?? null,
+            contractValue: (before as any).contractValue?.toString() ?? null,
+            revisedContractValue: (before as any).revisedContractValue?.toString() ?? null,
           },
           afterJson: {
             name: updated.name,
@@ -234,6 +245,8 @@ export const projectsService = {
             status: updated.status,
             startDate: updated.startDate.toISOString(),
             endDate: updated.endDate?.toISOString() ?? null,
+            contractValue: (updated as any).contractValue?.toString() ?? null,
+            revisedContractValue: (updated as any).revisedContractValue?.toString() ?? null,
           },
         },
         tx,

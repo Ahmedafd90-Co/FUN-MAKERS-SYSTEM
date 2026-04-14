@@ -27,6 +27,7 @@ export type AuditLogListItem = {
   resourceId: string;
   projectId: string | null;
   createdAt: Date;
+  actorName?: string | null;
 };
 
 export async function listAuditLogs(filters: AuditLogFilters = {}) {
@@ -56,7 +57,7 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
     where['createdAt'] = createdAt;
   }
 
-  const [items, total] = await Promise.all([
+  const [rawItems, total] = await Promise.all([
     prisma.auditLog.findMany({
       where: where as any,
       orderBy: { createdAt: 'desc' },
@@ -75,6 +76,22 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
     }),
     prisma.auditLog.count({ where: where as any }),
   ]);
+
+  // Resolve actor user IDs → names in a single batch query
+  const actorIds = [...new Set(rawItems.map((i) => i.actorUserId).filter(Boolean))] as string[];
+  const actorMap = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, name: true },
+    });
+    for (const u of users) actorMap.set(u.id, u.name);
+  }
+
+  const items = rawItems.map((i) => ({
+    ...i,
+    actorName: i.actorUserId ? actorMap.get(i.actorUserId) ?? null : null,
+  }));
 
   return { items, total };
 }

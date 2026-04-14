@@ -1,5 +1,6 @@
 'use client';
 
+import { Toaster } from 'sonner';
 import { CommandPalette } from './command-palette';
 import { TopNav } from './top-nav';
 
@@ -29,6 +30,7 @@ export function AppShell({
       />
       <main className="flex-1">{children}</main>
       <CommandPalette permissions={permissions} />
+      <Toaster position="top-right" />
     </div>
   );
 }

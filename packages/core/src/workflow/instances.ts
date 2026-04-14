@@ -13,6 +13,7 @@ import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { workflowTemplateService } from './templates';
 import * as workflowEvents from './events';
+import type { ResolutionSource } from './template-resolution';
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -85,8 +86,10 @@ export const workflowInstanceService = {
     recordId: string;
     projectId: string;
     startedBy: string;
+    /** How the template was resolved — stored in the 'started' action metadata for provenance. */
+    resolutionSource?: ResolutionSource;
   }) {
-    const { templateCode, recordType, recordId, projectId, startedBy } = input;
+    const { templateCode, recordType, recordId, projectId, startedBy, resolutionSource } = input;
 
     // Find active template
     const template = await workflowTemplateService.findActiveByCode(templateCode);
@@ -139,7 +142,7 @@ export const workflowInstanceService = {
         },
       });
 
-      // Write the 'started' action
+      // Write the 'started' action — include resolution provenance in metadata
       await tx.workflowAction.create({
         data: {
           instanceId: instance.id,
@@ -147,6 +150,7 @@ export const workflowInstanceService = {
           actorUserId: startedBy,
           action: 'started',
           actedAt: now,
+          metadataJson: resolutionSource ? { resolutionSource } : undefined,
         },
       });
 
@@ -190,6 +194,64 @@ export const workflowInstanceService = {
   },
 
   /**
+   * Find the most recent workflow instance for a (recordType, recordId) pair.
+   * Returns null if none exists (not an error — some records may not have workflows).
+   */
+  async getInstanceByRecord(recordType: string, recordId: string) {
+    const instance = await prisma.workflowInstance.findFirst({
+      where: { recordType, recordId },
+      orderBy: { startedAt: 'desc' },
+      include: {
+        template: {
+          include: {
+            steps: { orderBy: { orderIndex: 'asc' } },
+          },
+        },
+        actions: {
+          orderBy: { actedAt: 'asc' },
+          include: {
+            step: { select: { id: true, name: true, outcomeType: true } },
+          },
+        },
+      },
+    });
+
+    if (!instance) return null;
+
+    // Resolve actor names — WorkflowAction has no direct User relation
+    const actorIds = [...new Set(instance.actions.map((a) => a.actorUserId))];
+    const actors = await prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, name: true, email: true },
+    });
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
+    const actionsWithActors = instance.actions.map((a) => ({
+      ...a,
+      actor: actorMap.get(a.actorUserId) ?? { id: a.actorUserId, name: 'Unknown', email: '' },
+    }));
+
+    const currentStep = instance.currentStepId
+      ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+      : null;
+
+    const slaInfo = computeSlaInfo(instance, currentStep);
+
+    // Extract resolution source from the 'started' action metadata (provenance)
+    const startedAction = instance.actions.find((a) => a.action === 'started');
+    const resolutionSource: ResolutionSource | null =
+      (startedAction?.metadataJson as Record<string, unknown> | null)?.resolutionSource as ResolutionSource | null
+      ?? null;
+
+    return {
+      ...instance,
+      actions: actionsWithActors,
+      currentStep,
+      slaInfo,
+      resolutionSource,
+    };
+  },
+
+  /**
    * Get a workflow instance by ID.
    *
    * Returns the instance with template, steps, actions, current step,
@@ -208,6 +270,9 @@ export const workflowInstanceService = {
         },
         actions: {
           orderBy: { actedAt: 'asc' },
+          include: {
+            step: { select: { id: true, name: true, outcomeType: true } },
+          },
         },
       },
     });

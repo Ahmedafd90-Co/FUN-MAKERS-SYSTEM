@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Toaster } from 'sonner';
 
 import { CreateEntityDialog, EntityDetailSheet } from '@/components/admin/entity-form';
 import { EntityTree } from '@/components/admin/entity-tree';
@@ -16,6 +15,7 @@ type EntityData = {
   parentEntityId: string | null;
   parent: { id: string; code: string; name: string } | null;
   children: EntityData[];
+  metadataJson?: Record<string, unknown> | null;
 };
 
 export default function AdminEntitiesPage() {
@@ -42,7 +42,6 @@ export default function AdminEntitiesPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
       <EntityTree
         entities={entityList}
         onSelect={handleSelectEntity}

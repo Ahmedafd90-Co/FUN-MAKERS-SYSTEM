@@ -2,9 +2,10 @@ import { prisma } from '@fmksa/db';
 import type { IpaStatus } from '@fmksa/db';
 import type { CreateIpaInput, UpdateIpaInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { workflowInstanceService, TemplateNotActiveError, DuplicateInstanceError, resolveTemplate } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
-import { IPA_TRANSITIONS, IPA_TERMINAL_STATUSES } from './transitions';
+import { IPA_TRANSITIONS, IPA_TERMINAL_STATUSES, IPA_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,23 @@ export async function transitionIpa(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when workflow is active.
+  // These actions are driven by the workflow step service, not direct transitions.
+  if (IPA_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'ipa',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this IPA — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Transitions that require a transaction (posting or ref number)
   const needsTransaction = newStatus === 'approved_internal' || newStatus === 'issued';
 
@@ -222,6 +240,36 @@ export async function transitionIpa(
       afterJson: updated as any,
       reason: comment ?? null,
     });
+
+    // After the status update succeeds, try to start a workflow instance.
+    // If no active template exists for 'ipa', this is graceful — the transition
+    // still succeeds. Workflows are optional infrastructure.
+    if (newStatus === 'submitted') {
+      try {
+        const resolution = await resolveTemplate('ipa', existing.projectId);
+        if (resolution) {
+          await workflowInstanceService.startInstance({
+            templateCode: resolution.code,
+            recordType: 'ipa',
+            recordId: id,
+            projectId: existing.projectId,
+            startedBy: actorUserId,
+            resolutionSource: resolution.source,
+          });
+        } else {
+          console.warn(`[ipa-workflow] No workflow template configured for IPA in project ${existing.projectId}`);
+        }
+      } catch (err) {
+        if (
+          err instanceof TemplateNotActiveError ||
+          err instanceof DuplicateInstanceError
+        ) {
+          console.warn(`[ipa-workflow] Skipped workflow start for IPA ${id}: ${(err as Error).message}`);
+        } else {
+          throw err;
+        }
+      }
+    }
   }
 
   return updated;

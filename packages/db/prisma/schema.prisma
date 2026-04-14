@@ -275,6 +275,10 @@ model Project {
   currencyCode String        @map("currency_code")
   startDate    DateTime      @map("start_date")
   endDate      DateTime?     @map("end_date")
+  // Financial control — baseline contract values (Phase D2)
+  contractValue        Decimal?      @map("contract_value") @db.Decimal(18, 2)
+  revisedContractValue Decimal?      @map("revised_contract_value") @db.Decimal(18, 2)
+
   createdBy    String        @map("created_by")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
@@ -305,6 +309,10 @@ model Project {
   expenses               Expense[]
   creditNotes            CreditNote[]
   projectVendors         ProjectVendor[]
+  // Module 4 — Internal Budget & EI relations
+  budget                      ProjectBudget?
+  engineerInstructions        EngineerInstruction[]
+  budgetAbsorptionExceptions  BudgetAbsorptionException[]
 
   @@index([entityId])
   @@map("projects")
@@ -425,6 +433,9 @@ model WorkflowStep {
   slaHours             Int?    @map("sla_hours")
   isOptional           Boolean @default(false) @map("is_optional")
   requirementFlagsJson Json    @default("{}") @map("requirement_flags_json")
+  /// Step outcome semantics: review, approve, sign, issue, acknowledge.
+  /// Tells the UI what this step means operationally without changing engine logic.
+  outcomeType          String  @default("approve") @map("outcome_type")
 
   // Relations
   template        WorkflowTemplate @relation(fields: [templateId], references: [id])
@@ -636,6 +647,29 @@ model PostingException {
   event PostingEvent @relation(fields: [eventId], references: [id])
 
   @@map("posting_exceptions")
+}
+
+model BudgetAbsorptionException {
+  id               String    @id @default(uuid())
+  projectId        String    @map("project_id")
+  sourceModule     String    @map("source_module")       // 'procurement', 'engineer_instruction'
+  sourceRecordType String    @map("source_record_type")  // 'purchase_order', 'supplier_invoice', etc.
+  sourceRecordId   String    @map("source_record_id")
+  absorptionType   String    @map("absorption_type")     // 'po_commitment', 'po_reversal', 'si_actual', 'expense_actual', 'cn_reversal', 'ei_reserve_increase', 'ei_reserve_release'
+  reasonCode       String    @map("reason_code")         // 'no_category', 'no_budget', 'no_budget_category', 'no_budget_line'
+  message          String
+  severity         String    @default("warning")         // 'warning', 'error'
+  status           String    @default("open")            // 'open', 'resolved'
+  resolutionNote   String?   @map("resolution_note")
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedBy       String?   @map("resolved_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, status])
+  @@index([sourceRecordType, sourceRecordId])
+  @@map("budget_absorption_exceptions")
 }
 
 // ---------------------------------------------------------------------------
@@ -1093,10 +1127,11 @@ model Variation {
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
-  project         Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  parentVariation Variation?     @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
-  childVariations Variation[]    @relation("VariationParent")
-  costProposals   CostProposal[]
+  project               Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentVariation       Variation?            @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
+  childVariations       Variation[]           @relation("VariationParent")
+  costProposals         CostProposal[]
+  engineerInstructions  EngineerInstruction[]
 
   @@index([projectId, subtype, status])
   @@index([projectId, status])
@@ -1155,14 +1190,41 @@ model TaxInvoice {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ipc     Ipc     @relation(fields: [ipcId], references: [id], onDelete: Restrict)
+  project     Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipc         Ipc                  @relation(fields: [ipcId], references: [id], onDelete: Restrict)
+  collections InvoiceCollection[]
 
   @@unique([projectId, invoiceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([ipcId])
   @@map("tax_invoices")
+}
+
+// ---------------------------------------------------------------------------
+// Invoice Collection — records actual money received against tax invoices.
+//
+// Each row = one payment event. Partial payments produce multiple rows.
+// Outstanding = taxInvoice.totalAmount - SUM(invoiceCollections.amount).
+// Immutable by operating convention — no edit/delete in v1.
+// ---------------------------------------------------------------------------
+
+model InvoiceCollection {
+  id             String   @id @default(uuid()) @map("id")
+  taxInvoiceId   String   @map("tax_invoice_id")
+  amount         Decimal  @map("amount") @db.Decimal(18, 2)
+  collectionDate DateTime @map("collection_date")
+  paymentMethod  String?  @map("payment_method")
+  reference      String?  @map("reference")
+  notes          String?  @map("notes")
+  recordedBy     String   @map("recorded_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  taxInvoice TaxInvoice @relation(fields: [taxInvoiceId], references: [id], onDelete: Restrict)
+
+  @@index([taxInvoiceId])
+  @@index([collectionDate])
+  @@map("invoice_collections")
 }
 
 model Correspondence {
@@ -1574,6 +1636,8 @@ model Quotation {
   vendor    Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   lineItems QuotationLineItem[]
 
+  // Identity enforced at application level (status-aware: one ACTIVE quotation per vendor per RFQ).
+  // DB-level partial unique index in migration handles the hard constraint.
   @@index([rfqId, vendorId])
   @@index([rfqId, status])
   @@map("quotations")
@@ -1620,9 +1684,9 @@ model PurchaseOrder {
   deliveryDate          DateTime? @map("delivery_date")
   deliveryAddress       String?   @map("delivery_address")
   paymentTerms          String?   @map("payment_terms")
-  hasFrameworkDeviation Boolean   @default(false) @map("has_framework_deviation")
-  status                String    @default("draft")
-  referenceNumber       String?   @unique @map("reference_number")
+  hasFrameworkDeviation Boolean             @default(false) @map("has_framework_deviation")
+  status                PurchaseOrderStatus @default(draft)
+  referenceNumber       String?             @unique @map("reference_number")
   createdBy             String    @map("created_by")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
@@ -1676,9 +1740,9 @@ model SupplierInvoice {
   dueDate         DateTime? @map("due_date")
   currency        String
   categoryId      String?   @map("category_id")
-  noPOReason      String?   @map("no_po_reason")
-  status          String    @default("received")
-  createdBy       String    @map("created_by")
+  noPOReason      String?               @map("no_po_reason")
+  status          SupplierInvoiceStatus @default(received)
+  createdBy       String                @map("created_by")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -1708,7 +1772,7 @@ model Expense {
   categoryId           String?          @map("category_id")
   receiptReference     String?          @map("receipt_reference")
   purchaseOrderId      String?          @map("purchase_order_id")
-  status               String           @default("draft")
+  status               ExpenseStatus    @default(draft)
   // ticket-specific
   ticketType           TicketType?      @map("ticket_type")
   travelerName         String?          @map("traveler_name")
@@ -1764,7 +1828,7 @@ model CreditNote {
   currency          String
   reason            String
   receivedDate      DateTime         @map("received_date")
-  status            String           @default("received")
+  status            CreditNoteStatus @default(received)
   createdBy         String           @map("created_by")
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @updatedAt @map("updated_at")
@@ -1781,4 +1845,222 @@ model CreditNote {
   @@index([supplierInvoiceId])
   @@index([purchaseOrderId])
   @@map("credit_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Procurement Lifecycle
+// ---------------------------------------------------------------------------
+
+/// PO lifecycle: draft → submitted → approved → issued → delivered → closed
+/// Approved+ (committed_cost): approved, issued, partially_delivered, delivered, closed
+enum PurchaseOrderStatus {
+  draft                @map("draft")
+  submitted            @map("submitted")
+  approved             @map("approved")
+  issued               @map("issued")
+  partially_delivered  @map("partially_delivered")
+  delivered            @map("delivered")
+  closed               @map("closed")
+  rejected             @map("rejected")
+  cancelled            @map("cancelled")
+
+  @@map("purchase_order_status")
+}
+
+/// SI lifecycle: received → under_review → approved → paid → closed
+/// Approved+ (actual_cost): approved, paid, closed
+enum SupplierInvoiceStatus {
+  received      @map("received")
+  under_review  @map("under_review")
+  approved      @map("approved")
+  disputed      @map("disputed")
+  paid          @map("paid")
+  closed        @map("closed")
+  rejected      @map("rejected")
+
+  @@map("supplier_invoice_status")
+}
+
+/// Expense lifecycle: draft → submitted → approved → paid → closed
+/// Approved+ (actual_cost): approved, paid, closed
+enum ExpenseStatus {
+  draft      @map("draft")
+  submitted  @map("submitted")
+  approved   @map("approved")
+  paid       @map("paid")
+  closed     @map("closed")
+  rejected   @map("rejected")
+  cancelled  @map("cancelled")
+
+  @@map("expense_status")
+}
+
+/// CN lifecycle: received → verified → applied → closed
+enum CreditNoteStatus {
+  received   @map("received")
+  verified   @map("verified")
+  applied    @map("applied")
+  disputed   @map("disputed")
+  closed     @map("closed")
+  cancelled  @map("cancelled")
+
+  @@map("credit_note_status")
+}
+
+// ---------------------------------------------------------------------------
+// Enums — Internal Budget & EI
+// ---------------------------------------------------------------------------
+
+enum BudgetAdjustmentType {
+  baseline_change    @map("baseline_change")
+  contingency_change @map("contingency_change")
+  ei_reserve_change  @map("ei_reserve_change")
+  reallocation       @map("reallocation")
+
+  @@map("budget_adjustment_type")
+}
+
+/// EI lifecycle: received → under_evaluation → approved_reserve → converted/rejected/expired
+enum EiStatus {
+  received          @map("received")
+  under_evaluation  @map("under_evaluation")
+  approved_reserve  @map("approved_reserve")
+  converted         @map("converted")
+  rejected          @map("rejected")
+  expired           @map("expired")
+
+  @@map("ei_status")
+}
+
+// ---------------------------------------------------------------------------
+// Module 4: Internal Budget Control
+//
+// Internal budget is SEPARATE from external contract value.
+// Contract value = what the client pays Pico Play.
+// Internal budget = what Pico Play allocates to deliver the project.
+//
+// remainingBudget = internalRevised - SUM(budgetLine.committedAmount)
+// This is against committed, not actual, because committed represents
+// obligations already placed (POs, subcontracts) while actual represents
+// payments already made. Committed is the conservative control metric.
+// ---------------------------------------------------------------------------
+
+model BudgetCategory {
+  id        String   @id @default(uuid()) @map("id")
+  code      String   @unique @map("code")
+  name      String   @map("name")
+  sortOrder Int      @default(0) @map("sort_order")
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lines BudgetLine[]
+
+  @@map("budget_categories")
+}
+
+/// One budget header per project. Stores the internal delivery baseline
+/// which is distinct from the external contract value on the Project model.
+model ProjectBudget {
+  id               String   @id @default(uuid()) @map("id")
+  projectId        String   @unique @map("project_id")
+  internalBaseline Decimal  @map("internal_baseline") @db.Decimal(18, 2)
+  internalRevised  Decimal  @map("internal_revised") @db.Decimal(18, 2)
+  contingencyAmount Decimal @default(0) @map("contingency_amount") @db.Decimal(18, 2)
+  eiReserveTotal   Decimal  @default(0) @map("ei_reserve_total") @db.Decimal(18, 2)
+  notes            String?  @map("notes")
+  createdBy        String   @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  lines       BudgetLine[]
+  adjustments BudgetAdjustment[]
+
+  @@map("project_budgets")
+}
+
+/// Per-category budget allocation within a project.
+/// committedAmount = sum of obligations placed (POs, subcontracts).
+/// actualAmount = sum of payments made (supplier invoices, expenses).
+/// remainingAmount (derived) = budgetAmount - committedAmount.
+/// varianceAmount (derived) = budgetAmount - actualAmount.
+model BudgetLine {
+  id              String   @id @default(uuid()) @map("id")
+  budgetId        String   @map("budget_id")
+  categoryId      String   @map("category_id")
+  budgetAmount    Decimal  @default(0) @map("budget_amount") @db.Decimal(18, 2)
+  committedAmount Decimal  @default(0) @map("committed_amount") @db.Decimal(18, 2)
+  actualAmount    Decimal  @default(0) @map("actual_amount") @db.Decimal(18, 2)
+  notes           String?  @map("notes")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  budget   ProjectBudget  @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  category BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([budgetId, categoryId])
+  @@index([budgetId])
+  @@map("budget_lines")
+}
+
+/// Auditable record of every change to the internal budget.
+/// Append-only by convention — no edit/delete.
+model BudgetAdjustment {
+  id             String               @id @default(uuid()) @map("id")
+  budgetId       String               @map("budget_id")
+  adjustmentType BudgetAdjustmentType @map("adjustment_type")
+  amount         Decimal              @map("amount") @db.Decimal(18, 2)
+  reason         String               @map("reason")
+  approvedBy     String?              @map("approved_by")
+  createdBy      String               @map("created_by")
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  budget ProjectBudget @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+
+  @@index([budgetId, createdAt])
+  @@map("budget_adjustments")
+}
+
+// ---------------------------------------------------------------------------
+// Module 4: Engineer Instruction (EI)
+//
+// An EI is a field instruction that MAY lead to a Variation Order (VO) or
+// Change Order (CO). Upon receipt, Pico Play creates a provisional internal
+// budget reserve at 50% of estimated value.
+//
+// Reserve rules:
+//   eiReserveAmount = estimatedValue * reserveRate (default 0.50)
+//   Reserve increases INTERNAL budget exposure only — NOT external contract value.
+//   When converted to approved VO/CO → release reserve, move delta to revised contract value.
+//   When rejected/expired → reverse reserve, audit trail preserved.
+// ---------------------------------------------------------------------------
+
+model EngineerInstruction {
+  id              String    @id @default(uuid()) @map("id")
+  projectId       String    @map("project_id")
+  referenceNumber String?   @unique @map("reference_number")
+  title           String    @map("title")
+  description     String?   @map("description")
+  estimatedValue  Decimal   @map("estimated_value") @db.Decimal(18, 2)
+  currency        String    @map("currency")
+  status          EiStatus  @default(received) @map("status")
+  /// Reserve rate: fraction of estimatedValue held as internal provision.
+  /// Default 0.50 (50%). Configurable per EI for exceptional cases.
+  reserveRate     Decimal   @default(0.50) @map("reserve_rate") @db.Decimal(5, 4)
+  /// Computed on creation: estimatedValue * reserveRate. Updated if rate changes.
+  reserveAmount   Decimal   @map("reserve_amount") @db.Decimal(18, 2)
+  /// Set when EI is converted to a VO/CO.
+  variationId     String?   @map("variation_id")
+  notes           String?   @map("notes")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+  @@index([variationId])
+  @@map("engineer_instructions")
 }

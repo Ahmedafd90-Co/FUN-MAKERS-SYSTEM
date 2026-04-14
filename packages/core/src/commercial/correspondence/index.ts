@@ -9,6 +9,7 @@ export {
 export {
   createCorrespondence,
   updateCorrespondence,
+  updateSettlementFields,
   transitionCorrespondence,
   getCorrespondence,
   listCorrespondences,

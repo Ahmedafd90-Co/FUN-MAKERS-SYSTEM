@@ -20,7 +20,7 @@ import {
   deleteVendorContract,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
-import { mapError, getTransitionPermission } from './_helpers';
+import { mapError, getTransitionPermission, hasPerm } from './_helpers';
 
 // ---------------------------------------------------------------------------
 // Router
@@ -80,7 +80,7 @@ export const vendorContractRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const requiredPerm = getTransitionPermission('vendor_contract', input.action);
-      if (!ctx.user.permissions.includes(requiredPerm))
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await transitionVendorContract(input.id, input.action, ctx.user.id, input.comment, input.projectId);

@@ -1,7 +1,6 @@
 'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fmksa/ui/components/tabs';
-import { Toaster } from 'sonner';
 
 import { AppSettingsForm } from '@/components/admin/app-settings-form';
 import { CountriesTable } from '@/components/admin/countries-table';
@@ -11,8 +10,6 @@ import { StatusDictionaryEditor } from '@/components/admin/status-dictionary-edi
 export default function AdminReferenceDataPage() {
   return (
     <>
-      <Toaster position="top-right" />
-
       <div className="space-y-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Reference Data</h1>

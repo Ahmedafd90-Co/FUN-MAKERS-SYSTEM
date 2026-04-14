@@ -32,4 +32,9 @@ export {
   NoApproversFoundError,
 } from './approver-resolution';
 
+export { resolveTemplateCode, resolveTemplate } from './template-resolution';
+export type { ResolutionSource, TemplateResolution } from './template-resolution';
+
+export { registerConvergenceHandlers } from './convergence-handlers';
+
 export * as workflowEvents from './events';

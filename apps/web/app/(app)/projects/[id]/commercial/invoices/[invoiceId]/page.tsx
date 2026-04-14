@@ -2,51 +2,39 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CalendarClock } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@fmksa/ui/components/card';
-import { Separator } from '@fmksa/ui/components/separator';
+import { Badge } from '@fmksa/ui/components/badge';
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
+import { InvoiceCollectionsSection } from '@/components/commercial/invoice-collections-section';
+import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+function isDueSoon(dueDate: string | null): boolean {
+  if (!dueDate) return false;
+  const due = new Date(dueDate);
+  const now = new Date();
+  const daysUntil = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+  return daysUntil >= 0 && daysUntil <= 7;
 }
 
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <p className="text-sm mt-0.5">{value ?? '-'}</p>
-    </div>
-  );
+function isOverdue(dueDate: string | null): boolean {
+  if (!dueDate) return false;
+  return new Date(dueDate) < new Date();
 }
 
 export default function TaxInvoiceDetailPage() {
   const params = useParams<{ id: string; invoiceId: string }>();
   const utils = trpc.useUtils();
+
+  const { data: me } = trpc.auth.me.useQuery();
 
   const { data, isLoading, error } = trpc.commercial.taxInvoice.get.useQuery({
     projectId: params.id,
@@ -56,6 +44,9 @@ export default function TaxInvoiceDetailPage() {
   const transitionMut = trpc.commercial.taxInvoice.transition.useMutation({
     onSuccess: () => {
       utils.commercial.taxInvoice.get.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? 'Transition failed');
     },
   });
 
@@ -75,30 +66,61 @@ export default function TaxInvoiceDetailPage() {
     );
   }
 
+  const dueDateStr = data.dueDate ? String(data.dueDate) : null;
+  const dueSoon = isDueSoon(dueDateStr);
+  const overdue = isOverdue(dueDateStr);
+  const isCollected = data.status === 'collected';
+
+  // IPC reference from the included relation
+  const ipcRef: string | null = (data as any).ipc?.referenceNumber ?? null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/commercial/invoices`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Invoices
+        ← Tax Invoices
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">{data.invoiceNumber}</h1>
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {data.invoiceNumber}
+            </h1>
+            <CommercialStatusBadge status={data.status} />
+          </div>
           {data.referenceNumber && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground font-mono">
               Ref: {data.referenceNumber}
             </p>
           )}
-          <CommercialStatusBadge status={data.status} />
+          {/* Due date urgency — single authoritative location */}
+          {data.dueDate && (overdue || dueSoon) && (
+            <div className="flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5 text-amber-600" />
+              {overdue ? (
+                <Badge variant="destructive" className="text-[11px]">
+                  Overdue — due {new Date(data.dueDate).toLocaleDateString()}
+                </Badge>
+              ) : (
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  Due {new Date(data.dueDate).toLocaleDateString()}
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
         <TransitionActions
           currentStatus={data.status}
           recordFamily="taxInvoice"
-          permissions={['taxInvoice.transition']}
+          permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
@@ -109,43 +131,122 @@ export default function TaxInvoiceDetailPage() {
             });
           }}
         />
+        {/* Manual approval notice */}
+        <p className="text-[11px] text-muted-foreground italic">
+          Manual approval — does not route through workflow
+        </p>
       </div>
 
-      <Separator />
+      {/* ── Summary Strip — financial context at a glance ── */}
+      <SummaryStrip>
+        <SummaryItem
+          label="Total Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.totalAmount)} {data.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="Gross Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.grossAmount)} {data.currency}
+            </span>
+          }
+        />
+        <SummaryItem
+          label="VAT"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.vatAmount)} {data.currency}
+              <span className="text-muted-foreground text-[10px] ml-1">
+                ({parseFloat(String(data.vatRate)).toFixed(1)}%)
+              </span>
+            </span>
+          }
+        />
+        <SummaryItem label="Status" value={<CommercialStatusBadge status={data.status} />} />
+        <SummaryItem
+          label="Due Date"
+          value={
+            data.dueDate ? (
+              <span className={`font-mono tabular-nums ${overdue ? 'text-destructive font-semibold' : dueSoon ? 'text-amber-700 font-medium' : ''}`}>
+                {new Date(data.dueDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+          destructive={overdue}
+        />
+        <SummaryItem
+          label="Certified from IPC"
+          value={
+            <Link
+              href={`/projects/${params.id}/commercial/ipc/${data.ipcId}`}
+              className="text-primary hover:underline text-xs"
+            >
+              {ipcRef ?? 'View IPC'}
+            </Link>
+          }
+        />
+      </SummaryStrip>
 
-      {/* Invoice Info */}
+      {/* ── Invoice Details ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Invoice Details</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Invoice Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field
             label="Invoice Date"
-            value={new Date(data.invoiceDate).toLocaleDateString()}
+            value={
+              <span className="font-mono tabular-nums">
+                {new Date(data.invoiceDate).toLocaleDateString()}
+              </span>
+            }
           />
           {data.dueDate && (
             <Field
               label="Due Date"
-              value={new Date(data.dueDate).toLocaleDateString()}
+              value={
+                <span className={`font-mono tabular-nums ${overdue ? 'text-destructive font-medium' : ''}`}>
+                  {new Date(data.dueDate).toLocaleDateString()}
+                </span>
+              }
             />
           )}
           <Field label="Currency" value={data.currency} />
           <Field
             label="Gross Amount"
-            value={`${formatMoney(data.grossAmount)} ${data.currency}`}
+            value={
+              <span className="font-mono tabular-nums">
+                {formatMoney(data.grossAmount)} {data.currency}
+              </span>
+            }
           />
           <Field
             label="VAT Rate"
-            value={`${parseFloat(String(data.vatRate)).toFixed(2)}%`}
+            value={
+              <span className="font-mono tabular-nums">
+                {parseFloat(String(data.vatRate)).toFixed(2)}%
+              </span>
+            }
           />
           <Field
             label="VAT Amount"
-            value={`${formatMoney(data.vatAmount)} ${data.currency}`}
+            value={
+              <span className="font-mono tabular-nums">
+                {formatMoney(data.vatAmount)} {data.currency}
+              </span>
+            }
           />
           <Field
             label="Total Amount"
             value={
-              <span className="font-semibold">
+              <span className="font-semibold font-mono tabular-nums">
                 {formatMoney(data.totalAmount)} {data.currency}
               </span>
             }
@@ -153,49 +254,60 @@ export default function TaxInvoiceDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Buyer / Seller */}
+      {/* ── Buyer / Seller ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Parties</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Parties</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Buyer
             </p>
             <Field label="Name" value={data.buyerName} />
             {data.buyerTaxId && (
-              <Field label="Tax ID" value={data.buyerTaxId} />
+              <Field label="Tax ID" value={<span className="font-mono">{data.buyerTaxId}</span>} />
             )}
           </div>
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Seller
             </p>
-            <Field label="Tax ID" value={data.sellerTaxId} />
+            <Field label="Tax ID" value={<span className="font-mono">{data.sellerTaxId}</span>} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Linked IPC */}
+      {/* ── Source Records ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Linked Records</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Source Records</CardTitle>
         </CardHeader>
         <CardContent>
           <Field
-            label="Linked IPC"
+            label="CERTIFIED FROM IPC"
             value={
               <Link
                 href={`/projects/${params.id}/commercial/ipc/${data.ipcId}`}
                 className="text-primary hover:underline"
               >
-                View IPC
+                {ipcRef ?? 'View IPC'}
               </Link>
             }
           />
         </CardContent>
       </Card>
+
+      {/* ── Collections ── */}
+      <InvoiceCollectionsSection
+        projectId={params.id}
+        invoiceId={params.invoiceId}
+        invoiceStatus={data.status}
+        invoiceTotalAmount={String(data.totalAmount)}
+        invoiceCurrency={data.currency}
+        invoiceDueDate={dueDateStr}
+        canRecord={me?.permissions?.includes('tax_invoice.edit') ?? false}
+      />
     </div>
   );
 }

@@ -3,50 +3,25 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@fmksa/ui/components/card';
-import { Separator } from '@fmksa/ui/components/separator';
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <p className="text-sm mt-0.5">{value ?? '-'}</p>
-    </div>
-  );
-}
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 export default function IpcDetailPage() {
   const params = useParams<{ id: string; ipcId: string }>();
   const utils = trpc.useUtils();
+
+  const { data: me } = trpc.auth.me.useQuery();
 
   const { data, isLoading, error } = trpc.commercial.ipc.get.useQuery({
     projectId: params.id,
@@ -56,8 +31,20 @@ export default function IpcDetailPage() {
   const transitionMut = trpc.commercial.ipc.transition.useMutation({
     onSuccess: () => {
       utils.commercial.ipc.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'ipc', recordId: params.ipcId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -75,8 +62,24 @@ export default function IpcDetailPage() {
     );
   }
 
+  const workflowLabel = workflowData
+    ? workflowData.status === 'approved'
+      ? 'Approved'
+      : workflowData.status === 'rejected'
+        ? 'Rejected'
+        : workflowData.status === 'returned'
+          ? 'Returned'
+          : 'In Progress'
+    : data.status === 'draft'
+      ? 'Not started'
+      : '—';
+
+  // IPA reference from the included relation
+  const ipaRef: string | null = (data as any).ipa?.referenceNumber ?? null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Back link */}
       <Link
         href={`/projects/${params.id}/commercial/ipc`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -85,18 +88,38 @@ export default function IpcDetailPage() {
         Back to IPCs
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">
-            {data.referenceNumber ?? 'Draft IPC'}
-          </h1>
-          <CommercialStatusBadge status={data.status} />
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {data.referenceNumber ?? 'Draft IPC'}
+            </h1>
+            <CommercialStatusBadge status={data.status} />
+          </div>
+          {ipaRef && (
+            <p className="text-sm text-muted-foreground">
+              Certifying{' '}
+              <Link
+                href={`/projects/${params.id}/commercial/ipa/${data.ipaId}`}
+                className="text-primary hover:underline font-medium"
+              >
+                {ipaRef}
+              </Link>
+            </p>
+          )}
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="IPC"
+          />
         </div>
         <TransitionActions
           currentStatus={data.status}
           recordFamily="ipc"
-          permissions={['ipc.transition']}
+          permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -108,12 +131,36 @@ export default function IpcDetailPage() {
         />
       </div>
 
-      <Separator />
+      {/* ── Summary Strip ── */}
+      <SummaryStrip>
+        <SummaryItem
+          label="Net Certified"
+          value={`${formatMoney(data.netCertified)} ${data.currency}`}
+          emphasis
+        />
+        <SummaryItem
+          label="Certified Amount"
+          value={`${formatMoney(data.certifiedAmount)} ${data.currency}`}
+        />
+        <SummaryItem
+          label="Retention"
+          value={`${formatMoney(data.retentionAmount)} ${data.currency}`}
+        />
+        <SummaryItem label="Status" value={<CommercialStatusBadge status={data.status} />} />
+        <SummaryItem label="Workflow" value={workflowLabel} />
+        <SummaryItem
+          label="Certification Date"
+          value={new Date(data.certificationDate).toLocaleDateString()}
+        />
+      </SummaryStrip>
 
-      {/* Financial Summary */}
+      {/* ── Workflow ── */}
+      <WorkflowStatusCard recordType="ipc" recordId={params.ipcId} />
+
+      {/* ── Financial Detail ── */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Financial Summary</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Financial Detail</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field
@@ -138,13 +185,12 @@ export default function IpcDetailPage() {
               </span>
             }
           />
-          <Field label="Currency" value={data.currency} />
         </CardContent>
       </Card>
 
-      {/* Certification Info */}
+      {/* ── Certification Details ── */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-sm">Certification Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -159,10 +205,11 @@ export default function IpcDetailPage() {
                 href={`/projects/${params.id}/commercial/ipa/${data.ipaId}`}
                 className="text-primary hover:underline"
               >
-                View IPA
+                {ipaRef ?? 'Linked IPA'}
               </Link>
             }
           />
+          <Field label="Currency" value={data.currency} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
@@ -170,10 +217,10 @@ export default function IpcDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Remarks */}
+      {/* ── Remarks ── */}
       {data.remarks && (
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle className="text-sm">Remarks</CardTitle>
           </CardHeader>
           <CardContent>

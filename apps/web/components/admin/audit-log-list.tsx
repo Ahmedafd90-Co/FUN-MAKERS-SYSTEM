@@ -162,7 +162,7 @@ export function AuditLogList() {
                       {formatDate(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {entry.actorUserId ? entry.actorUserId.slice(0, 8) + '...' : '—'}
+                      {(entry as any).actorName ?? (entry.actorUserId ? entry.actorUserId.slice(0, 8) + '...' : '—')}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-xs">{entry.actorSource}</Badge>
@@ -214,8 +214,12 @@ export function AuditLogList() {
                 <dd>{formatDate(detail.createdAt)}</dd>
                 <dt className="text-muted-foreground">Actor Source</dt>
                 <dd>{detail.actorSource}</dd>
-                <dt className="text-muted-foreground">Actor User ID</dt>
-                <dd className="font-mono text-xs">{detail.actorUserId ?? '—'}</dd>
+                <dt className="text-muted-foreground">Actor</dt>
+                <dd className="text-xs">
+                  {detail.actorUserId
+                    ? <><span className="font-mono">{detail.actorUserId}</span></>
+                    : '—'}
+                </dd>
                 <dt className="text-muted-foreground">Action</dt>
                 <dd>{formatAction(detail.action)}</dd>
                 <dt className="text-muted-foreground">Resource Type</dt>

@@ -10,7 +10,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./notifications/delivery": "./src/notifications/delivery.ts",
-    "./notifications/templates": "./src/notifications/templates.ts"
+    "./notifications/templates": "./src/notifications/templates.ts",
+    "./commercial/dashboard/kpi-definitions": "./src/commercial/dashboard/kpi-definitions.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

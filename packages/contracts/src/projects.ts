@@ -14,6 +14,8 @@ export const CreateProjectSchema = z.object({
   currencyCode: z.string().min(1, 'Currency code is required.'),
   startDate: z.coerce.date(),
   endDate: z.coerce.date().optional().nullable(),
+  // Phase D2 — financial control baseline
+  contractValue: z.number().positive().optional().nullable(),
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
@@ -26,6 +28,9 @@ export const UpdateProjectSchema = z.object({
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional().nullable(),
   status: z.enum(['active', 'on_hold', 'completed']).optional(),
+  // Phase D2 — financial control baseline
+  contractValue: z.number().positive().optional().nullable(),
+  revisedContractValue: z.number().positive().optional().nullable(),
 });
 
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;

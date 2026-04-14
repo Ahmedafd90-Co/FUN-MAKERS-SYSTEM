@@ -11,11 +11,11 @@ import {
   DialogTitle,
 } from '@fmksa/ui/components/dialog';
 import { Separator } from '@fmksa/ui/components/separator';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
 
@@ -42,29 +42,49 @@ function statusBadge(status: string) {
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data: me, isLoading } = trpc.auth.me.useQuery();
+  const router = useRouter();
+  const utils = trpc.useUtils();
   const [deactivateOpen, setDeactivateOpen] = useState(false);
 
-  // For Phase 1.4 we display the current user data when the ID matches,
-  // or show a placeholder for other IDs.
-  const isCurrentUser = me?.id === params.id;
+  const { data: user, isLoading, error } = trpc.adminUsers.getUser.useQuery(
+    { id: params.id },
+  );
+
+  const deactivateMut = trpc.adminUsers.deactivateUser.useMutation({
+    onSuccess: (data) => {
+      toast.success(`User "${data.name}" has been deactivated.`);
+      setDeactivateOpen(false);
+      utils.adminUsers.getUser.invalidate({ id: params.id });
+      utils.adminUsers.userList.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
 
   if (isLoading) {
     return <p className="text-muted-foreground">Loading user details...</p>;
   }
 
-  if (!me) {
-    return <p className="text-muted-foreground">Unable to load user data.</p>;
+  if (error || !user) {
+    return (
+      <div className="space-y-4">
+        <Link
+          href="/admin/users"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Users
+        </Link>
+        <p className="text-sm text-destructive">
+          {error?.message ?? 'Unable to load user data.'}
+        </p>
+      </div>
+    );
   }
-
-  const user = isCurrentUser
-    ? me
-    : { id: params.id, name: 'User', email: '-', status: 'active', roles: [], permissions: [] };
 
   return (
     <>
-      <Toaster position="top-right" />
-
       {/* Back link */}
       <Link
         href="/admin/users"
@@ -164,12 +184,17 @@ export default function UserDetailPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                toast.success(`User "${user.name}" has been deactivated.`);
-                setDeactivateOpen(false);
-              }}
+              onClick={() => deactivateMut.mutate({ id: user.id })}
+              disabled={deactivateMut.isPending}
             >
-              Deactivate
+              {deactivateMut.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  Deactivating...
+                </>
+              ) : (
+                'Deactivate'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

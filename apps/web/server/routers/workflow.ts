@@ -27,9 +27,15 @@ import {
   NotAValidApproverError,
   InvalidInstanceStatusError,
   InvalidReturnStepError,
+  registerWorkflowNotificationHandlers,
 } from '@fmksa/core';
 import { accessControlService } from '@fmksa/core';
 import { prisma } from '@fmksa/db';
+
+// Register workflow event handlers at module load — convergence handlers
+// (record status sync) + notification handlers. Matches the pattern used by
+// commercial/procurement routers for their posting event types.
+registerWorkflowNotificationHandlers();
 import {
   router,
   protectedProcedure,
@@ -152,6 +158,51 @@ const templatesRouter = router({
         mapWorkflowError(err);
       }
     }),
+
+  reactivate: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await workflowTemplateService.reactivateTemplate(
+          input.id,
+          ctx.user.id,
+        );
+      } catch (err) {
+        mapWorkflowError(err);
+      }
+    }),
+
+  /** Governance gate: activate a draft template after review. Requires ≥1 step. */
+  activate: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await workflowTemplateService.activateTemplate(
+          input.id,
+          ctx.user.id,
+        );
+      } catch (err) {
+        mapWorkflowError(err);
+      }
+    }),
+
+  /** Clone a template into a new draft with a different code. */
+  clone: adminProcedure
+    .input(z.object({
+      sourceId: z.string().uuid(),
+      newCode: z.string().min(1).max(100).regex(/^[a-z0-9_]+$/, 'Code must be lowercase alphanumeric with underscores'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await workflowTemplateService.cloneTemplate(
+          input.sourceId,
+          input.newCode,
+          ctx.user.id,
+        );
+      } catch (err) {
+        mapWorkflowError(err);
+      }
+    }),
 });
 
 // ---------------------------------------------------------------------------
@@ -195,6 +246,37 @@ const instancesRouter = router({
       } catch (err) {
         mapWorkflowError(err);
       }
+    }),
+
+  getByRecord: protectedProcedure
+    .input(z.object({
+      recordType: z.string().min(1),
+      recordId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const instance = await workflowInstanceService.getInstanceByRecord(
+        input.recordType,
+        input.recordId,
+      );
+      if (!instance) return null;
+
+      // Resolve current approvers if instance is active
+      let currentApprovers: Array<{ id: string; name: string; email: string }> = [];
+      if (instance.currentStep && ['in_progress', 'returned'].includes(instance.status)) {
+        const approverRule = instance.currentStep.approverRuleJson as any;
+        try {
+          const approverIds = await resolveApprovers(approverRule, instance.projectId);
+          const users = await prisma.user.findMany({
+            where: { id: { in: approverIds } },
+            select: { id: true, name: true, email: true },
+          });
+          currentApprovers = users;
+        } catch {
+          // NoApproversFoundError — return empty
+        }
+      }
+
+      return { ...instance, currentApprovers };
     }),
 });
 
@@ -349,6 +431,7 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
     recordId: string;
     currentStepId: string;
     currentStepName: string;
+    currentStepOutcomeType: string;
     status: string;
     startedAt: Date;
     currentStepStartedAt: Date;
@@ -359,6 +442,7 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
     templateId: string;
     templateCode: string;
     previousSteps: Array<{ id: string; name: string; orderIndex: number }>;
+    recordReference: string | null;
   }> = [];
 
   const now = new Date();
@@ -420,6 +504,7 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
       recordId: instance.recordId,
       currentStepId: currentStep.id,
       currentStepName: currentStep.name,
+      currentStepOutcomeType: (currentStep as any).outcomeType ?? 'approve',
       status: instance.status,
       startedAt: instance.startedAt,
       currentStepStartedAt,
@@ -430,10 +515,73 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
       templateId: instance.templateId,
       templateCode: instance.template.code,
       previousSteps,
+      recordReference: null, // populated below via batch lookup
     });
   }
 
-  // 5. Sort: SLA breached first, then closest to SLA, then oldest
+  // 5. Batch-resolve human-readable reference numbers (eliminates raw UUIDs in UI)
+  {
+    const refMap = new Map<string, string>();
+    const idsBy = (type: string) => results.filter((r) => r.recordType === type).map((r) => r.recordId);
+
+    const [ipas, ipcs, vars, cps, tis, corrs, rfqs, quots, pos, sis, exps, cns] = await Promise.all([
+      idsBy('ipa').length > 0
+        ? prisma.ipa.findMany({ where: { id: { in: idsBy('ipa') } }, select: { id: true, referenceNumber: true } })
+        : [],
+      idsBy('ipc').length > 0
+        ? prisma.ipc.findMany({ where: { id: { in: idsBy('ipc') } }, select: { id: true, referenceNumber: true } })
+        : [],
+      idsBy('variation').length > 0
+        ? prisma.variation.findMany({ where: { id: { in: idsBy('variation') } }, select: { id: true, referenceNumber: true, title: true } })
+        : [],
+      idsBy('cost_proposal').length > 0
+        ? prisma.costProposal.findMany({ where: { id: { in: idsBy('cost_proposal') } }, select: { id: true, referenceNumber: true } })
+        : [],
+      idsBy('tax_invoice').length > 0
+        ? prisma.taxInvoice.findMany({ where: { id: { in: idsBy('tax_invoice') } }, select: { id: true, referenceNumber: true, invoiceNumber: true } })
+        : [],
+      idsBy('correspondence').length > 0
+        ? prisma.correspondence.findMany({ where: { id: { in: idsBy('correspondence') } }, select: { id: true, referenceNumber: true, subject: true } })
+        : [],
+      idsBy('rfq').length > 0
+        ? prisma.rFQ.findMany({ where: { id: { in: idsBy('rfq') } }, select: { id: true, referenceNumber: true, rfqNumber: true } })
+        : [],
+      idsBy('quotation').length > 0
+        ? prisma.quotation.findMany({ where: { id: { in: idsBy('quotation') } }, select: { id: true, quotationRef: true } })
+        : [],
+      idsBy('purchase_order').length > 0
+        ? prisma.purchaseOrder.findMany({ where: { id: { in: idsBy('purchase_order') } }, select: { id: true, referenceNumber: true, poNumber: true } })
+        : [],
+      idsBy('supplier_invoice').length > 0
+        ? prisma.supplierInvoice.findMany({ where: { id: { in: idsBy('supplier_invoice') } }, select: { id: true, invoiceNumber: true } })
+        : [],
+      idsBy('expense').length > 0
+        ? prisma.expense.findMany({ where: { id: { in: idsBy('expense') } }, select: { id: true, title: true } })
+        : [],
+      idsBy('credit_note').length > 0
+        ? prisma.creditNote.findMany({ where: { id: { in: idsBy('credit_note') } }, select: { id: true, creditNoteNumber: true } })
+        : [],
+    ]);
+
+    for (const r of ipas) if (r.referenceNumber) refMap.set(r.id, r.referenceNumber);
+    for (const r of ipcs) if (r.referenceNumber) refMap.set(r.id, r.referenceNumber);
+    for (const r of vars) refMap.set(r.id, r.referenceNumber ?? r.title);
+    for (const r of cps) if (r.referenceNumber) refMap.set(r.id, r.referenceNumber);
+    for (const r of tis) refMap.set(r.id, r.referenceNumber ?? r.invoiceNumber);
+    for (const r of corrs) refMap.set(r.id, r.referenceNumber ?? r.subject);
+    for (const r of rfqs) refMap.set(r.id, r.referenceNumber ?? r.rfqNumber);
+    for (const r of quots) if (r.quotationRef) refMap.set(r.id, r.quotationRef);
+    for (const r of pos) refMap.set(r.id, r.referenceNumber ?? r.poNumber);
+    for (const r of sis) refMap.set(r.id, r.invoiceNumber);
+    for (const r of exps) refMap.set(r.id, r.title);
+    for (const r of cns) refMap.set(r.id, r.creditNoteNumber);
+
+    for (const item of results) {
+      item.recordReference = refMap.get(item.recordId) ?? null;
+    }
+  }
+
+  // 6. Sort: SLA breached first, then closest to SLA, then oldest
   results.sort((a, b) => {
     // Breached items first
     if (a.isBreached && !b.isBreached) return -1;

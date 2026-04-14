@@ -103,7 +103,7 @@ beforeAll(async () => {
 
   // Create templates
   templateCode = `STEP-TPL-${ts}`;
-  await workflowTemplateService.createTemplate({
+  const twoStepResult = await workflowTemplateService.createTemplate({
     code: templateCode,
     name: 'Two Step Template',
     recordType: 'test_record',
@@ -121,9 +121,10 @@ beforeAll(async () => {
     ],
     createdBy: testUser.id,
   });
+  await workflowTemplateService.activateTemplate(twoStepResult.id, testUser.id);
 
   singleStepCode = `SINGLE-${ts}`;
-  await workflowTemplateService.createTemplate({
+  const singleStepResult = await workflowTemplateService.createTemplate({
     code: singleStepCode,
     name: 'Single Step Template',
     recordType: 'test_record',
@@ -136,9 +137,10 @@ beforeAll(async () => {
     ],
     createdBy: testUser.id,
   });
+  await workflowTemplateService.activateTemplate(singleStepResult.id, testUser.id);
 
   threeStepCode = `THREE-${ts}`;
-  await workflowTemplateService.createTemplate({
+  const threeStepResult = await workflowTemplateService.createTemplate({
     code: threeStepCode,
     name: 'Three Step Template',
     recordType: 'test_record',
@@ -161,6 +163,7 @@ beforeAll(async () => {
     ],
     createdBy: testUser.id,
   });
+  await workflowTemplateService.activateTemplate(threeStepResult.id, testUser.id);
 });
 
 beforeEach(() => {

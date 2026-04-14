@@ -13,6 +13,7 @@ import { Input } from '@fmksa/ui/components/input';
 import { Label } from '@fmksa/ui/components/label';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { trpc } from '@/lib/trpc-client';
 
 // ---------------------------------------------------------------------------
 // Create User Dialog
@@ -27,29 +28,29 @@ export function UserFormDialog({ open, onOpenChange }: UserFormProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      toast.error('All fields are required.');
-      return;
-    }
-
-    setSubmitting(true);
-
-    // In Phase 1.4 we show the form UI. The actual backend mutation
-    // (admin.users.create) would be wired in a future phase or via
-    // a dedicated tRPC route. For now, show success feedback.
-    setTimeout(() => {
-      toast.success(`User "${name}" created successfully.`);
-      setSubmitting(false);
+  const utils = trpc.useUtils();
+  const createMutation = trpc.adminUsers.createUser.useMutation({
+    onSuccess: (data) => {
+      toast.success(`User "${data.name}" created successfully.`);
+      utils.adminUsers.userList.invalidate();
       setName('');
       setEmail('');
       setPassword('');
       onOpenChange(false);
-    }, 500);
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      toast.error('All fields are required.');
+      return;
+    }
+    createMutation.mutate({ name, email, password });
   }
 
   return (
@@ -89,7 +90,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormProps) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min 12 characters"
+              placeholder="Min 8 characters"
             />
           </div>
           <DialogFooter>
@@ -100,8 +101,8 @@ export function UserFormDialog({ open, onOpenChange }: UserFormProps) {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create User'}
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create User'}
             </Button>
           </DialogFooter>
         </form>

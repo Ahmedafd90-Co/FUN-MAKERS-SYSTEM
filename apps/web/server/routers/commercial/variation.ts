@@ -23,6 +23,7 @@ import {
   deleteVariation,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { getTransitionPermission, hasPerm } from './transition-permissions';
 
 // ---------------------------------------------------------------------------
 // Error mapping helper
@@ -55,7 +56,7 @@ export const variationRouter = router({
   list: projectProcedure
     .input(ListFilterInputSchema.merge(VariationListFilterSchema.partial()))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('variation.list'))
+      if (!ctx.user.permissions.includes('variation.view'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -102,7 +103,7 @@ export const variationRouter = router({
       UpdateVariationInputSchema.extend({ projectId: z.string().uuid() }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('variation.update'))
+      if (!ctx.user.permissions.includes('variation.edit'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -133,10 +134,11 @@ export const variationRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('variation.transition'))
+      const requiredPerm = getTransitionPermission('variation', input.action);
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Insufficient permissions.',
+          message: `Insufficient permissions${requiredPerm ? ` (requires ${requiredPerm})` : ''}.`,
         });
       try {
         // Strip undefined values for exactOptionalPropertyTypes compat

@@ -19,6 +19,7 @@ import {
   deleteIpa,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { getTransitionPermission, hasPerm } from './transition-permissions';
 
 // ---------------------------------------------------------------------------
 // Error mapping helper
@@ -51,7 +52,7 @@ export const ipaRouter = router({
   list: projectProcedure
     .input(ListFilterInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('ipa.list'))
+      if (!ctx.user.permissions.includes('ipa.view'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -92,7 +93,7 @@ export const ipaRouter = router({
   update: projectProcedure
     .input(UpdateIpaInputSchema.extend({ projectId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('ipa.update'))
+      if (!ctx.user.permissions.includes('ipa.edit'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -114,10 +115,11 @@ export const ipaRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('ipa.transition'))
+      const requiredPerm = getTransitionPermission('ipa', input.action);
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Insufficient permissions.',
+          message: `Insufficient permissions${requiredPerm ? ` (requires ${requiredPerm})` : ''}.`,
         });
       try {
         return await transitionIpa(

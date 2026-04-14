@@ -151,7 +151,10 @@ function AssignmentRows({
         .map((project) => (
           <tr key={project.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
             <td className="px-4 py-3 text-muted-foreground">-</td>
-            <td className="px-4 py-3 font-medium">{project.code} - {project.name}</td>
+            <td className="px-4 py-3">
+              <span className="font-medium">{project.name}</span>
+              <span className="ml-1.5 font-mono text-xs text-muted-foreground">({project.code})</span>
+            </td>
             <td className="px-4 py-3 text-muted-foreground">-</td>
             <td className="px-4 py-3 text-muted-foreground">-</td>
             <td className="px-4 py-3 text-muted-foreground">-</td>

@@ -50,6 +50,17 @@ export const CORRESPONDENCE_TERMINAL_STATUSES = [
   'closed',
 ];
 
+/**
+ * Actions that the workflow engine manages during the approval phase.
+ * When an active workflow instance exists, these actions cannot be
+ * performed as direct transitions — they must go through workflow steps.
+ *
+ * Note: no 'review' action here. Correspondence goes from draft → under_review
+ * via 'submit', which is NOT managed by workflow (it triggers the workflow).
+ * The workflow then drives approve/reject/return from the under_review state.
+ */
+export const CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS = ['approve', 'reject', 'return'];
+
 export function getCorrespondenceTransitions(
   subtype: 'letter' | 'notice' | 'claim' | 'back_charge',
 ): Record<string, string[]> {

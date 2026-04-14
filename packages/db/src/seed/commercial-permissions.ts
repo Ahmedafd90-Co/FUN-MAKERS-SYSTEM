@@ -8,7 +8,7 @@ type PermissionDef = {
 };
 
 const RECORD_FAMILIES = ['ipa', 'ipc', 'variation', 'cost_proposal', 'tax_invoice', 'correspondence'] as const;
-const ACTIONS = ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'issue'] as const;
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue'] as const;
 
 const FAMILY_DESCRIPTIONS: Record<string, string> = {
   ipa: 'Interim Payment Application',
@@ -23,6 +23,7 @@ const ACTION_VERBS: Record<string, string> = {
   view: 'View',
   create: 'Create',
   edit: 'Edit draft',
+  delete: 'Delete draft',
   submit: 'Submit for review',
   review: 'Review and provide feedback',
   approve: 'Approve',
@@ -59,7 +60,7 @@ COMMERCIAL_PERMISSIONS.push(
 );
 
 export async function seedCommercialPermissions(prisma: PrismaClient) {
-  console.log('  Seeding commercial permissions (50 codes)...');
+  console.log(`  Seeding commercial permissions (${COMMERCIAL_PERMISSIONS.length} codes)...`);
   for (const perm of COMMERCIAL_PERMISSIONS) {
     await prisma.permission.upsert({
       where: { code: perm.code },

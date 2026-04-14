@@ -93,7 +93,7 @@ describe('workflowTemplateService', () => {
       expect(template.id).toBeDefined();
       expect(template.code).toBe(`TPL-${ts}-1`);
       expect(template.version).toBe(1);
-      expect(template.isActive).toBe(true);
+      expect(template.isActive).toBe(false);
       expect(template.recordType).toBe('test_record');
       expect(template.steps).toHaveLength(2);
       expect(template.steps[0]!.name).toBe('Manager Review');
@@ -230,6 +230,7 @@ describe('workflowTemplateService', () => {
         ],
         createdBy: testUser.id,
       });
+      await workflowTemplateService.activateTemplate(v1.id, testUser.id);
 
       const v2 = await workflowTemplateService.updateTemplate(v1.id, {
         name: 'Version 2',
@@ -275,6 +276,7 @@ describe('workflowTemplateService', () => {
         ],
         createdBy: testUser.id,
       });
+      await workflowTemplateService.activateTemplate(v1.id, testUser.id);
 
       const v2 = await workflowTemplateService.updateTemplate(v1.id, {
         name: 'Name Only V2',
@@ -304,6 +306,7 @@ describe('workflowTemplateService', () => {
         ],
         createdBy: testUser.id,
       });
+      await workflowTemplateService.activateTemplate(template.id, testUser.id);
 
       const deactivated = await workflowTemplateService.deactivateTemplate(
         template.id,
@@ -364,6 +367,9 @@ describe('workflowTemplateService', () => {
         ],
         createdBy: testUser.id,
       });
+
+      // Templates are created as draft — must activate before findActiveByCode works
+      await workflowTemplateService.activateTemplate(created.id, testUser.id);
 
       const found = await workflowTemplateService.findActiveByCode(`TPL-${ts}-find`);
       expect(found).toBeDefined();

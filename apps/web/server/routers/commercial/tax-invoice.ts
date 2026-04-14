@@ -8,7 +8,7 @@ import { TRPCError } from '@trpc/server';
 import {
   CreateTaxInvoiceInputSchema,
   UpdateTaxInvoiceInputSchema,
-  ListFilterInputSchema,
+  TaxInvoiceListInputSchema,
 } from '@fmksa/contracts';
 import {
   createTaxInvoice,
@@ -19,6 +19,7 @@ import {
   deleteTaxInvoice,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { getTransitionPermission, hasPerm } from './transition-permissions';
 
 // ---------------------------------------------------------------------------
 // Error mapping helper
@@ -49,9 +50,9 @@ function mapError(err: unknown): never {
 
 export const taxInvoiceRouter = router({
   list: projectProcedure
-    .input(ListFilterInputSchema)
+    .input(TaxInvoiceListInputSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('tax_invoice.list'))
+      if (!ctx.user.permissions.includes('tax_invoice.view'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -94,7 +95,7 @@ export const taxInvoiceRouter = router({
       UpdateTaxInvoiceInputSchema.extend({ projectId: z.string().uuid() }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('tax_invoice.update'))
+      if (!ctx.user.permissions.includes('tax_invoice.edit'))
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Insufficient permissions.',
@@ -116,10 +117,11 @@ export const taxInvoiceRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('tax_invoice.transition'))
+      const requiredPerm = getTransitionPermission('tax_invoice', input.action);
+      if (!hasPerm(ctx, requiredPerm))
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Insufficient permissions.',
+          message: `Insufficient permissions${requiredPerm ? ` (requires ${requiredPerm})` : ''}.`,
         });
       try {
         return await transitionTaxInvoice(

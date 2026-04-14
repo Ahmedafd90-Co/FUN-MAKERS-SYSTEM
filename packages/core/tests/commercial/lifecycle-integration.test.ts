@@ -12,9 +12,20 @@ import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks
 describe('Commercial Lifecycle Integration', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
+  /** IDs of templates deactivated for this test (legacy manual path) */
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate all commercial workflow templates so manual transitions work (legacy path)
+    const templates = await prisma.workflowTemplate.findMany({
+      where: { recordType: { in: ['ipa', 'ipc', 'variation', 'correspondence'] }, isActive: true },
+    });
+    for (const t of templates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-INT-${ts}`, name: 'Integration Test Entity', type: 'parent', status: 'active' },
@@ -37,6 +48,10 @@ describe('Commercial Lifecycle Integration', () => {
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
   });
+
+  // NOTE: templates are NOT reactivated in afterAll — this avoids a race
+  // condition with other parallel test files that also deactivate templates.
+  // The test DB state for templates is restored by the vitest global setup.
 
   // ---------------------------------------------------------------------------
   // Helpers

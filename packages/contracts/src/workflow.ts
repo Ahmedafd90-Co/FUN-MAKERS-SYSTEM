@@ -93,6 +93,8 @@ export const WorkflowStepDefSchema = z.object({
   slaHours: z.number().int().positive().nullable().optional(),
   isOptional: z.boolean().default(false),
   requirementFlags: z.record(z.unknown()).default({}),
+  /** Step outcome semantics: review, approve, sign, issue, acknowledge. */
+  outcomeType: z.enum(['review', 'approve', 'sign', 'issue', 'acknowledge']).default('approve'),
 });
 
 export type WorkflowStepDef = z.infer<typeof WorkflowStepDefSchema>;

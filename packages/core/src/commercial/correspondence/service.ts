@@ -5,8 +5,14 @@ import type { CorrespondenceListFilter } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
-import { getCorrespondenceTransitions, CORRESPONDENCE_TERMINAL_STATUSES } from './transitions';
+import { getCorrespondenceTransitions, CORRESPONDENCE_TERMINAL_STATUSES, CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Action -> status mapping
@@ -187,6 +193,23 @@ export async function transitionCorrespondence(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when workflow is active.
+  // These actions are driven by the workflow step service, not direct transitions.
+  if (CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'correspondence',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this Correspondence — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Transitions that require a transaction (posting or ref number)
   const needsTransaction = newStatus === 'issued';
 
@@ -287,7 +310,131 @@ export async function transitionCorrespondence(
       afterJson: updated as any,
       reason: comment ?? null,
     });
+
+    // After the status update succeeds, try to start a workflow instance.
+    // Correspondence triggers workflow on submit → under_review (not 'submitted').
+    // The subtype drives template selection (e.g. letter_standard, claim_with_finance).
+    if (action === 'submit' && newStatus === 'under_review') {
+      try {
+        const resolution = await resolveTemplate(
+          'correspondence',
+          existing.projectId,
+          existing.subtype,
+        );
+        if (resolution) {
+          await workflowInstanceService.startInstance({
+            templateCode: resolution.code,
+            recordType: 'correspondence',
+            recordId: id,
+            projectId: existing.projectId,
+            startedBy: actorUserId,
+            resolutionSource: resolution.source,
+          });
+        } else {
+          console.warn(
+            `[correspondence-workflow] No workflow template configured for correspondence subtype '${existing.subtype}' in project ${existing.projectId}`,
+          );
+        }
+      } catch (err) {
+        if (
+          err instanceof TemplateNotActiveError ||
+          err instanceof DuplicateInstanceError
+        ) {
+          console.warn(
+            `[correspondence-workflow] Skipped workflow start for Correspondence ${id}: ${(err as Error).message}`,
+          );
+        } else {
+          throw err;
+        }
+      }
+    }
   }
+
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Update settlement / recovery fields (post-issuance only)
+// ---------------------------------------------------------------------------
+
+/** Claim statuses where settlement values can be entered/updated. */
+const CLAIM_SETTLEMENT_STATES = [
+  'under_evaluation',
+  'partially_accepted',
+  'accepted',
+  'disputed',
+];
+
+/** Back-charge statuses where recovery values can be entered/updated. */
+const BC_RECOVERY_STATES = [
+  'acknowledged',
+  'disputed',
+  'partially_recovered',
+  'recovered',
+];
+
+/**
+ * Update settlement fields on a post-issuance correspondence.
+ *
+ * For claims: settledAmount + settledTimeDays.
+ * For back charges: settledAmount doubles as "recovered amount".
+ *
+ * Only allowed in specific post-issuance states — draft/returned editing
+ * is handled by the regular `updateCorrespondence` function.
+ */
+export async function updateSettlementFields(
+  id: string,
+  fields: { settledAmount?: number | null; settledTimeDays?: number | null },
+  actorUserId: string,
+  projectId: string,
+) {
+  const existing = await prisma.correspondence.findUniqueOrThrow({
+    where: { id },
+  });
+  assertProjectScope(existing, projectId, 'Correspondence', id);
+
+  const isClaimSettlement =
+    existing.subtype === 'claim' &&
+    CLAIM_SETTLEMENT_STATES.includes(existing.status);
+  const isBcRecovery =
+    existing.subtype === 'back_charge' &&
+    BC_RECOVERY_STATES.includes(existing.status);
+
+  if (!isClaimSettlement && !isBcRecovery) {
+    throw new Error(
+      `Cannot update settlement fields for ${existing.subtype} in status '${existing.status}'.`,
+    );
+  }
+
+  const data: Record<string, unknown> = {};
+  if (fields.settledAmount !== undefined) data.settledAmount = fields.settledAmount;
+  if (fields.settledTimeDays !== undefined) data.settledTimeDays = fields.settledTimeDays;
+
+  if (Object.keys(data).length === 0) {
+    return existing;
+  }
+
+  const updated = await prisma.correspondence.update({
+    where: { id },
+    data,
+  });
+
+  await auditService.log({
+    actorUserId,
+    actorSource: 'user',
+    action: 'correspondence.settlement_update',
+    resourceType: 'correspondence',
+    resourceId: id,
+    projectId: existing.projectId,
+    beforeJson: {
+      settledAmount: existing.settledAmount?.toString() ?? null,
+      settledTimeDays: existing.settledTimeDays,
+    },
+    afterJson: {
+      settledAmount: updated.settledAmount?.toString() ?? null,
+      settledTimeDays: updated.settledTimeDays,
+    },
+  });
 
   return updated;
 }

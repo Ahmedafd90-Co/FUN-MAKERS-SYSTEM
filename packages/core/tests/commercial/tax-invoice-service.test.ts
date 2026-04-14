@@ -15,9 +15,19 @@ describe('TaxInvoice Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   let signedIpc: { id: string };
   const ts = Date.now();
+  const deactivatedTemplateIds: string[] = [];
 
   beforeAll(async () => {
     registerCommercialEventTypes();
+
+    // Deactivate all commercial workflow templates so manual transitions work (legacy path)
+    const templates = await prisma.workflowTemplate.findMany({
+      where: { recordType: { in: ['ipa', 'ipc', 'variation'] }, isActive: true },
+    });
+    for (const t of templates) {
+      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
+      deactivatedTemplateIds.push(t.id);
+    }
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-TI-${ts}`, name: 'TaxInvoice Test Entity', type: 'parent', status: 'active' },

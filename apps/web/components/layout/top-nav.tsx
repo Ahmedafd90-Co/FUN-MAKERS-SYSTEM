@@ -5,7 +5,7 @@ import { cn } from '@fmksa/ui/lib/utils';
 import { Menu, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { NotificationBell } from '@/components/notifications/notification-bell';
 
@@ -60,10 +60,10 @@ function getNavItems(
   return items;
 }
 
-// Future module nav items — rendered as subtle placeholders
+// Future module nav items — rendered as subtle placeholders.
+// Commercial and Procurement are project-scoped modules accessed via project workspace,
+// so they do NOT appear here.
 const futureModuleItems: Array<{ label: string; module: string }> = [
-  { label: 'Commercial', module: 'Module 2' },
-  { label: 'Procurement', module: 'Module 3' },
   { label: 'Materials', module: 'Module 4' },
   { label: 'Budget', module: 'Module 5' },
   { label: 'Cashflow', module: 'Module 6' },
@@ -84,6 +84,10 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
   const pathname = usePathname();
   const navItems = getNavItems(pathname, permissions);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(/Mac/.test(navigator.userAgent));
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -103,12 +107,13 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
               <span
                 key={item.label}
                 className={cn(
-                  'relative px-3 py-1.5 text-sm rounded-md transition-colors cursor-default',
+                  'relative flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors cursor-default',
                   'text-muted-foreground/60',
                 )}
                 title={item.placeholder}
               >
                 {item.label}
+                <span className="text-[10px] text-muted-foreground/30">Soon</span>
               </span>
             ) : (
               <Link
@@ -156,7 +161,7 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
             <Search className="mr-2 h-3.5 w-3.5" />
             Search...
             <kbd className="ml-auto rounded border bg-muted px-1.5 text-[10px] font-medium">
-              {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '⌘' : 'Ctrl+'}K
+              {isMac ? '⌘' : 'Ctrl+'}K
             </kbd>
           </Button>
           <NotificationBell />
@@ -188,10 +193,11 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
               item.placeholder ? (
                 <span
                   key={item.label}
-                  className="px-3 py-2 text-sm text-muted-foreground/60 cursor-default"
+                  className="flex items-center gap-1 px-3 py-2 text-sm text-muted-foreground/60 cursor-default"
                   title={item.placeholder}
                 >
                   {item.label}
+                  <span className="text-[10px] text-muted-foreground/30">Soon</span>
                 </span>
               ) : (
                 <Link

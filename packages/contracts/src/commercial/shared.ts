@@ -69,3 +69,12 @@ export const ListFilterInputSchema = z.object({
   createdByFilter: z.string().uuid().optional(),
 });
 export type ListFilterInput = z.infer<typeof ListFilterInputSchema>;
+
+/**
+ * Tax-invoice-specific list input — extends the shared schema with a
+ * dueDate-based overdue filter for KPI drilldown fidelity.
+ */
+export const TaxInvoiceListInputSchema = ListFilterInputSchema.extend({
+  overdueOnly: z.boolean().optional(),
+});
+export type TaxInvoiceListInput = z.infer<typeof TaxInvoiceListInputSchema>;
