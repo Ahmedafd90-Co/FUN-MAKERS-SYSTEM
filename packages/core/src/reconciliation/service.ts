@@ -419,6 +419,37 @@ export async function reconcileProjectFinancials(
       continue;
     }
 
+    // Partial-alignment KPIs (e.g. revised_budget) mix a ledger-backed
+    // component with a non-ledger-backed component (base contract value).
+    // A three-way reconciliation at the composite level is not semantically
+    // meaningful — comparing source (baseline + delta) to ledger (delta
+    // only) yields a delta that is always ≈ baseline, which is noise, not
+    // a real discrepancy. Report these as not_reconcilable with the
+    // alignmentNote as the honest reason, and do NOT run the ledger query
+    // (its total would appear next to an unrelated source total).
+    if (def.postingCoverage.alignment === 'partial') {
+      summary.notReconcilable++;
+      kpis[def.id] = {
+        kpiId: def.id,
+        kpiName: def.name,
+        reconcilable: false,
+        sourceTotal: displayedTotal,
+        ledgerTotal: null,
+        displayedTotal,
+        status: 'not_reconcilable',
+        delta: null,
+        postingEventTypes: def.postingCoverage.eventTypes,
+        postingEventCount: 0,
+        sourceRecordCount: 0,
+        sourceQueryBasis: def.sourceQueryBasis,
+        ledgerQueryBasis: def.postingCoverage.ledgerQueryBasis,
+        legacyGapNote: def.postingCoverage.alignmentNote ?? null,
+        ledgerOriginSplit: null,
+        adjustmentDelta: null,
+      };
+      continue;
+    }
+
     // Has posting coverage — run ledger + source count queries
     summary.reconcilable++;
 
@@ -434,14 +465,7 @@ export async function reconcileProjectFinancials(
     let status: ReconciliationStatus;
     let delta: string | null = null;
 
-    if (def.postingCoverage.alignment === 'partial') {
-      // Partial alignment — always partially_reconcilable
-      status = 'partially_reconcilable';
-      summary.partiallyReconcilable++;
-      if (sourceTotal !== null) {
-        delta = decStr(toDecimal(sourceTotal).minus(ledger.total));
-      }
-    } else if (ledger.count === 0 && sourceRecordCount > 0) {
+    if (ledger.count === 0 && sourceRecordCount > 0) {
       // Source has data but ledger has no events
       status = 'missing_postings';
       summary.missingPostings++;

@@ -208,7 +208,7 @@ export function ReconciliationTable({ result }: ReconciliationTableProps) {
                       </p>
                       {kpi.legacyGapNote && (
                         <div className="rounded border border-amber-300/50 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/50 p-2">
-                          <p className="font-medium text-amber-800 dark:text-amber-300">Legacy Data Gap</p>
+                          <p className="font-medium text-amber-800 dark:text-amber-300">Reconciliation Note</p>
                           <p className="text-amber-700 dark:text-amber-400 mt-0.5">{kpi.legacyGapNote}</p>
                         </div>
                       )}
