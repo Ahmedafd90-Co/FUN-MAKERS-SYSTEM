@@ -11,6 +11,8 @@ import {
   Receipt,
   Wallet,
   CreditCard,
+  FileSignature,
+  FileCheck2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@fmksa/ui/lib/utils';
@@ -29,8 +31,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: 'supplier-invoices', label: 'Supplier Invoices', icon: Receipt },
   { href: 'expenses', label: 'Expenses', icon: Wallet },
   { href: 'credit-notes', label: 'Credit Notes', icon: CreditCard },
-  // Future items — visible but disabled
-  { href: 'vendors', label: 'Vendors', icon: Package, disabled: true },
+  { href: 'vendors', label: 'Vendors', icon: Package },
+  { href: 'framework-agreements', label: 'Framework Agreements', icon: FileCheck2 },
+  { href: 'vendor-contracts', label: 'Vendor Contracts', icon: FileSignature },
 ];
 
 export function ProcurementSidebar({ projectId }: { projectId: string }) {

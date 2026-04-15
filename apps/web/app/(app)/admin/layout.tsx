@@ -15,6 +15,7 @@ import {
   ArrowLeftRight,
   HeartPulse,
   AlertCircle,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -66,6 +67,11 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Absorption Exceptions',
     href: '/admin/absorption-exceptions',
     icon: AlertCircle,
+  },
+  {
+    label: 'Sheet Imports',
+    href: '/admin/imports',
+    icon: Upload,
   },
   {
     label: 'Financial Health',

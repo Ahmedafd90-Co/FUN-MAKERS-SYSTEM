@@ -13,6 +13,8 @@ import {
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 function StageRow({
@@ -66,11 +68,22 @@ export default function CostProposalDetailPage() {
   const transitionMut = trpc.commercial.costProposal.transition.useMutation({
     onSuccess: () => {
       utils.commercial.costProposal.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
     },
     onError: (err) => {
       toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  // Workflow instance drives approve/return/reject when present — these
+  // actions are hidden from the transition bar and handled by the workflow.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'cost_proposal', recordId: params.costProposalId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -116,7 +129,7 @@ export default function CostProposalDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {data.referenceNumber ?? 'Draft Cost Proposal'}
+              {data.referenceNumber ?? 'Cost Proposal'}
             </h1>
             <CommercialStatusBadge status={data.status} />
           </div>
@@ -125,12 +138,18 @@ export default function CostProposalDetailPage() {
               Revision {data.revisionNumber}
             </p>
           )}
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Cost Proposal"
+          />
         </div>
         <TransitionActions
           currentStatus={data.status}
           recordFamily="costProposal"
           permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -140,11 +159,10 @@ export default function CostProposalDetailPage() {
             });
           }}
         />
-        {/* Manual approval notice */}
-        <p className="text-[11px] text-muted-foreground italic">
-          Manual approval — does not route through workflow
-        </p>
       </div>
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
+      <WorkflowStatusCard recordType="cost_proposal" recordId={params.costProposalId} />
 
       {/* ── Summary Strip ── */}
       <SummaryStrip>

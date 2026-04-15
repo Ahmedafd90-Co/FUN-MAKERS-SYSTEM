@@ -22,6 +22,7 @@ import {
   FileWarning,
   Activity,
   ArrowLeftRight,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -38,6 +39,7 @@ const adminNavItems = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ScrollText },
   { label: 'Override Log', href: '/admin/override-log', icon: ArrowLeftRight },
   { label: 'Posting Exceptions', href: '/admin/posting-exceptions', icon: FileWarning },
+  { label: 'Sheet Imports', href: '/admin/imports', icon: Upload },
   { label: 'System Health', href: '/admin/system-health', icon: Activity },
 ];
 

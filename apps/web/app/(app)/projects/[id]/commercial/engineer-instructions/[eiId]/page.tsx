@@ -24,6 +24,8 @@ import {
 } from '@fmksa/ui/components/dialog';
 import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 import {
   formatMoney,
   Field,
@@ -81,11 +83,22 @@ export default function EngineerInstructionDetailPage() {
     trpc.commercial.engineerInstruction.transition.useMutation({
       onSuccess: () => {
         utils.commercial.engineerInstruction.get.invalidate();
+        utils.workflow.instances.getByRecord.invalidate();
       },
       onError: (err) => {
         toast.error(err.message ?? 'Transition failed');
       },
     });
+
+  // Workflow instance drives evaluation/approval transitions when present —
+  // manual action buttons are hidden and handled by the workflow itself.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'engineer_instruction', recordId: params.eiId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   // ── Transition action state ──
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -188,10 +201,15 @@ export default function EngineerInstructionDetailPage() {
           {data.title && (
             <p className="text-sm text-muted-foreground">{data.title}</p>
           )}
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Engineer Instruction"
+          />
         </div>
 
-        {/* ── Transition Buttons ── */}
-        {hasTransitionPerm && actions.length > 0 && (
+        {/* ── Transition Buttons (hidden while a workflow is active) ── */}
+        {!hasActiveWorkflow && hasTransitionPerm && actions.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {actions.map(({ action, label, variant }) => (
               <Button
@@ -207,6 +225,11 @@ export default function EngineerInstructionDetailPage() {
           </div>
         )}
       </div>
+
+      <WorkflowStatusCard
+        recordType="engineer_instruction"
+        recordId={params.eiId}
+      />
 
       {/* ── Summary Strip ── */}
       <SummaryStrip>

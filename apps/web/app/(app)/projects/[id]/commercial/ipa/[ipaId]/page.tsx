@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Card,
@@ -15,7 +15,7 @@ import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
+import { formatMoney, formatRate, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 export default function IpaDetailPage() {
   const params = useParams<{ id: string; ipaId: string }>();
@@ -84,6 +84,33 @@ export default function IpaDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         Back to IPAs
       </Link>
+
+      {/* ── Imported-historical banner ── */}
+      {data.origin === 'imported_historical' && (
+        <div className="flex items-start gap-3 rounded-md border border-blue-300 bg-blue-50 p-3 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200">
+          <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 space-y-1 text-sm">
+            <div className="font-medium">Imported historical IPA</div>
+            <div className="text-xs">
+              This record was imported from a historical sheet
+              {data.importedAt && (
+                <> on {new Date(data.importedAt).toLocaleDateString()}</>
+              )}
+              . Its ledger event uses <code className="font-mono">imported_historical</code>{' '}
+              origin — so it is visible as historical truth but does not count
+              alongside live activity in reconciliation.
+            </div>
+            {data.importBatchId && (
+              <Link
+                href={`/admin/imports/${data.importBatchId}`}
+                className="inline-block text-xs underline"
+              >
+                View source batch →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
@@ -171,9 +198,7 @@ export default function IpaDetailPage() {
           <Field
             label="Retention Rate"
             value={
-              data.retentionRate != null
-                ? `${parseFloat(String(data.retentionRate)).toFixed(2)}%`
-                : '—'
+              data.retentionRate != null ? formatRate(data.retentionRate) : '—'
             }
           />
           <Field

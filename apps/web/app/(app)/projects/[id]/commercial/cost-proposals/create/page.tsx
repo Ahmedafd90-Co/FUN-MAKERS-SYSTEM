@@ -121,7 +121,7 @@ export default function CreateCostProposalPage() {
               </SelectItem>
               {(variations?.items ?? []).map((v) => (
                 <SelectItem key={v.id} value={v.id}>
-                  {v.referenceNumber ?? 'Draft'} — {v.title}
+                  {v.referenceNumber ?? `#${v.id.slice(0, 8)}`} — {v.title}
                 </SelectItem>
               ))}
             </SelectContent>

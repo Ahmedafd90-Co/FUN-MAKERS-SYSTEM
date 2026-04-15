@@ -15,6 +15,8 @@ import { trpc } from '@/lib/trpc-client';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -54,11 +56,22 @@ export default function PurchaseOrderDetailPage() {
   const transitionMut = trpc.procurement.purchaseOrder.transition.useMutation({
     onSuccess: () => {
       utils.procurement.purchaseOrder.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
     },
     onError: (err) => {
       toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  // Workflow instance drives approve/return/reject when present — these
+  // actions are hidden from the transition bar and handled by the workflow.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'purchase_order', recordId: params.poId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -106,9 +119,9 @@ export default function PurchaseOrderDetailPage() {
       </Link>
 
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">
-            {(data as any).poNumber ?? 'Draft PO'}
+            {(data as any).poNumber ?? 'Purchase Order'}
           </h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={data.status} />
@@ -118,16 +131,18 @@ export default function PurchaseOrderDetailPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Manual approval — transitions are operator-driven, not workflow-routed.
-          </p>
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Purchase Order"
+          />
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
           recordFamily="purchase_order"
           userPermissions={userPermissions ?? []}
           isLoading={transitionMut.isPending}
-          hasActiveWorkflow={false}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -138,6 +153,8 @@ export default function PurchaseOrderDetailPage() {
           }}
         />
       </div>
+
+      <WorkflowStatusCard recordType="purchase_order" recordId={params.poId} />
 
       <Separator />
 
@@ -189,7 +206,7 @@ export default function PurchaseOrderDetailPage() {
                   href={`/projects/${params.id}/procurement/rfq/${(data as any).rfqId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).rfq.referenceNumber ?? (data as any).rfq.rfqNumber ?? 'View RFQ'}
+                  {(data as any).rfq.referenceNumber ?? 'View RFQ'}
                 </Link>
               ) : (
                 '-'
@@ -198,11 +215,25 @@ export default function PurchaseOrderDetailPage() {
           />
           <Field
             label="Quotation"
-            value={(data as any).quotation?.quotationRef ?? '-'}
+            value={
+              (data as any).quotation ? (
+                <Link
+                  href={`/projects/${params.id}/procurement/quotations/${(data as any).quotationId}`}
+                  className="text-primary hover:underline"
+                >
+                  {(data as any).quotation.quotationRef ?? 'View Quotation'}
+                </Link>
+              ) : (
+                '-'
+              )
+            }
           />
           <Field
             label="Budget Category"
-            value={(data as any).category?.name ?? (data as any).categoryId ? 'Mapped' : 'Not mapped'}
+            value={
+              (data as any).category?.name ??
+              ((data as any).categoryId ? 'Mapped' : 'Not mapped')
+            }
           />
         </CardContent>
       </Card>

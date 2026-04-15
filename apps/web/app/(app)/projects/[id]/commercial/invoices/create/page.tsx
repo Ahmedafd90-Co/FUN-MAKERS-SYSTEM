@@ -151,7 +151,7 @@ export default function CreateTaxInvoicePage() {
             <SelectContent>
               {(ipcs?.items ?? []).map((ipc) => (
                 <SelectItem key={ipc.id} value={ipc.id}>
-                  {ipc.referenceNumber ?? 'Draft'}{' — '}
+                  {ipc.referenceNumber ?? `#${ipc.id.slice(0, 8)}`}{' — '}
                   <span className="text-muted-foreground">{ipc.status}</span>
                 </SelectItem>
               ))}

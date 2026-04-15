@@ -74,8 +74,15 @@ export default function IpcDetailPage() {
       ? 'Not started'
       : '—';
 
-  // IPA reference from the included relation
-  const ipaRef: string | null = (data as any).ipa?.referenceNumber ?? null;
+  // IPA label — prefer referenceNumber, fall back to period-based label so
+  // the link never reads "Linked IPA" in the UI.
+  const ipaData = (data as any).ipa as
+    | { referenceNumber: string | null; periodNumber: number }
+    | null
+    | undefined;
+  const ipaRef: string | null = ipaData
+    ? (ipaData.referenceNumber ?? `Period ${ipaData.periodNumber}`)
+    : null;
 
   return (
     <div className="space-y-4">
@@ -205,7 +212,7 @@ export default function IpcDetailPage() {
                 href={`/projects/${params.id}/commercial/ipa/${data.ipaId}`}
                 className="text-primary hover:underline"
               >
-                {ipaRef ?? 'Linked IPA'}
+                {ipaRef ?? 'View IPA'}
               </Link>
             }
           />

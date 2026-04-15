@@ -16,6 +16,9 @@ import { trpc } from '@/lib/trpc-client';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
+import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -62,11 +65,22 @@ export default function ExpenseDetailPage() {
   const transitionMut = trpc.procurement.expense.transition.useMutation({
     onSuccess: () => {
       utils.procurement.expense.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
     },
     onError: (err) => {
       toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  // Workflow instance drives approve/return/reject when present — these
+  // actions are hidden from the transition bar and handled by the workflow.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'expense', recordId: params.expenseId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -117,7 +131,7 @@ export default function ExpenseDetailPage() {
       </Link>
 
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">{d.title}</h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={d.status} />
@@ -125,16 +139,18 @@ export default function ExpenseDetailPage() {
               {SUBTYPE_LABELS[subtype] ?? subtype}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Manual approval — transitions are operator-driven, not workflow-routed.
-          </p>
+          <WorkflowStatusHint
+            recordStatus={d.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Expense"
+          />
         </div>
         <ProcurementTransitionActions
           currentStatus={d.status}
           recordFamily="expense"
           userPermissions={userPermissions ?? []}
           isLoading={transitionMut.isPending}
-          hasActiveWorkflow={false}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -145,6 +161,8 @@ export default function ExpenseDetailPage() {
           }}
         />
       </div>
+
+      <WorkflowStatusCard recordType="expense" recordId={params.expenseId} />
 
       <Separator />
 
@@ -299,24 +317,19 @@ export default function ExpenseDetailPage() {
         </Card>
       )}
 
-      {/* Budget Impact */}
-      {d.status === 'approved' || d.status === 'paid' || d.status === 'closed' ? (
-        <Card className="border-green-500/30">
-          <CardHeader>
-            <CardTitle className="text-sm">Budget Impact</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This expense has been absorbed into the project budget as an{' '}
-              <span className="font-medium text-foreground">actual cost</span>{' '}
-              of{' '}
-              <span className="font-medium tabular-nums">
-                {formatMoney(d.amount)} {d.currency}
-              </span>
-              .
-            </p>
-          </CardContent>
-        </Card>
+      {/* Budget Impact — renders only if absorption succeeded (no open exception) */}
+      {d.status === 'approved' ||
+      d.status === 'paid' ||
+      d.status === 'closed' ? (
+        <BudgetImpactCard
+          projectId={params.id}
+          sourceRecordType="expense"
+          sourceRecordId={params.expenseId}
+          amount={d.amount}
+          currency={d.currency}
+          recordLabel="expense"
+          variant="actual"
+        />
       ) : null}
 
       {/* Linked PO */}

@@ -1,7 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Wallet, Pencil, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Wallet,
+  Pencil,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@fmksa/ui/components/button';
@@ -56,6 +64,15 @@ type BudgetLine = {
   remainingAmount: number;
   varianceAmount: number;
   notes: string | null;
+  // Import provenance — populated when the line was written by a committed
+  // import batch. lastImportedAmount is the frozen "what the sheet said"
+  // value and stays fixed even after subsequent manual edits so we can show
+  // drift.
+  importBatchId: string | null;
+  importRowId: string | null;
+  importedAt: Date | string | null;
+  importedByUserId: string | null;
+  lastImportedAmount: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -196,11 +213,47 @@ export function BudgetOverviewCard({
                         <TableBody>
                           {lines.map((line) => {
                             const lineRemaining = line.budgetAmount - line.committedAmount;
+                            const isImported = line.importBatchId != null;
+                            const hasDrift =
+                              line.lastImportedAmount != null &&
+                              line.lastImportedAmount !== line.budgetAmount;
+                            const importedDateStr = line.importedAt
+                              ? new Date(line.importedAt).toLocaleDateString()
+                              : null;
                             return (
                               <TableRow key={line.id}>
-                                <TableCell className="text-xs">{line.categoryName}</TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="truncate">{line.categoryName}</span>
+                                    {isImported && (
+                                      <Link
+                                        href={`/admin/imports/${line.importBatchId}`}
+                                        title={
+                                          importedDateStr
+                                            ? `Imported from sheet on ${importedDateStr}. Click to view source batch.`
+                                            : 'Imported from sheet. Click to view source batch.'
+                                        }
+                                        className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-800 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <FileSpreadsheet className="h-2.5 w-2.5" />
+                                        Imported
+                                      </Link>
+                                    )}
+                                  </div>
+                                </TableCell>
                                 <TableCell className="text-xs text-right font-mono tabular-nums">
-                                  {formatMoney(line.budgetAmount)}
+                                  <div className="flex flex-col items-end leading-tight">
+                                    <span>{formatMoney(line.budgetAmount)}</span>
+                                    {hasDrift && line.lastImportedAmount != null && (
+                                      <span
+                                        className="text-[10px] text-amber-600 dark:text-amber-400"
+                                        title={`Imported value: ${formatMoney(line.lastImportedAmount)} ${currency}. Adjusted manually since import.`}
+                                      >
+                                        was {formatMoney(line.lastImportedAmount)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell className="text-xs text-right font-mono tabular-nums">
                                   {formatMoney(line.committedAmount)}
@@ -720,11 +773,13 @@ function EditLineSheet({
   const utils = trpc.useUtils();
 
   const [budgetAmount, setBudgetAmount] = useState(line.budgetAmount.toString());
+  const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
       setBudgetAmount(line.budgetAmount.toString());
+      setReason('');
       setErrors({});
     }
     onOpenChange(isOpen);
@@ -762,11 +817,13 @@ function EditLineSheet({
   function handleSubmit() {
     if (!validate()) return;
 
+    const trimmedReason = reason.trim();
     mutation.mutate({
       projectId,
       budgetLineId: line.id,
       budgetAmount: parseFloat(budgetAmount),
       notes: undefined,
+      reason: trimmedReason ? trimmedReason : undefined,
     });
   }
 
@@ -781,6 +838,35 @@ function EditLineSheet({
         </SheetHeader>
 
         <div className="space-y-4 py-4">
+          {/* Imported-line banner — shown when line originated from a sheet import */}
+          {line.importBatchId && (
+            <div className="flex items-start gap-2 rounded-md border border-blue-300 bg-blue-50 p-2.5 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200">
+              <FileSpreadsheet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div className="flex-1 space-y-0.5 text-xs">
+                <div className="font-medium">Imported budget line</div>
+                <div>
+                  This line was written by a committed import
+                  {line.importedAt && (
+                    <> on {new Date(line.importedAt).toLocaleDateString()}</>
+                  )}
+                  . Manual edits here are recorded as append-only budget adjustments
+                  &mdash; the original imported value stays visible for reconciliation.
+                </div>
+                {line.lastImportedAmount != null && (
+                  <div className="pt-1 font-mono tabular-nums">
+                    Imported value: {formatMoney(line.lastImportedAmount)} {currency}
+                  </div>
+                )}
+                <Link
+                  href={`/admin/imports/${line.importBatchId}`}
+                  className="inline-block pt-0.5 underline"
+                >
+                  View source batch &rarr;
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* Current figures */}
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
@@ -818,6 +904,35 @@ function EditLineSheet({
             {errors.budgetAmount && (
               <p className="text-xs text-destructive font-medium">{errors.budgetAmount}</p>
             )}
+          </div>
+
+          {/* Optional reason — required-looking prompt on imported lines so the
+              drift from the sheet is traceable. The service writes the reason
+              into the BudgetAdjustment record either way; this field just
+              gives the operator a first-class place to type it. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="line-reason">
+              Reason for change
+              {line.importBatchId && (
+                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                  (recommended — drift from imported value)
+                </span>
+              )}
+            </Label>
+            <Textarea
+              id="line-reason"
+              placeholder={
+                line.importBatchId
+                  ? 'Why is the imported value being overridden?'
+                  : 'Optional rationale recorded in the adjustment log.'
+              }
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Saved as an append-only budget adjustment alongside the change.
+            </p>
           </div>
         </div>
 

@@ -148,7 +148,14 @@ export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspa
           Procurement
           <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
         </Link>
-        {['Materials', 'Budget', 'Cashflow'].map((label) => (
+        <Link
+          href={`/projects/${project.id}/budget`}
+          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+        >
+          Budget
+          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+        </Link>
+        {['Materials', 'Cashflow'].map((label) => (
           <span
             key={label}
             className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-sm text-muted-foreground/50 cursor-default"

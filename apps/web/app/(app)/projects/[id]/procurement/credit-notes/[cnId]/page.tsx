@@ -15,6 +15,9 @@ import { trpc } from '@/lib/trpc-client';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
+import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -54,11 +57,22 @@ export default function CreditNoteDetailPage() {
   const transitionMut = trpc.procurement.creditNote.transition.useMutation({
     onSuccess: () => {
       utils.procurement.creditNote.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
     },
     onError: (err) => {
       toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  // Workflow instance drives approve/return/reject when present — these
+  // actions are hidden from the transition bar and handled by the workflow.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'credit_note', recordId: params.cnId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -108,7 +122,7 @@ export default function CreditNoteDetailPage() {
       </Link>
 
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">{d.creditNoteNumber}</h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={d.status} />
@@ -116,16 +130,18 @@ export default function CreditNoteDetailPage() {
               {d.subtype?.replace(/_/g, ' ') ?? ''}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Manual approval — transitions are operator-driven, not workflow-routed.
-          </p>
+          <WorkflowStatusHint
+            recordStatus={d.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Credit Note"
+          />
         </div>
         <ProcurementTransitionActions
           currentStatus={d.status}
           recordFamily="credit_note"
           userPermissions={userPermissions ?? []}
           isLoading={transitionMut.isPending}
-          hasActiveWorkflow={false}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -136,6 +152,8 @@ export default function CreditNoteDetailPage() {
           }}
         />
       </div>
+
+      <WorkflowStatusCard recordType="credit_note" recordId={params.cnId} />
 
       <Separator />
 
@@ -221,31 +239,35 @@ export default function CreditNoteDetailPage() {
           />
           <Field
             label="Correspondence"
-            value={d.correspondenceId ? d.correspondenceId.slice(0, 8) : '-'}
+            value={
+              d.correspondence ? (
+                <Link
+                  href={`/projects/${params.id}/commercial/correspondence/${d.correspondenceId}`}
+                  className="text-primary hover:underline"
+                >
+                  {d.correspondence.referenceNumber ??
+                    d.correspondence.subject ??
+                    'View Correspondence'}
+                </Link>
+              ) : (
+                '-'
+              )
+            }
           />
         </CardContent>
       </Card>
 
-      {/* Budget Impact */}
+      {/* Budget Impact — renders only if absorption succeeded (no open exception) */}
       {d.status === 'applied' || d.status === 'closed' ? (
-        <Card className="border-amber-500/30">
-          <CardHeader>
-            <CardTitle className="text-sm">Budget Impact</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This credit note has been applied to the project budget as an{' '}
-              <span className="font-medium text-foreground">
-                actual cost reversal
-              </span>{' '}
-              of{' '}
-              <span className="font-medium tabular-nums">
-                {formatMoney(d.amount)} {d.currency}
-              </span>
-              .
-            </p>
-          </CardContent>
-        </Card>
+        <BudgetImpactCard
+          projectId={params.id}
+          sourceRecordType="credit_note"
+          sourceRecordId={params.cnId}
+          amount={d.amount}
+          currency={d.currency}
+          recordLabel="credit note"
+          variant="reversal"
+        />
       ) : null}
     </div>
   );

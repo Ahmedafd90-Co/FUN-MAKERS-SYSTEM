@@ -15,6 +15,9 @@ import { trpc } from '@/lib/trpc-client';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
+import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -40,6 +43,24 @@ function formatMoney(val: unknown): string {
   });
 }
 
+/**
+ * Decimal rate (0.0–1.0) → "15.00%" percent string.
+ *
+ * The schema stores `vatRate` as `Decimal(5,4)` in the 0–1 range (0.15 = 15%),
+ * so UI must multiply by 100 before display — `parseFloat` alone would
+ * incorrectly render "0.15%" for a 15% tax.
+ */
+function formatRate(val: unknown): string {
+  const num =
+    typeof val === 'string'
+      ? parseFloat(val)
+      : typeof val === 'number'
+        ? val
+        : 0;
+  if (!Number.isFinite(num)) return '—';
+  return `${(num * 100).toFixed(2)}%`;
+}
+
 export default function SupplierInvoiceDetailPage() {
   const params = useParams<{ id: string; siId: string }>();
   const utils = trpc.useUtils();
@@ -56,11 +77,22 @@ export default function SupplierInvoiceDetailPage() {
     trpc.procurement.supplierInvoice.transition.useMutation({
       onSuccess: () => {
         utils.procurement.supplierInvoice.get.invalidate();
+        utils.workflow.instances.getByRecord.invalidate();
       },
       onError: (err) => {
         toast.error(err.message ?? 'Transition failed');
       },
     });
+
+  // Workflow instance drives approve/return/reject when present — these
+  // actions are hidden from the transition bar and handled by the workflow.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'supplier_invoice', recordId: params.siId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -108,9 +140,9 @@ export default function SupplierInvoiceDetailPage() {
       </Link>
 
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">
-            {(data as any).invoiceNumber ?? 'Invoice'}
+            {(data as any).invoiceNumber ?? 'Supplier Invoice'}
           </h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={data.status} />
@@ -118,16 +150,18 @@ export default function SupplierInvoiceDetailPage() {
               {(data as any).vendor?.name ?? 'Unknown Vendor'}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Manual approval — transitions are operator-driven, not workflow-routed.
-          </p>
+          <WorkflowStatusHint
+            recordStatus={data.status}
+            hasActiveWorkflow={hasActiveWorkflow}
+            recordLabel="Supplier Invoice"
+          />
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
           recordFamily="supplier_invoice"
           userPermissions={userPermissions ?? []}
           isLoading={transitionMut.isPending}
-          hasActiveWorkflow={false}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -138,6 +172,8 @@ export default function SupplierInvoiceDetailPage() {
           }}
         />
       </div>
+
+      <WorkflowStatusCard recordType="supplier_invoice" recordId={params.siId} />
 
       <Separator />
 
@@ -163,7 +199,7 @@ export default function SupplierInvoiceDetailPage() {
             label="VAT Rate"
             value={
               (data as any).vatRate != null
-                ? `${parseFloat(String((data as any).vatRate))}%`
+                ? formatRate((data as any).vatRate)
                 : '-'
             }
           />
@@ -226,24 +262,19 @@ export default function SupplierInvoiceDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Budget Impact */}
-      {data.status === 'approved' || data.status === 'paid' || data.status === 'closed' ? (
-        <Card className="border-green-500/30">
-          <CardHeader>
-            <CardTitle className="text-sm">Budget Impact</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This invoice has been absorbed into the project budget as an{' '}
-              <span className="font-medium text-foreground">actual cost</span>{' '}
-              of{' '}
-              <span className="font-medium tabular-nums">
-                {formatMoney(data.totalAmount)} {data.currency}
-              </span>
-              .
-            </p>
-          </CardContent>
-        </Card>
+      {/* Budget Impact — renders only if absorption succeeded (no open exception) */}
+      {data.status === 'approved' ||
+      data.status === 'paid' ||
+      data.status === 'closed' ? (
+        <BudgetImpactCard
+          projectId={params.id}
+          sourceRecordType="supplier_invoice"
+          sourceRecordId={params.siId}
+          amount={data.totalAmount}
+          currency={data.currency}
+          recordLabel="invoice"
+          variant="actual"
+        />
       ) : null}
     </div>
   );

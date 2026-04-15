@@ -15,7 +15,9 @@ import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
 import { InvoiceCollectionsSection } from '@/components/commercial/invoice-collections-section';
-import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
+import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
+import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { formatMoney, formatRate, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 function isDueSoon(dueDate: string | null): boolean {
   if (!dueDate) return false;
@@ -44,11 +46,21 @@ export default function TaxInvoiceDetailPage() {
   const transitionMut = trpc.commercial.taxInvoice.transition.useMutation({
     onSuccess: () => {
       utils.commercial.taxInvoice.get.invalidate();
+      utils.workflow.instances.getByRecord.invalidate();
     },
     onError: (err) => {
       toast.error(err.message ?? 'Transition failed');
     },
   });
+
+  // Workflow instance drives approve/return/reject when present.
+  const { data: workflowData } = trpc.workflow.instances.getByRecord.useQuery(
+    { recordType: 'tax_invoice', recordId: params.invoiceId },
+    { refetchInterval: 30_000 },
+  );
+  const hasActiveWorkflow =
+    workflowData != null &&
+    ['in_progress', 'returned'].includes(workflowData.status);
 
   if (isLoading) {
     return (
@@ -71,8 +83,19 @@ export default function TaxInvoiceDetailPage() {
   const overdue = isOverdue(dueDateStr);
   const isCollected = data.status === 'collected';
 
-  // IPC reference from the included relation
-  const ipcRef: string | null = (data as any).ipc?.referenceNumber ?? null;
+  // IPC label — prefer referenceNumber, fall back to the IPC's IPA period
+  // (e.g. "Period 2 IPC") so the link never reads "View IPC" in the UI.
+  const ipcData = (data as any).ipc as
+    | {
+        referenceNumber: string | null;
+        ipa?: { periodNumber: number } | null;
+      }
+    | null
+    | undefined;
+  const ipcRef: string | null = ipcData
+    ? (ipcData.referenceNumber ??
+      (ipcData.ipa ? `Period ${ipcData.ipa.periodNumber} IPC` : null))
+    : null;
 
   return (
     <div className="space-y-4">
@@ -122,6 +145,7 @@ export default function TaxInvoiceDetailPage() {
           recordFamily="taxInvoice"
           permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
+          hasActiveWorkflow={hasActiveWorkflow}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,
@@ -131,11 +155,16 @@ export default function TaxInvoiceDetailPage() {
             });
           }}
         />
-        {/* Manual approval notice */}
-        <p className="text-[11px] text-muted-foreground italic">
-          Manual approval — does not route through workflow
-        </p>
       </div>
+
+      <WorkflowStatusHint
+        recordStatus={data.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Tax Invoice"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
+      <WorkflowStatusCard recordType="tax_invoice" recordId={params.invoiceId} />
 
       {/* ── Summary Strip — financial context at a glance ── */}
       <SummaryStrip>
@@ -162,7 +191,7 @@ export default function TaxInvoiceDetailPage() {
             <span className="font-mono tabular-nums">
               {formatMoney(data.vatAmount)} {data.currency}
               <span className="text-muted-foreground text-[10px] ml-1">
-                ({parseFloat(String(data.vatRate)).toFixed(1)}%)
+                ({formatRate(data.vatRate)})
               </span>
             </span>
           }
@@ -231,7 +260,7 @@ export default function TaxInvoiceDetailPage() {
             label="VAT Rate"
             value={
               <span className="font-mono tabular-nums">
-                {parseFloat(String(data.vatRate)).toFixed(2)}%
+                {formatRate(data.vatRate)}
               </span>
             }
           />

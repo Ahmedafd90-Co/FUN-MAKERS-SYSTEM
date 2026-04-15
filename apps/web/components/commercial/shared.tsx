@@ -25,6 +25,31 @@ export function formatMoney(val: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
+// Rate formatting — decimal rate (0.0–1.0) → "15.00%"
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a decimal rate as a percent string.
+ *
+ * The schema stores VAT and similar multipliers as `Decimal(5,4)` in the
+ * range 0.0–1.0 (e.g. 0.15 = 15%). Pages must multiply by 100 before display
+ * — `parseFloat(String(rate))` alone would show "0.15%" for a 15% tax.
+ *
+ * @param val  Stored rate value (number, numeric string, or Decimal toString)
+ * @param fractionDigits  Decimals to render (default 2, to match schema precision)
+ */
+export function formatRate(val: unknown, fractionDigits = 2): string {
+  const num =
+    typeof val === 'string'
+      ? parseFloat(val)
+      : typeof val === 'number'
+        ? val
+        : 0;
+  if (!Number.isFinite(num)) return '—';
+  return `${(num * 100).toFixed(fractionDigits)}%`;
+}
+
+// ---------------------------------------------------------------------------
 // Field — label + value pair used in card grids
 // ---------------------------------------------------------------------------
 
