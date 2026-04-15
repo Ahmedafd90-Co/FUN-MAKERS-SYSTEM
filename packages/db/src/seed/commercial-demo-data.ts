@@ -28,17 +28,35 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
     return;
   }
 
-  // Skip if demo data already exists (idempotent)
-  const existingIpa = await prisma.ipa.findFirst({
-    where: { projectId: project.id, description: 'DEMO_SEED' },
+  // Resolve a real admin user id for `createdBy` so seeded records don't
+  // attribute authorship to the literal string 'seed' in the UI.
+  const admin = await prisma.user.findUnique({
+    where: { email: 'ahmedafd90@gmail.com' },
   });
-  if (existingIpa) {
+  if (!admin) {
+    console.log('  ⚠ Master admin not found — skipping commercial demo data.');
+    return;
+  }
+
+  // Idempotency — new anchor is the reserved `referenceNumber` IPA-DEMO-001
+  // (operator-invisible, globally unique). Also honour the legacy
+  // `description: 'DEMO_SEED'` anchor so databases seeded before this change
+  // are treated as already-seeded and we don't duplicate rows.
+  const existingByRef = await prisma.ipa.findFirst({
+    where: { projectId: project.id, referenceNumber: 'IPA-DEMO-001' },
+  });
+  const existingByLegacyAnchor = existingByRef
+    ? null
+    : await prisma.ipa.findFirst({
+        where: { projectId: project.id, description: 'DEMO_SEED' },
+      });
+  if (existingByRef || existingByLegacyAnchor) {
     console.log('  ✓ Commercial demo data already exists — skipping.');
     return;
   }
 
   const currency = 'SAR';
-  const actor = 'seed';
+  const actor = admin.id;
 
   // ---------------------------------------------------------------------------
   // IPA #1 — Period 1 (approved_internal)
@@ -46,6 +64,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   const ipa1 = await prisma.ipa.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'IPA-DEMO-001',
       status: 'approved_internal',
       periodNumber: 1,
       periodFrom: new Date('2026-02-01'),
@@ -57,7 +76,6 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
       currentClaim: 4500000,
       netClaimed: 4500000,
       currency,
-      description: 'DEMO_SEED',
       createdBy: actor,
     },
   });
@@ -68,6 +86,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   const ipa2 = await prisma.ipa.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'IPA-DEMO-002',
       status: 'approved_internal',
       periodNumber: 2,
       periodFrom: new Date('2026-03-01'),
@@ -79,7 +98,6 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
       currentClaim: 2700000,
       netClaimed: 2700000,
       currency,
-      description: 'DEMO_SEED',
       createdBy: actor,
     },
   });
@@ -90,6 +108,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   const ipc1 = await prisma.ipc.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'IPC-DEMO-001',
       ipaId: ipa1.id,
       status: 'signed',
       certifiedAmount: 4000000,
@@ -107,6 +126,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   const ipc2 = await prisma.ipc.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'IPC-DEMO-002',
       ipaId: ipa2.id,
       status: 'signed',
       certifiedAmount: 2500000,
@@ -187,6 +207,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   const var1 = await prisma.variation.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'VAR-DEMO-001',
       subtype: 'vo',
       status: 'approved_internal',
       title: 'Additional Lighting Package',
@@ -205,6 +226,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   await prisma.variation.create({
     data: {
       projectId: project.id,
+      referenceNumber: 'VAR-DEMO-002',
       subtype: 'vo',
       status: 'submitted',
       title: 'Extended Outdoor Canopy',
