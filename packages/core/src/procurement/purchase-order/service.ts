@@ -122,7 +122,27 @@ export async function getPurchaseOrder(id: string, projectId: string) {
     include: { items: true, vendor: true, category: true },
   });
   assertProjectScope(record, projectId, 'PurchaseOrder', id);
-  return record;
+
+  // The PurchaseOrder schema stores rfqId / quotationId as scalar foreign
+  // keys but does not declare Prisma relations for them. Fetch the two
+  // lookups explicitly so the UI can render real references instead of
+  // generic "View RFQ" / "-" fallbacks.
+  const [rfq, quotation] = await Promise.all([
+    record.rfqId
+      ? prisma.rFQ.findUnique({
+          where: { id: record.rfqId },
+          select: { id: true, referenceNumber: true },
+        })
+      : Promise.resolve(null),
+    record.quotationId
+      ? prisma.quotation.findUnique({
+          where: { id: record.quotationId },
+          select: { id: true, quotationRef: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return { ...record, rfq, quotation };
 }
 
 // ---------------------------------------------------------------------------

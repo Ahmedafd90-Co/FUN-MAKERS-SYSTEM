@@ -74,7 +74,14 @@ export async function createCreditNote(
 export async function getCreditNote(id: string, projectId: string) {
   const record = await prisma.creditNote.findUniqueOrThrow({
     where: { id },
-    include: { vendor: true, supplierInvoice: true, purchaseOrder: true },
+    include: {
+      vendor: true,
+      supplierInvoice: true,
+      purchaseOrder: true,
+      correspondence: {
+        select: { id: true, referenceNumber: true, subject: true },
+      },
+    },
   });
   assertProjectScope(record, projectId, 'CreditNote', id);
   return record;

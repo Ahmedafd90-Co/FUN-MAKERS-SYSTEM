@@ -54,6 +54,19 @@ export interface KpiReconciliation {
    * gap is historical, not a live system defect.
    */
   legacyGapNote: string | null;
+  /**
+   * Origin-aware split of the ledger total. Present only for KPIs with
+   * posting coverage that touches `ipas` (the sole source of imported
+   * historical events today). Sums to `ledgerTotal`.
+   */
+  ledgerOriginSplit: {
+    live: string;
+    imported: string;
+    liveCount: number;
+    importedCount: number;
+  } | null;
+  /** Delta contribution from IPA_ADJUSTMENT events, included in ledgerTotal. */
+  adjustmentDelta: string | null;
 }
 
 export interface ReconciliationResult {
@@ -121,33 +134,68 @@ async function countEventsWithMissingField(
  * Query the posting_events table to SUM a specific payloadJson field
  * for given event types within a project. Uses raw SQL because Prisma
  * doesn't support JSON field aggregation natively.
+ *
+ * `origin` scopes the sum to a single provenance bucket when supplied.
+ * When omitted the sum crosses both live and imported_historical events.
  */
 async function sumLedgerField(
   projectId: string,
   eventTypes: string[],
   amountField: string,
+  origin?: 'live' | 'imported_historical',
 ): Promise<{ total: Prisma.Decimal; count: number }> {
   if (eventTypes.length === 0) {
     return { total: new Prisma.Decimal(0), count: 0 };
   }
 
-  const result = await prisma.$queryRaw<
-    { total: string | null; cnt: bigint }[]
-  >`
-    SELECT
-      COALESCE(SUM(CAST(payload_json ->> ${amountField} AS DECIMAL(18,2))), 0) AS total,
-      COUNT(*) AS cnt
-    FROM posting_events
-    WHERE project_id = ${projectId}
-      AND event_type = ANY(${eventTypes})
-      AND status = 'posted'
-  `;
+  const result = origin
+    ? await prisma.$queryRaw<{ total: string | null; cnt: bigint }[]>`
+        SELECT
+          COALESCE(SUM(CAST(payload_json ->> ${amountField} AS DECIMAL(18,2))), 0) AS total,
+          COUNT(*) AS cnt
+        FROM posting_events
+        WHERE project_id = ${projectId}
+          AND event_type = ANY(${eventTypes})
+          AND status = 'posted'
+          AND origin = ${origin}::posting_origin
+      `
+    : await prisma.$queryRaw<{ total: string | null; cnt: bigint }[]>`
+        SELECT
+          COALESCE(SUM(CAST(payload_json ->> ${amountField} AS DECIMAL(18,2))), 0) AS total,
+          COUNT(*) AS cnt
+        FROM posting_events
+        WHERE project_id = ${projectId}
+          AND event_type = ANY(${eventTypes})
+          AND status = 'posted'
+      `;
 
   const row = result[0];
   return {
     total: new Prisma.Decimal(row?.total ?? '0'),
     count: Number(row?.cnt ?? 0),
   };
+}
+
+/**
+ * IPA_ADJUSTMENT contributes DELTAS to IPA-derived KPIs. We map the
+ * base-event amount field onto the matching adjustment delta field:
+ *   netClaimed      → netClaimedDelta
+ *   grossAmount     → grossAmountDelta
+ *   retentionAmount → retentionAmountDelta
+ * Any other amount field has no corresponding adjustment delta today,
+ * and returns zero.
+ */
+function adjustmentDeltaFieldFor(baseField: string): string | null {
+  switch (baseField) {
+    case 'netClaimed':
+      return 'netClaimedDelta';
+    case 'grossAmount':
+      return 'grossAmountDelta';
+    case 'retentionAmount':
+      return 'retentionAmountDelta';
+    default:
+      return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -210,44 +258,107 @@ async function countSourceRecords(
 // Ledger total for a single KPI
 // ---------------------------------------------------------------------------
 
+interface LedgerTotalResult {
+  total: Prisma.Decimal;
+  count: number;
+  /** Live-origin subtotal. */
+  liveTotal: Prisma.Decimal;
+  /** Imported-historical-origin subtotal. */
+  importedTotal: Prisma.Decimal;
+  liveCount: number;
+  importedCount: number;
+  /** Sum of IPA_ADJUSTMENT deltas (0 for KPIs that aren't IPA-based). */
+  adjustmentDelta: Prisma.Decimal;
+  /** True if origin split is meaningful for this KPI. */
+  originAware: boolean;
+}
+
 async function getLedgerTotal(
   projectId: string,
   coverage: KpiPostingCoverage,
   kpiId: string,
-): Promise<{ total: Prisma.Decimal; count: number }> {
-  // For KPIs with multiple event types + amount fields (e.g. actual_cost),
-  // we sum each pair separately and add them.
+): Promise<LedgerTotalResult> {
+  // actual_cost: two pairs summed. Not IPA-derived, origin split irrelevant
+  // (no historical import path for procurement yet).
   if (kpiId === 'actual_cost') {
-    // SUPPLIER_INVOICE_APPROVED.totalAmount + EXPENSE_APPROVED.amount
     const [si, exp] = await Promise.all([
       sumLedgerField(projectId, ['SUPPLIER_INVOICE_APPROVED'], 'totalAmount'),
       sumLedgerField(projectId, ['EXPENSE_APPROVED'], 'amount'),
     ]);
+    const total = si.total.plus(exp.total);
     return {
-      total: si.total.plus(exp.total),
+      total,
       count: si.count + exp.count,
+      liveTotal: total,
+      importedTotal: new Prisma.Decimal(0),
+      liveCount: si.count + exp.count,
+      importedCount: 0,
+      adjustmentDelta: new Prisma.Decimal(0),
+      originAware: false,
     };
   }
 
   if (kpiId === 'approved_variation_impact' || kpiId === 'revised_budget') {
-    // Both KPIs track approved amounts, not claimed amounts:
-    // VARIATION_APPROVED_INTERNAL.approvedCostImpact + VARIATION_APPROVED_CLIENT.approvedCost
     const [internal, client] = await Promise.all([
       sumLedgerField(projectId, ['VARIATION_APPROVED_INTERNAL'], 'approvedCostImpact'),
       sumLedgerField(projectId, ['VARIATION_APPROVED_CLIENT'], 'approvedCost'),
     ]);
+    const total = internal.total.plus(client.total);
     return {
-      total: internal.total.plus(client.total),
+      total,
       count: internal.count + client.count,
+      liveTotal: total,
+      importedTotal: new Prisma.Decimal(0),
+      liveCount: internal.count + client.count,
+      importedCount: 0,
+      adjustmentDelta: new Prisma.Decimal(0),
+      originAware: false,
     };
   }
 
-  // Default: single event type, single amount field
-  return sumLedgerField(
-    projectId,
-    coverage.eventTypes,
-    coverage.amountFields[0]!,
-  );
+  // Default: single event type, single amount field. Origin split applies
+  // wherever the event type can be imported historically — today that's
+  // IPA_APPROVED only (other event types have no import path).
+  const eventType = coverage.eventTypes[0]!;
+  const amountField = coverage.amountFields[0]!;
+  const isIpaDerived = eventType === 'IPA_APPROVED';
+
+  if (isIpaDerived) {
+    // Origin-aware sum + IPA_ADJUSTMENT deltas (for matching field).
+    const adjustmentField = adjustmentDeltaFieldFor(amountField);
+
+    const [live, imported, adjDelta] = await Promise.all([
+      sumLedgerField(projectId, [eventType], amountField, 'live'),
+      sumLedgerField(projectId, [eventType], amountField, 'imported_historical'),
+      adjustmentField
+        ? sumLedgerField(projectId, ['IPA_ADJUSTMENT'], adjustmentField)
+        : Promise.resolve({ total: new Prisma.Decimal(0), count: 0 }),
+    ]);
+
+    const total = live.total.plus(imported.total).plus(adjDelta.total);
+    return {
+      total,
+      count: live.count + imported.count + adjDelta.count,
+      liveTotal: live.total,
+      importedTotal: imported.total,
+      liveCount: live.count,
+      importedCount: imported.count,
+      adjustmentDelta: adjDelta.total,
+      originAware: true,
+    };
+  }
+
+  const base = await sumLedgerField(projectId, [eventType], amountField);
+  return {
+    total: base.total,
+    count: base.count,
+    liveTotal: base.total,
+    importedTotal: new Prisma.Decimal(0),
+    liveCount: base.count,
+    importedCount: 0,
+    adjustmentDelta: new Prisma.Decimal(0),
+    originAware: false,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +413,8 @@ export async function reconcileProjectFinancials(
         sourceQueryBasis: def.sourceQueryBasis,
         ledgerQueryBasis: 'No posting event type exists for this KPI',
         legacyGapNote: null,
+        ledgerOriginSplit: null,
+        adjustmentDelta: null,
       };
       continue;
     }
@@ -397,6 +510,15 @@ export async function reconcileProjectFinancials(
       sourceQueryBasis: def.sourceQueryBasis,
       ledgerQueryBasis: def.postingCoverage.ledgerQueryBasis,
       legacyGapNote,
+      ledgerOriginSplit: ledger.originAware
+        ? {
+            live: decStr(ledger.liveTotal),
+            imported: decStr(ledger.importedTotal),
+            liveCount: ledger.liveCount,
+            importedCount: ledger.importedCount,
+          }
+        : null,
+      adjustmentDelta: ledger.originAware ? decStr(ledger.adjustmentDelta) : null,
     };
   }
 

@@ -302,7 +302,7 @@ export async function getIpc(id: string, projectId: string) {
     where: { id },
     include: {
       project: true,
-      ipa: { select: { id: true, referenceNumber: true } },
+      ipa: { select: { id: true, referenceNumber: true, periodNumber: true } },
     },
   });
   assertProjectScope(record, projectId, 'IPC', id);
@@ -349,7 +349,7 @@ export async function listIpcs(input: ListFilterInput) {
       take: input.take ?? 20,
       include: {
         project: true,
-        ipa: { select: { id: true, referenceNumber: true } },
+        ipa: { select: { id: true, referenceNumber: true, periodNumber: true } },
       },
     }),
     prisma.ipc.count({ where }),

@@ -72,6 +72,12 @@ export async function updateIpa(input: UpdateIpaInput, actorUserId: string, proj
   const existing = await prisma.ipa.findUniqueOrThrow({ where: { id: input.id } });
   assertProjectScope(existing, projectId, 'IPA', input.id);
 
+  if (existing.origin === 'imported_historical') {
+    throw new Error(
+      `Cannot update IPA ${input.id} via the live update path: record was imported. Use 'Adjust imported IPA' instead.`,
+    );
+  }
+
   if (!['draft', 'returned'].includes(existing.status)) {
     throw new Error(`Cannot update IPA in status '${existing.status}'. Only draft or returned IPAs can be updated.`);
   }
@@ -129,6 +135,14 @@ export async function transitionIpa(
     include: { project: true },
   });
   if (projectId) assertProjectScope(existing, projectId, 'IPA', id);
+
+  // Import provenance guard — imported historical IPAs never run through
+  // the live workflow machinery. Corrections flow through adjustIpa().
+  if (existing.origin === 'imported_historical') {
+    throw new Error(
+      `Cannot transition IPA ${id}: record was imported from historical sheet and is not managed by live workflow. Use the 'Adjust imported IPA' action instead.`,
+    );
+  }
 
   // Terminal status check
   if (IPA_TERMINAL_STATUSES.includes(existing.status)) {
@@ -335,12 +349,201 @@ export async function listIpas(input: ListFilterInput) {
 }
 
 // ---------------------------------------------------------------------------
+// Adjust — post-commit corrections (imported IPAs or live correction path)
+//
+// Writes a header IpaAdjustmentBatch, a row IpaAdjustmentField per changed
+// field, and — when monetary fields change — emits ONE IPA_ADJUSTMENT
+// posting event whose payload carries the deltas (not absolute values).
+// ---------------------------------------------------------------------------
+
+const MONETARY_FIELDS = new Set([
+  'grossAmount',
+  'retentionRate',
+  'retentionAmount',
+  'previousCertified',
+  'currentClaim',
+  'advanceRecovery',
+  'otherDeductions',
+  'netClaimed',
+]);
+
+export async function adjustIpa(
+  input: {
+    ipaId: string;
+    projectId: string;
+    adjustmentType: 'imported_correction' | 'manual_correction' | 'period_recategorization';
+    reason: string;
+    changes: Partial<{
+      grossAmount: string;
+      retentionRate: string;
+      retentionAmount: string;
+      previousCertified: string;
+      currentClaim: string;
+      advanceRecovery: string | null;
+      otherDeductions: string | null;
+      netClaimed: string;
+      description: string | null;
+      status: IpaStatus;
+      periodFrom: string;
+      periodTo: string;
+    }>;
+    approvedBy?: string;
+  },
+  actorUserId: string,
+) {
+  const existing = await prisma.ipa.findUniqueOrThrow({
+    where: { id: input.ipaId },
+    include: { project: true },
+  });
+  assertProjectScope(existing, input.projectId, 'IPA', input.ipaId);
+
+  if (
+    existing.origin !== 'imported_historical' &&
+    input.adjustmentType === 'imported_correction'
+  ) {
+    throw new Error(
+      `adjustmentType='imported_correction' is only valid for imported IPAs. This IPA is origin='live'.`,
+    );
+  }
+
+  const changedFields: Array<{ field: string; before: string; after: string }> = [];
+  const dataForUpdate: Record<string, unknown> = {};
+
+  for (const [field, after] of Object.entries(input.changes)) {
+    if (after === undefined) continue;
+    const before = (existing as any)[field];
+    const beforeStr =
+      before === null || before === undefined
+        ? ''
+        : before instanceof Date
+          ? before.toISOString()
+          : before.toString();
+    const afterStr =
+      after === null || after === undefined
+        ? ''
+        : typeof after === 'string'
+          ? after
+          : String(after);
+    if (beforeStr === afterStr) continue;
+    changedFields.push({ field, before: beforeStr, after: afterStr });
+    if (field === 'periodFrom' || field === 'periodTo') {
+      dataForUpdate[field] = new Date(afterStr);
+    } else {
+      dataForUpdate[field] = after;
+    }
+  }
+
+  if (changedFields.length === 0) {
+    throw new Error('adjustIpa called with no field changes.');
+  }
+
+  // 1. Header + fields + Ipa row update in one tx
+  const { batch, updated } = await prisma.$transaction(async (tx) => {
+    const header = await tx.ipaAdjustmentBatch.create({
+      data: {
+        ipaId: input.ipaId,
+        adjustmentType: input.adjustmentType,
+        reason: input.reason,
+        actorUserId,
+        approvedBy: input.approvedBy ?? null,
+      },
+    });
+
+    await tx.ipaAdjustmentField.createMany({
+      data: changedFields.map((c) => ({
+        batchId: header.id,
+        fieldName: c.field,
+        beforeValue: c.before,
+        afterValue: c.after,
+      })),
+    });
+
+    const upd = await tx.ipa.update({
+      where: { id: input.ipaId },
+      data: dataForUpdate,
+    });
+
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'ipa.adjust',
+        resourceType: 'ipa',
+        resourceId: input.ipaId,
+        projectId: input.projectId,
+        beforeJson: existing as any,
+        afterJson: {
+          adjustmentBatchId: header.id,
+          adjustmentType: input.adjustmentType,
+          changedFields,
+        },
+        reason: input.reason,
+      },
+      tx,
+    );
+
+    return { batch: header, updated: upd };
+  });
+
+  // 2. If any monetary field changed, post ONE IPA_ADJUSTMENT event with deltas
+  const hasMonetary = changedFields.some((c) => MONETARY_FIELDS.has(c.field));
+  if (hasMonetary) {
+    const grossBefore = parseFloat(existing.grossAmount.toString());
+    const grossAfter = parseFloat(updated.grossAmount.toString());
+    const retBefore = parseFloat(existing.retentionAmount.toString());
+    const retAfter = parseFloat(updated.retentionAmount.toString());
+    const netBefore = parseFloat(existing.netClaimed.toString());
+    const netAfter = parseFloat(updated.netClaimed.toString());
+
+    const posted = await postingService.post({
+      eventType: 'IPA_ADJUSTMENT',
+      sourceService: 'commercial',
+      sourceRecordType: 'ipa_adjustment_batch',
+      sourceRecordId: batch.id,
+      projectId: input.projectId,
+      entityId: existing.project.entityId ?? undefined,
+      idempotencyKey: `ipa-adjustment-${batch.id}`,
+      // Origin matches the IPA: imported IPAs are corrected against imported
+      // history; live IPAs are corrected against live history. This keeps
+      // reconciliation's origin-aware split consistent.
+      origin: existing.origin === 'imported_historical' ? 'imported_historical' : 'live',
+      importBatchId: existing.importBatchId ?? null,
+      payload: {
+        ipaAdjustmentBatchId: batch.id,
+        ipaId: input.ipaId,
+        adjustmentType: input.adjustmentType,
+        reason: input.reason,
+        grossAmountDelta: (grossAfter - grossBefore).toFixed(2),
+        retentionAmountDelta: (retAfter - retBefore).toFixed(2),
+        netClaimedDelta: (netAfter - netBefore).toFixed(2),
+        currency: updated.currency,
+        projectId: input.projectId,
+      },
+      actorUserId,
+    });
+
+    await prisma.ipaAdjustmentBatch.update({
+      where: { id: batch.id },
+      data: { postingEventId: posted.id },
+    });
+  }
+
+  return { batchId: batch.id, changedFields: changedFields.length };
+}
+
+// ---------------------------------------------------------------------------
 // Delete (draft only — hard delete)
 // ---------------------------------------------------------------------------
 
 export async function deleteIpa(id: string, actorUserId: string, projectId: string) {
   const existing = await prisma.ipa.findUniqueOrThrow({ where: { id } });
   assertProjectScope(existing, projectId, 'IPA', id);
+
+  if (existing.origin === 'imported_historical') {
+    throw new Error(
+      `Cannot delete IPA ${id}: imported historical records are append-only. Flag exclusion through import review instead.`,
+    );
+  }
 
   if (existing.status !== 'draft') {
     throw new Error(`Cannot delete IPA in status '${existing.status}'. Only draft IPAs can be deleted.`);

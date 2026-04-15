@@ -79,13 +79,22 @@ export const budgetRouter = router({
         budgetLineId: z.string().uuid(),
         budgetAmount: z.number().min(0),
         notes: z.string().optional(),
+        // Optional operator-supplied rationale. When present, it becomes the
+        // BudgetAdjustment.reason written by updateBudgetLine. UI surfaces
+        // this when editing imported lines so the drift history is legible.
+        reason: z.string().max(500).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user.permissions.includes('project.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       return updateBudgetLine(
-        { budgetLineId: input.budgetLineId, budgetAmount: input.budgetAmount, notes: input.notes },
+        {
+          budgetLineId: input.budgetLineId,
+          budgetAmount: input.budgetAmount,
+          notes: input.notes,
+          reason: input.reason,
+        },
         ctx.user.id,
       );
     }),

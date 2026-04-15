@@ -265,7 +265,14 @@ export async function getTaxInvoice(id: string, projectId: string) {
     where: { id },
     include: {
       project: true,
-      ipc: { select: { id: true, referenceNumber: true } },
+      ipc: {
+        select: {
+          id: true,
+          referenceNumber: true,
+          certificationDate: true,
+          ipa: { select: { periodNumber: true } },
+        },
+      },
     },
   });
   assertProjectScope(record, projectId, 'TaxInvoice', id);

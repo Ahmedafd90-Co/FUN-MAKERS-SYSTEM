@@ -8,6 +8,20 @@ export const IPA_APPROVED_SCHEMA = z.object({
   netClaimed: z.string(),
   currency: z.string(),
   projectId: z.string(),
+  /**
+   * Present only when the event was emitted by the sheet-import pipeline.
+   * Live events never carry this block. Keeps import provenance on the
+   * posting record even if the surrounding Ipa row is later altered.
+   */
+  _import: z
+    .object({
+      batchId: z.string().optional(),
+      rowId: z.string().optional(),
+      rowNumber: z.number().optional(),
+      /** 'approvedAt' | 'signedAt' | 'issuedAt' | 'periodTo' */
+      postingDateSource: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const IPC_SIGNED_SCHEMA = z.object({
@@ -70,4 +84,38 @@ export const BACK_CHARGE_ISSUED_SCHEMA = z.object({
   chargedAmount: z.string(),
   currency: z.string(),
   projectId: z.string(),
+});
+
+/**
+ * Post-commit corrections to an IPA record. Paired with IpaAdjustmentBatch
+ * rows in the DB — this posting event is the signed accounting side of
+ * that header.
+ *
+ * adjustmentType values:
+ *   - imported_correction       — fixing an imported_historical record
+ *   - manual_correction         — generic manual fix on a live record
+ *   - period_recategorization   — shifting amounts across periods
+ *
+ * Amount fields are DELTAS, not absolute values. Reconciliation aggregates
+ * these against the matching base event (IPA_APPROVED) to arrive at the
+ * revised total.
+ */
+export const IPA_ADJUSTMENT_SCHEMA = z.object({
+  ipaAdjustmentBatchId: z.string(),
+  ipaId: z.string(),
+  adjustmentType: z.string(),
+  reason: z.string(),
+  grossAmountDelta: z.string(),
+  retentionAmountDelta: z.string(),
+  netClaimedDelta: z.string(),
+  currency: z.string(),
+  projectId: z.string(),
+  _import: z
+    .object({
+      batchId: z.string().optional(),
+      rowId: z.string().optional(),
+      rowNumber: z.number().optional(),
+      postingDateSource: z.string().optional(),
+    })
+    .optional(),
 });

@@ -159,6 +159,12 @@ export async function updateBudgetLine(
     budgetLineId: string;
     budgetAmount: number;
     notes?: string | undefined;
+    /**
+     * Optional operator-supplied rationale for the change. When provided,
+     * it becomes the BudgetAdjustment.reason; when omitted, the adjustment
+     * record uses a canned description.
+     */
+    reason?: string | undefined;
   },
   actorUserId: string,
 ) {
@@ -167,26 +173,59 @@ export async function updateBudgetLine(
     include: { budget: true },
   });
 
-  const data: Record<string, unknown> = {
+  const beforeAmount = existing.budgetAmount.toString();
+  const afterAmount = input.budgetAmount.toFixed(2);
+  const amountChanged = beforeAmount !== afterAmount;
+
+  const updateData: Record<string, unknown> = {
     budgetAmount: input.budgetAmount,
   };
-  if (input.notes !== undefined) data.notes = input.notes;
+  if (input.notes !== undefined) updateData.notes = input.notes;
 
-  const updated = await prisma.budgetLine.update({
-    where: { id: input.budgetLineId },
-    data,
-    include: { category: true },
-  });
+  const { updated } = await prisma.$transaction(async (tx) => {
+    const upd = await (tx as any).budgetLine.update({
+      where: { id: input.budgetLineId },
+      data: updateData,
+      include: { category: true },
+    });
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'project_budget.update_line',
-    resourceType: 'project_budget',
-    resourceId: existing.budgetId,
-    projectId: existing.budget.projectId,
-    beforeJson: existing as any,
-    afterJson: updated as any,
+    // Append-only per-line history — ALWAYS written on manual amount changes.
+    // Keeps the reconciliation story honest: a late hand-edit to a budget
+    // line is visible in the budget page even when the top-level totals
+    // look right.
+    if (amountChanged) {
+      await (tx as any).budgetAdjustment.create({
+        data: {
+          budgetId: existing.budgetId,
+          budgetLineId: existing.id,
+          adjustmentType: 'line_manual_adjustment',
+          amount: input.budgetAmount,
+          beforeAmount,
+          afterAmount,
+          reason:
+            input.reason?.trim() ||
+            `Manual budget line adjustment (${beforeAmount} → ${afterAmount})`,
+          createdBy: actorUserId,
+        },
+      });
+    }
+
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'project_budget.update_line',
+        resourceType: 'project_budget',
+        resourceId: existing.budgetId,
+        projectId: existing.budget.projectId,
+        beforeJson: existing as any,
+        afterJson: upd as any,
+        reason: input.reason ?? null,
+      },
+      tx,
+    );
+
+    return { updated: upd };
   });
 
   return updated;
@@ -273,6 +312,10 @@ export async function getBudgetSummary(projectId: string) {
     const budgetAmount = parseFloat(line.budgetAmount.toString());
     const committedAmount = parseFloat(line.committedAmount.toString());
     const actualAmount = parseFloat(line.actualAmount.toString());
+    const lastImportedAmount =
+      line.lastImportedAmount != null
+        ? parseFloat(line.lastImportedAmount.toString())
+        : null;
 
     totalBudgeted += budgetAmount;
     totalCommitted += committedAmount;
@@ -289,6 +332,14 @@ export async function getBudgetSummary(projectId: string) {
       remainingAmount: budgetAmount - committedAmount,
       varianceAmount: budgetAmount - actualAmount,
       notes: line.notes,
+      // Import provenance — non-null when this line was written by an import commit.
+      // lastImportedAmount is the frozen "what the sheet said" value and is NOT
+      // mutated by subsequent manual adjustments, so UI can show imported vs current.
+      importBatchId: line.importBatchId,
+      importRowId: line.importRowId,
+      importedAt: line.importedAt,
+      importedByUserId: line.importedByUserId,
+      lastImportedAmount,
     };
   });
 

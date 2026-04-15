@@ -2,13 +2,13 @@
  * Dashboard tRPC router — Phase 1.9
  *
  * Provides a summary endpoint that aggregates data for the home dashboard:
- *   - Pending approval count
+ *   - Pending approval count (approver-rule filtered — matches /approvals)
  *   - Assigned projects (5 most recent)
  *   - Unread notification count
  *   - Recent audit activity (admin only)
  */
 import { prisma } from '@fmksa/db';
-import { getUnreadCount } from '@fmksa/core';
+import { getUnreadCount, resolveApprovers } from '@fmksa/core';
 
 import { router, protectedProcedure } from '../trpc';
 
@@ -44,6 +44,19 @@ export const dashboardRouter = router({
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Count workflow instances where THIS user is a valid approver for the current
+ * step. Mirrors the filter applied by `workflow.myApprovals` so the dashboard
+ * number agrees with the /approvals queue exactly.
+ *
+ * Invariants:
+ *  - Only projects the user is assigned to
+ *  - Only instances in `in_progress` or `returned` status with a current step
+ *  - Only instances where `resolveApprovers(currentStep.rule)` includes userId
+ *
+ * Instances whose approver rule fails to resolve are skipped (matches
+ * myApprovals behavior — a broken rule is invisible, not counted).
+ */
 async function countPendingApprovals(userId: string): Promise<number> {
   // Get projects the user is assigned to
   const assignments = await (prisma as any).projectAssignment.findMany({
@@ -54,13 +67,48 @@ async function countPendingApprovals(userId: string): Promise<number> {
 
   if (projectIds.length === 0) return 0;
 
-  // Count workflow instances in those projects that are pending action
-  return (prisma as any).workflowInstance.count({
+  // Pull candidate instances with their current step's approver rule
+  const instances = await prisma.workflowInstance.findMany({
     where: {
       projectId: { in: projectIds },
       status: { in: ['in_progress', 'returned'] },
+      currentStepId: { not: null },
+    },
+    select: {
+      id: true,
+      projectId: true,
+      currentStepId: true,
+      template: {
+        select: {
+          steps: {
+            select: { id: true, approverRuleJson: true },
+          },
+        },
+      },
     },
   });
+
+  let count = 0;
+  for (const instance of instances) {
+    if (!instance.currentStepId) continue;
+    const currentStep = instance.template.steps.find(
+      (s) => s.id === instance.currentStepId,
+    );
+    if (!currentStep) continue;
+
+    let approverIds: string[];
+    try {
+      approverIds = await resolveApprovers(
+        currentStep.approverRuleJson as any,
+        instance.projectId,
+      );
+    } catch {
+      // NoApproversFoundError or similar — skip (matches myApprovals)
+      continue;
+    }
+    if (approverIds.includes(userId)) count += 1;
+  }
+  return count;
 }
 
 async function fetchAssignedProjects(userId: string) {

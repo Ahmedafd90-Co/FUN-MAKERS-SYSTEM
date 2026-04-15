@@ -1,4 +1,5 @@
 import { prisma } from '@fmksa/db';
+import type { PostingOrigin } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import {
   validatePayload,
@@ -19,6 +20,21 @@ export type PostInput = {
   idempotencyKey: string;
   payload: unknown;
   actorUserId?: string;
+  /**
+   * Provenance flag. Defaults to 'live' (the common path). Set to
+   * 'imported_historical' when the event is emitted by a sheet-import
+   * committer — this flags downstream reconciliation and ensures the
+   * event never shares an idempotency namespace with a live event.
+   */
+  origin?: PostingOrigin;
+  /** Soft FK to ImportBatch. Only meaningful when origin='imported_historical'. */
+  importBatchId?: string | null;
+  /**
+   * Backdated timestamp for historical imports (e.g. an IPA approved in
+   * Q2 last year). Ignored for origin='live'. When absent for imported
+   * events, falls back to new Date() so the event is still persisted.
+   */
+  postedAtOverride?: Date | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -60,6 +76,8 @@ export const postingService = {
           idempotencyKey: input.idempotencyKey,
           payloadJson: (input.payload ?? {}) as any,
           status: 'failed',
+          origin: input.origin ?? 'live',
+          importBatchId: input.importBatchId ?? null,
           failureReason:
             validationError instanceof Error
               ? validationError.message
@@ -84,6 +102,11 @@ export const postingService = {
     if (existing) return existing;
 
     // 3. Create event in transaction with audit log
+    const origin = input.origin ?? 'live';
+    const postedAt =
+      origin === 'imported_historical' && input.postedAtOverride
+        ? input.postedAtOverride
+        : new Date();
     return prisma.$transaction(async (tx) => {
       const event = await tx.postingEvent.create({
         data: {
@@ -96,7 +119,9 @@ export const postingService = {
           idempotencyKey: input.idempotencyKey,
           payloadJson: parsed as any,
           status: 'posted',
-          postedAt: new Date(),
+          origin,
+          importBatchId: input.importBatchId ?? null,
+          postedAt,
         },
       });
 
