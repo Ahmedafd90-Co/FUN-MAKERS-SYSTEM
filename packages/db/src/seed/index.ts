@@ -23,6 +23,7 @@ import { seedProcurementNotificationTemplates } from './procurement-notification
 import { seedProcurementCategories } from './procurement-categories';
 import { seedCommercialDemoData } from './commercial-demo-data';
 import { seedBudgetCategories } from './budget-categories';
+import { seedE2eDemo } from './e2e-demo';
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,7 @@ async function main() {
   await seedProcurementCategories(prisma);
   await seedBudgetCategories(prisma);
   await seedCommercialDemoData(prisma);
+  await seedE2eDemo(prisma);
 
   console.log('✅ Seeding complete.');
 }

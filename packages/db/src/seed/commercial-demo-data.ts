@@ -184,7 +184,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   // Variation #1 — approved VO with cost impact
   // ---------------------------------------------------------------------------
-  await prisma.variation.create({
+  const var1 = await prisma.variation.create({
     data: {
       projectId: project.id,
       subtype: 'vo',
@@ -216,5 +216,193 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
     },
   });
 
-  console.log('  ✓ Commercial demo data seeded (2 IPAs, 2 IPCs, 2 Invoices, 1 Collection, 2 Variations)');
+  // ---------------------------------------------------------------------------
+  // Posting events — emit one canonical PostingEvent for each approved record
+  // so the /home and audit ledgers reconcile with the detail pages.
+  //
+  // Idempotency keys use the `demo-…-${recordId}` convention (distinct from
+  // the `e2e-demo-…` keys used in e2e-demo.ts) so both seeds can coexist
+  // without colliding on `posting_events.idempotency_key`.
+  // ---------------------------------------------------------------------------
+  const { entityId } = project;
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'IPA_APPROVED',
+      sourceService: 'commercial',
+      sourceRecordType: 'ipa',
+      sourceRecordId: ipa1.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-ipa-approved-${ipa1.id}`,
+      payloadJson: {
+        ipaId: ipa1.id,
+        periodNumber: 1,
+        grossAmount: '5000000.00',
+        retentionAmount: '500000.00',
+        netClaimed: '4500000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-03-02'),
+    },
+  });
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'IPA_APPROVED',
+      sourceService: 'commercial',
+      sourceRecordType: 'ipa',
+      sourceRecordId: ipa2.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-ipa-approved-${ipa2.id}`,
+      payloadJson: {
+        ipaId: ipa2.id,
+        periodNumber: 2,
+        grossAmount: '3000000.00',
+        retentionAmount: '300000.00',
+        netClaimed: '2700000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-04-02'),
+    },
+  });
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'IPC_SIGNED',
+      sourceService: 'commercial',
+      sourceRecordType: 'ipc',
+      sourceRecordId: ipc1.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-ipc-signed-${ipc1.id}`,
+      payloadJson: {
+        ipcId: ipc1.id,
+        ipaId: ipa1.id,
+        certifiedAmount: '4000000.00',
+        retentionAmount: '400000.00',
+        netCertified: '3600000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-03-10'),
+    },
+  });
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'IPC_SIGNED',
+      sourceService: 'commercial',
+      sourceRecordType: 'ipc',
+      sourceRecordId: ipc2.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-ipc-signed-${ipc2.id}`,
+      payloadJson: {
+        ipcId: ipc2.id,
+        ipaId: ipa2.id,
+        certifiedAmount: '2500000.00',
+        retentionAmount: '250000.00',
+        netCertified: '2250000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-04-05'),
+    },
+  });
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'TAX_INVOICE_ISSUED',
+      sourceService: 'commercial',
+      sourceRecordType: 'tax_invoice',
+      sourceRecordId: inv1.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-tax-invoice-issued-${inv1.id}`,
+      payloadJson: {
+        taxInvoiceId: inv1.id,
+        ipcId: ipc1.id,
+        invoiceNumber: 'INV-DEMO-001',
+        grossAmount: '3600000.00',
+        vatAmount: '540000.00',
+        totalAmount: '4140000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-03-12'),
+    },
+  });
+
+  // Tax invoice #2 — fetch by invoice number to get its id
+  const inv2 = await prisma.taxInvoice.findFirst({
+    where: { projectId: project.id, invoiceNumber: 'INV-DEMO-002' },
+    select: { id: true },
+  });
+  if (inv2) {
+    await prisma.postingEvent.create({
+      data: {
+        eventType: 'TAX_INVOICE_ISSUED',
+        sourceService: 'commercial',
+        sourceRecordType: 'tax_invoice',
+        sourceRecordId: inv2.id,
+        projectId: project.id,
+        entityId,
+        idempotencyKey: `demo-tax-invoice-issued-${inv2.id}`,
+        payloadJson: {
+          taxInvoiceId: inv2.id,
+          ipcId: ipc2.id,
+          invoiceNumber: 'INV-DEMO-002',
+          grossAmount: '2250000.00',
+          vatAmount: '337500.00',
+          totalAmount: '2587500.00',
+          currency,
+          projectId: project.id,
+        },
+        status: 'posted',
+        origin: 'live',
+        postedAt: new Date('2026-04-08'),
+      },
+    });
+  }
+
+  await prisma.postingEvent.create({
+    data: {
+      eventType: 'VARIATION_APPROVED_INTERNAL',
+      sourceService: 'commercial',
+      sourceRecordType: 'variation',
+      sourceRecordId: var1.id,
+      projectId: project.id,
+      entityId,
+      idempotencyKey: `demo-variation-approved-internal-${var1.id}`,
+      payloadJson: {
+        variationId: var1.id,
+        subtype: 'vo',
+        costImpact: '1500000.00',
+        approvedCostImpact: '1200000.00',
+        currency,
+        projectId: project.id,
+      },
+      status: 'posted',
+      origin: 'live',
+      postedAt: new Date('2026-04-06'),
+    },
+  });
+
+  console.log(
+    '  ✓ Commercial demo data seeded (2 IPAs, 2 IPCs, 2 Invoices, 1 Collection, 2 Variations, 7 posting events)',
+  );
 }

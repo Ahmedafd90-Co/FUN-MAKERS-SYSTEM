@@ -99,6 +99,12 @@ export const PERMISSIONS: PermissionDef[] = [
   // --- Cross-Project ---
   { code: 'cross_project.read', description: 'Read approved data across multiple projects where authorized', resource: 'cross_project', action: 'read' },
 
+  // --- Import (sheet-import staging layer) ---
+  { code: 'import.view', description: 'View sheet-import batches and their review queues', resource: 'import', action: 'view' },
+  { code: 'import.create', description: 'Upload a new sheet into the import staging area', resource: 'import', action: 'create' },
+  { code: 'import.commit', description: 'Validate and commit staged import batches into live records', resource: 'import', action: 'commit' },
+  { code: 'import.reject', description: 'Reject or cancel staged import batches without committing', resource: 'import', action: 'reject' },
+
   // --- Screen-level access ---
   { code: 'screen.admin_users', description: 'Access the Admin Users screen', resource: 'screen', action: 'admin_users' },
   { code: 'screen.admin_roles_permissions', description: 'Access the Admin Roles and Permissions screen', resource: 'screen', action: 'admin_roles_permissions' },
@@ -111,6 +117,7 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'screen.admin_posting_exceptions', description: 'Access the Admin Posting Exceptions screen', resource: 'screen', action: 'admin_posting_exceptions' },
   { code: 'screen.admin_system_health', description: 'Access the Admin System Health and Jobs screen', resource: 'screen', action: 'admin_system_health' },
   { code: 'screen.admin_override_log', description: 'Access the Admin Override Log screen', resource: 'screen', action: 'admin_override_log' },
+  { code: 'screen.admin_imports', description: 'Access the Admin Imports screen (sheet-import review queue)', resource: 'screen', action: 'admin_imports' },
 ];
 
 export async function seedPermissions(prisma: PrismaClient) {
