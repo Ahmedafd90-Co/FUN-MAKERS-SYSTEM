@@ -31,6 +31,33 @@ export interface KpiDrilldown {
   additionalFilters?: Record<string, string>;
 }
 
+/**
+ * Posting-ledger coverage metadata for reconciliation.
+ *
+ * Maps a KPI to the PostingEvent types that should account for it,
+ * including which JSON field in the payload carries the monetary amount.
+ */
+export interface KpiPostingCoverage {
+  /** PostingEvent.eventType values that contribute to this KPI. */
+  eventTypes: string[];
+  /** JSON path(s) within payloadJson to extract the monetary amount. */
+  amountFields: string[];
+  /**
+   * Operator-readable description of what the ledger query compares.
+   * Shown in the reconciliation UI so admins understand the basis.
+   */
+  ledgerQueryBasis: string;
+  /**
+   * 'full' = ledger event fires at the same lifecycle point as the source aggregate.
+   * 'partial' = ledger event fires at a different lifecycle point than the source query
+   *             (e.g. base contract value has no posting event). Reconciliation uses
+   *             'partially_reconcilable' status for these.
+   */
+  alignment: 'full' | 'partial';
+  /** When alignment is 'partial', explains the gap. */
+  alignmentNote?: string;
+}
+
 export interface KpiDefinition {
   /** Unique identifier for the KPI. */
   id: string;
@@ -57,6 +84,16 @@ export interface KpiDefinition {
    * have no single record list. Array for cross-record KPIs.
    */
   drilldown: KpiDrilldown | KpiDrilldown[] | null;
+  /**
+   * Posting-ledger coverage for reconciliation. Null when no posting
+   * event type exists for this KPI (reported as 'not_reconcilable').
+   */
+  postingCoverage: KpiPostingCoverage | null;
+  /**
+   * Operator-readable description of the source-side query.
+   * Shown in reconciliation UI alongside ledgerQueryBasis.
+   */
+  sourceQueryBasis: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +153,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/ipa',
       statusFilter: [...IPA_APPROVED_PLUS],
     },
+    sourceQueryBasis: 'SUM(ipa.netClaimed) where status in approved+',
+    postingCoverage: {
+      eventTypes: ['IPA_APPROVED'],
+      amountFields: ['netClaimed'],
+      ledgerQueryBasis: 'SUM(IPA_APPROVED.netClaimed) where posted',
+      alignment: 'full',
+    },
   },
   {
     id: 'total_certified',
@@ -130,6 +174,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
     drilldown: {
       page: '/projects/[id]/commercial/ipc',
       statusFilter: [...IPC_SIGNED_PLUS],
+    },
+    sourceQueryBasis: 'SUM(ipc.netCertified) where status in signed+',
+    postingCoverage: {
+      eventTypes: ['IPC_SIGNED'],
+      amountFields: ['netCertified'],
+      ledgerQueryBasis: 'SUM(IPC_SIGNED.netCertified) where posted',
+      alignment: 'full',
     },
   },
   {
@@ -146,6 +197,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/invoices',
       statusFilter: [...TI_ISSUED_PLUS],
     },
+    sourceQueryBasis: 'SUM(taxInvoice.totalAmount) where status in issued+',
+    postingCoverage: {
+      eventTypes: ['TAX_INVOICE_ISSUED'],
+      amountFields: ['totalAmount'],
+      ledgerQueryBasis: 'SUM(TAX_INVOICE_ISSUED.totalAmount) where posted',
+      alignment: 'full',
+    },
   },
   {
     id: 'total_collected',
@@ -161,6 +219,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/invoices',
       statusFilter: ['partially_collected', 'collected'],
     },
+    sourceQueryBasis: 'SUM(invoiceCollection.amount) where parent invoice in issued+',
+    postingCoverage: null, // No posting event fires for invoice collections
   },
   {
     id: 'open_receivable',
@@ -176,6 +236,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/invoices',
       statusFilter: [...TI_OPEN_STATUSES],
     },
+    sourceQueryBasis: 'Derived: total open invoice amounts minus their collections',
+    postingCoverage: null, // Derived KPI — no direct posting event
   },
   {
     id: 'overdue_receivable',
@@ -192,6 +254,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       statusFilter: [...TI_OPEN_STATUSES],
       additionalFilters: { overdue: 'true' },
     },
+    sourceQueryBasis: 'Derived: open receivable filtered by dueDate < now',
+    postingCoverage: null, // Derived + date-filtered — not expressible in ledger
   },
   {
     id: 'collection_rate',
@@ -207,6 +271,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/invoices',
       statusFilter: [...TI_ISSUED_PLUS],
     },
+    sourceQueryBasis: 'Derived: (total_collected / total_invoiced) * 100',
+    postingCoverage: null, // Derived from two other KPIs
   },
 
   // =========================================================================
@@ -226,6 +292,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/variations',
       statusFilter: [...VAR_SUBMITTED_PLUS],
     },
+    sourceQueryBasis: 'SUM(variation.costImpact) where status in submitted+',
+    postingCoverage: null, // Submission does not fire a posting event
   },
   {
     id: 'approved_variation_impact',
@@ -241,6 +309,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/commercial/variations',
       statusFilter: [...VAR_APPROVED_PLUS],
     },
+    sourceQueryBasis: 'SUM(variation.approvedCostImpact) where status in approved+ and not null',
+    postingCoverage: {
+      eventTypes: ['VARIATION_APPROVED_INTERNAL', 'VARIATION_APPROVED_CLIENT'],
+      amountFields: ['approvedCostImpact', 'approvedCost'],
+      ledgerQueryBasis: 'SUM(VARIATION_APPROVED_INTERNAL.approvedCostImpact) + SUM(VARIATION_APPROVED_CLIENT.approvedCost) where posted',
+      alignment: 'full',
+    },
   },
   {
     id: 'claimed_vs_certified_gap',
@@ -252,7 +327,6 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
     nature: 'actual',
     temporality: 'point_in_time',
     supportStatus: 'supported',
-    // Cross-record KPI: drilldown shows both sides
     drilldown: [
       {
         page: '/projects/[id]/commercial/ipa',
@@ -263,6 +337,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
         statusFilter: [...IPC_SIGNED_PLUS],
       },
     ],
+    sourceQueryBasis: 'Derived: total_claimed minus total_certified',
+    postingCoverage: null, // Derived from two other KPIs
   },
 
   // =========================================================================
@@ -282,6 +358,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]',
       statusFilter: [],
     },
+    sourceQueryBasis: 'project.contractValue (single field)',
+    postingCoverage: null, // No posting event for project contract value
   },
   {
     id: 'revised_budget',
@@ -296,6 +374,14 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
     drilldown: {
       page: '/projects/[id]',
       statusFilter: [],
+    },
+    sourceQueryBasis: 'project.contractValue + SUM(approved variation deltas)',
+    postingCoverage: {
+      eventTypes: ['VARIATION_APPROVED_INTERNAL', 'VARIATION_APPROVED_CLIENT'],
+      amountFields: ['approvedCostImpact', 'approvedCost'],
+      ledgerQueryBasis: 'Variation delta from ledger only — base contract value has no posting event',
+      alignment: 'partial',
+      alignmentNote: 'Base contract value (project.contractValue) has no posting event. Only the variation delta component is ledger-backed.',
     },
   },
   {
@@ -312,6 +398,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]/procurement',
       statusFilter: ['approved', 'issued', 'partially_delivered', 'delivered', 'closed'],
     },
+    sourceQueryBasis: 'SUM(po.totalAmount) where status in approved+ (commitment point = approved)',
+    postingCoverage: {
+      eventTypes: ['PO_COMMITTED'],
+      amountFields: ['totalAmount'],
+      ledgerQueryBasis: 'SUM(PO_COMMITTED.totalAmount) — fires at approved, same moment as budget absorption',
+      alignment: 'full',
+    },
   },
   {
     id: 'actual_cost',
@@ -326,6 +419,13 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
     drilldown: {
       page: '/projects/[id]/procurement',
       statusFilter: ['approved', 'paid', 'closed'],
+    },
+    sourceQueryBasis: 'SUM(si.totalAmount) where approved+ plus SUM(expense.amount) where approved+',
+    postingCoverage: {
+      eventTypes: ['SUPPLIER_INVOICE_APPROVED', 'EXPENSE_APPROVED'],
+      amountFields: ['totalAmount', 'amount'],
+      ledgerQueryBasis: 'SUM(SUPPLIER_INVOICE_APPROVED.totalAmount) + SUM(EXPENSE_APPROVED.amount) where posted',
+      alignment: 'full',
     },
   },
   {
@@ -342,6 +442,8 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
       page: '/projects/[id]',
       statusFilter: [],
     },
+    sourceQueryBasis: 'Derived: revised_budget minus committed_cost',
+    postingCoverage: null, // Derived from two other KPIs
   },
 ] as const;
 

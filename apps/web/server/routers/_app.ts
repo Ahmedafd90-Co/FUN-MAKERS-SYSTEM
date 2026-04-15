@@ -19,6 +19,7 @@ import { commercialRouter } from './commercial';
 import { procurementRouter } from './procurement';
 import { adminRouter } from './admin';
 import { budgetRouter } from './budget';
+import { reconciliationRouter } from './reconciliation';
 
 export const appRouter = router({
   auth: authRouter,
@@ -36,6 +37,7 @@ export const appRouter = router({
   procurement: procurementRouter,
   adminUsers: adminRouter,
   budget: budgetRouter,
+  reconciliation: reconciliationRouter,
 });
 
 export type AppRouter = typeof appRouter;

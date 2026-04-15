@@ -13,6 +13,8 @@ import {
   FileWarning,
   Activity,
   ArrowLeftRight,
+  HeartPulse,
+  AlertCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -59,6 +61,16 @@ const adminNavItems: AdminNavItem[] = [
     label: 'Posting Exceptions',
     href: '/admin/posting-exceptions',
     icon: FileWarning,
+  },
+  {
+    label: 'Absorption Exceptions',
+    href: '/admin/absorption-exceptions',
+    icon: AlertCircle,
+  },
+  {
+    label: 'Financial Health',
+    href: '/admin/financial-health',
+    icon: HeartPulse,
   },
   {
     label: 'System Health',

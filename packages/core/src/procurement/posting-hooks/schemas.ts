@@ -1,5 +1,25 @@
 import { z } from 'zod';
 
+/**
+ * PO_COMMITTED fires when a PO reaches "approved" — the commitment point.
+ * This is when budget absorption happens and committed_cost KPI starts counting.
+ * Aligns posting ledger with budget absorption and KPI source query.
+ */
+export const PO_COMMITTED_SCHEMA = z.object({
+  purchaseOrderId: z.string().uuid(),
+  poNumber: z.string(),
+  vendorId: z.string().uuid(),
+  totalAmount: z.string(),
+  currency: z.string(),
+  categoryId: z.string().uuid().nullable(),
+  projectId: z.string().uuid(),
+  entityId: z.string().uuid(),
+});
+
+/**
+ * PO_ISSUED fires when a PO is formally sent to the vendor.
+ * Distinct from PO_COMMITTED — this tracks external issuance, not budget commitment.
+ */
 export const PO_ISSUED_SCHEMA = z.object({
   purchaseOrderId: z.string().uuid(),
   poNumber: z.string(),

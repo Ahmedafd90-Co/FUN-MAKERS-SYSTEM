@@ -202,6 +202,7 @@ export async function transitionPurchaseOrder(
   // ---------------------------------------------------------------------------
 
   if (newStatus === 'approved') {
+    // Budget absorption: committedAmount++ on the budget line
     const result = await absorbPoCommitment(existing.projectId, existing.id, actorUserId);
     if (!result.absorbed) {
       // BUDGET MAPPING POLICY: Block PO approval if budget mapping is missing.
@@ -223,6 +224,29 @@ export async function transitionPurchaseOrder(
       // For internal_error (infra crash), allow the transition but warn
       console.warn(`[PO ${id}] Budget absorption failed (non-blocking): ${result.reasonCode} — ${result.message}`);
     }
+
+    // Posting event: PO_COMMITTED fires at the same moment as budget absorption.
+    // This aligns the posting ledger with budget absorption and the committed_cost KPI.
+    await postingService.post({
+      eventType: 'PO_COMMITTED',
+      sourceService: 'procurement',
+      sourceRecordType: 'purchase_order',
+      sourceRecordId: existing.id,
+      projectId: existing.projectId,
+      entityId: existing.project.entityId,
+      idempotencyKey: `po-committed-${existing.id}`,
+      payload: {
+        purchaseOrderId: existing.id,
+        poNumber: existing.poNumber,
+        vendorId: existing.vendorId,
+        totalAmount: String(existing.totalAmount),
+        currency: existing.currency,
+        categoryId: existing.categoryId,
+        projectId: existing.projectId,
+        entityId: existing.project.entityId,
+      },
+      actorUserId,
+    });
   }
 
   // Budget absorption: PO cancelled from approved+ → committedAmount--

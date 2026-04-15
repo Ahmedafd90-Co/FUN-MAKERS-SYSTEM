@@ -240,6 +240,8 @@ export async function transitionVariation(
 
     // Fire posting event for approved_internal (outside tx)
     if (newStatus === 'approved_internal') {
+      // Re-fetch to get latest fields after the transaction (approvedCostImpact may have been set)
+      const latest = await prisma.variation.findUniqueOrThrow({ where: { id } });
       await postingService.post({
         eventType: 'VARIATION_APPROVED_INTERNAL',
         sourceService: 'commercial',
@@ -253,6 +255,7 @@ export async function transitionVariation(
           subtype: existing.subtype,
           title: existing.title,
           costImpact: existing.costImpact?.toString() ?? null,
+          approvedCostImpact: latest.approvedCostImpact?.toString() ?? null,
           timeImpactDays: existing.timeImpactDays ?? null,
           currency: existing.currency,
           projectId: existing.projectId,

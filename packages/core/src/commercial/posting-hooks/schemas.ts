@@ -25,6 +25,8 @@ export const VARIATION_APPROVED_INTERNAL_SCHEMA = z.object({
   subtype: z.string(),
   title: z.string(),
   costImpact: z.string().nullable(),
+  /** The approved cost impact — may differ from costImpact (the claim). */
+  approvedCostImpact: z.string().nullable(),
   timeImpactDays: z.number().int().nullable(),
   currency: z.string(),
   projectId: z.string(),
