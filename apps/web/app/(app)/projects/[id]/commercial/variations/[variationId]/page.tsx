@@ -142,7 +142,10 @@ export default function VariationDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {data.referenceNumber ?? 'Draft Variation'}
+              {data.referenceNumber ??
+                (data.status === 'draft'
+                  ? 'Draft Variation'
+                  : 'Variation (no reference)')}
             </h1>
             <Badge
               variant={data.subtype === 'change_order' ? 'default' : 'secondary'}

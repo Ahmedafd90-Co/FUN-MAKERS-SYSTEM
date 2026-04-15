@@ -188,7 +188,7 @@ export default function CorrespondenceListPage() {
                     >
                       {corr.referenceNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {corr.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

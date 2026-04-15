@@ -166,7 +166,7 @@ export default function RfqListPage() {
                     >
                       {rfq.referenceNumber ?? rfq.rfqNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {rfq.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

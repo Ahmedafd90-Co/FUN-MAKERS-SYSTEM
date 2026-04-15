@@ -192,7 +192,7 @@ export default function VariationsListPage() {
                     >
                       {variation.referenceNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {variation.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

@@ -160,7 +160,7 @@ export default function CostProposalsListPage() {
                     >
                       {cp.referenceNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {cp.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

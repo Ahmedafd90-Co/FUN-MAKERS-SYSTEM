@@ -161,7 +161,7 @@ export default function IpcListPage() {
                     >
                       {ipc.referenceNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {ipc.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

@@ -192,7 +192,10 @@ export default function CorrespondenceDetailPage() {
           <div className="space-y-1.5 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-semibold tracking-tight">
-                {data.referenceNumber ?? 'Draft Correspondence'}
+                {data.referenceNumber ??
+                  (data.status === 'draft'
+                    ? 'Draft Correspondence'
+                    : 'Correspondence (no reference)')}
               </h1>
               <Badge
                 variant={data.subtype === 'claim' || data.subtype === 'back_charge' ? 'default' : 'secondary'}

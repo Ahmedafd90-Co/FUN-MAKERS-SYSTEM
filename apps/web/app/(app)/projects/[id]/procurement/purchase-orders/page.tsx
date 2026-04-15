@@ -114,7 +114,9 @@ export default function PurchaseOrderListPage() {
                       className="font-medium hover:underline"
                     >
                       {po.poNumber ?? (
-                        <span className="text-muted-foreground italic">Draft</span>
+                        <span className="text-muted-foreground italic">
+                          {po.status === 'draft' ? 'Draft' : 'No reference'}
+                        </span>
                       )}
                     </Link>
                   </TableCell>

@@ -117,7 +117,8 @@ export default function IpaDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {data.referenceNumber ?? 'Draft IPA'}
+              {data.referenceNumber ??
+                (data.status === 'draft' ? 'Draft IPA' : 'IPA (no reference)')}
             </h1>
             <CommercialStatusBadge status={data.status} />
           </div>

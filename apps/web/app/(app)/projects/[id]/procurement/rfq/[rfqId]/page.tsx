@@ -145,7 +145,9 @@ export default function RfqDetailPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold">
-            {data.referenceNumber ?? data.rfqNumber ?? 'Draft RFQ'}
+            {data.referenceNumber ??
+              data.rfqNumber ??
+              (data.status === 'draft' ? 'Draft RFQ' : 'RFQ (no reference)')}
           </h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={data.status} />

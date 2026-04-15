@@ -179,7 +179,9 @@ export default function TaxInvoiceListPage() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {inv.referenceNumber ?? (
-                      <span className="italic">Draft</span>
+                      <span className="italic">
+                        {inv.status === 'draft' ? 'Draft' : 'No reference'}
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">

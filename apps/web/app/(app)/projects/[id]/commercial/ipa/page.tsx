@@ -161,7 +161,7 @@ export default function IpaListPage() {
                     >
                       {ipa.referenceNumber ?? (
                         <span className="text-muted-foreground italic">
-                          Draft
+                          {ipa.status === 'draft' ? 'Draft' : 'No reference'}
                         </span>
                       )}
                     </Link>

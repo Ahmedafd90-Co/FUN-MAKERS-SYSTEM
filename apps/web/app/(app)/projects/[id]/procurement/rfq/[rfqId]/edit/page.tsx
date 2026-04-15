@@ -73,7 +73,11 @@ export default function EditRfqPage() {
 
       <PageHeader
         title="Edit RFQ"
-        description={`Editing ${data.referenceNumber ?? data.rfqNumber ?? 'Draft RFQ'}`}
+        description={`Editing ${
+          data.referenceNumber ??
+          data.rfqNumber ??
+          (data.status === 'draft' ? 'Draft RFQ' : 'RFQ (no reference)')
+        }`}
       />
 
       <RfqForm

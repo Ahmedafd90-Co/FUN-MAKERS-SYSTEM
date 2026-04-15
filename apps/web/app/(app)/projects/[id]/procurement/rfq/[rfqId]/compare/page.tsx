@@ -75,7 +75,11 @@ export default function QuotationComparePage() {
         title="Quotation Comparison"
         description={
           rfq
-            ? `${rfq.referenceNumber ?? rfq.rfqNumber ?? 'Draft RFQ'} — ${rfq.title ?? ''}`
+            ? `${
+                rfq.referenceNumber ??
+                rfq.rfqNumber ??
+                (rfq.status === 'draft' ? 'Draft RFQ' : 'RFQ (no reference)')
+              } — ${rfq.title ?? ''}`
             : 'Loading...'
         }
       />
