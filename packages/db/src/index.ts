@@ -2,6 +2,7 @@ export { prisma } from './client';
 export { PrismaClient, Prisma } from '@prisma/client';
 export type {
   IpaStatus,
+  IpaOrigin,
   IpcStatus,
   VariationStatus,
   CostProposalStatus,
@@ -18,6 +19,10 @@ export type {
   SupplierInvoiceStatus,
   ExpenseStatus,
   CreditNoteStatus,
+  PostingOrigin,
+  ImportType,
+  ImportBatchStatus,
+  ImportRowStatus,
 } from '@prisma/client';
 
 // Seed data exports — for structural testing (H8)

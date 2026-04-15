@@ -239,12 +239,12 @@ model Entity {
   children Entity[] @relation("EntityParent")
 
   // Relations
-  projects Project[]
+  projects              Project[]
   // Module 3 — Procurement Engine relations
-  vendors                Vendor[]
-  procurementCategories  ProcurementCategory[]
-  itemCatalogs           ItemCatalog[]
-  frameworkAgreements    FrameworkAgreement[]
+  vendors               Vendor[]
+  procurementCategories ProcurementCategory[]
+  itemCatalogs          ItemCatalog[]
+  frameworkAgreements   FrameworkAgreement[]
 
   @@map("entities")
 }
@@ -267,52 +267,54 @@ enum ProjectStatus {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id           String        @id @default(uuid()) @map("id")
-  code         String        @unique @map("code")
-  name         String        @map("name")
-  entityId     String        @map("entity_id")
-  status       ProjectStatus @map("status")
-  currencyCode String        @map("currency_code")
-  startDate    DateTime      @map("start_date")
-  endDate      DateTime?     @map("end_date")
+  id                   String        @id @default(uuid()) @map("id")
+  code                 String        @unique @map("code")
+  name                 String        @map("name")
+  entityId             String        @map("entity_id")
+  status               ProjectStatus @map("status")
+  currencyCode         String        @map("currency_code")
+  startDate            DateTime      @map("start_date")
+  endDate              DateTime?     @map("end_date")
   // Financial control — baseline contract values (Phase D2)
   contractValue        Decimal?      @map("contract_value") @db.Decimal(18, 2)
   revisedContractValue Decimal?      @map("revised_contract_value") @db.Decimal(18, 2)
 
-  createdBy    String        @map("created_by")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  entity            Entity              @relation(fields: [entityId], references: [id])
-  currency          Currency            @relation(fields: [currencyCode], references: [code])
-  assignments       ProjectAssignment[]
-  settings          ProjectSetting[]
-  screenPermissions ScreenPermission[]
-  workflowInstances WorkflowInstance[]
-  documents         Document[]
-  postingEvents     PostingEvent[]
+  entity                     Entity                      @relation(fields: [entityId], references: [id])
+  currency                   Currency                    @relation(fields: [currencyCode], references: [code])
+  assignments                ProjectAssignment[]
+  settings                   ProjectSetting[]
+  screenPermissions          ScreenPermission[]
+  workflowInstances          WorkflowInstance[]
+  documents                  Document[]
+  postingEvents              PostingEvent[]
   // Module 2 — Commercial Engine relations
-  ipas              Ipa[]
-  ipcs              Ipc[]
-  variations        Variation[]
-  costProposals     CostProposal[]
-  taxInvoices       TaxInvoice[]
-  correspondences   Correspondence[]
-  referenceCounters ReferenceCounter[]
+  ipas                       Ipa[]
+  ipcs                       Ipc[]
+  variations                 Variation[]
+  costProposals              CostProposal[]
+  taxInvoices                TaxInvoice[]
+  correspondences            Correspondence[]
+  referenceCounters          ReferenceCounter[]
   // Module 3 — Procurement Engine relations
-  vendorContracts        VendorContract[]
-  frameworkAgreements    FrameworkAgreement[]
-  rfqs                   RFQ[]
-  purchaseOrders         PurchaseOrder[]
-  supplierInvoices       SupplierInvoice[]
-  expenses               Expense[]
-  creditNotes            CreditNote[]
-  projectVendors         ProjectVendor[]
+  vendorContracts            VendorContract[]
+  frameworkAgreements        FrameworkAgreement[]
+  rfqs                       RFQ[]
+  purchaseOrders             PurchaseOrder[]
+  supplierInvoices           SupplierInvoice[]
+  expenses                   Expense[]
+  creditNotes                CreditNote[]
+  projectVendors             ProjectVendor[]
   // Module 4 — Internal Budget & EI relations
-  budget                      ProjectBudget?
-  engineerInstructions        EngineerInstruction[]
-  budgetAbsorptionExceptions  BudgetAbsorptionException[]
+  budget                     ProjectBudget?
+  engineerInstructions       EngineerInstruction[]
+  budgetAbsorptionExceptions BudgetAbsorptionException[]
+  // Import layer relations
+  importBatches              ImportBatch[]
 
   @@index([entityId])
   @@map("projects")
@@ -601,6 +603,17 @@ enum PostingStatus {
   @@map("posting_status")
 }
 
+/// Provenance of a posting event. `live` = created through in-system
+/// operational flows. `imported_historical` = created when a batch of
+/// pre-adoption records was imported; distinguishable so reconciliation
+/// can break out live vs historical totals.
+enum PostingOrigin {
+  live                @map("live")
+  imported_historical @map("imported_historical")
+
+  @@map("posting_origin")
+}
+
 // ---------------------------------------------------------------------------
 // 8. Posting (centralized)
 // ---------------------------------------------------------------------------
@@ -616,6 +629,9 @@ model PostingEvent {
   idempotencyKey    String        @unique @map("idempotency_key")
   payloadJson       Json          @map("payload_json")
   status            PostingStatus @map("status")
+  origin            PostingOrigin @default(live) @map("origin")
+  /// Set only when origin=imported_historical. Soft FK to ImportBatch.
+  importBatchId     String?       @map("import_batch_id")
   postedAt          DateTime?     @map("posted_at")
   reversedByEventId String?       @map("reversed_by_event_id")
   failureReason     String?       @map("failure_reason")
@@ -626,10 +642,12 @@ model PostingEvent {
   reversals       PostingEvent[] @relation("PostingReversal")
 
   // Relations
-  project    Project            @relation(fields: [projectId], references: [id])
-  exceptions PostingException[]
+  project              Project              @relation(fields: [projectId], references: [id])
+  exceptions           PostingException[]
+  ipaAdjustmentBatches IpaAdjustmentBatch[]
 
   @@index([projectId, eventType, status])
+  @@index([projectId, origin, eventType])
   @@map("posting_events")
 }
 
@@ -652,14 +670,14 @@ model PostingException {
 model BudgetAbsorptionException {
   id               String    @id @default(uuid())
   projectId        String    @map("project_id")
-  sourceModule     String    @map("source_module")       // 'procurement', 'engineer_instruction'
-  sourceRecordType String    @map("source_record_type")  // 'purchase_order', 'supplier_invoice', etc.
+  sourceModule     String    @map("source_module") // 'procurement', 'engineer_instruction'
+  sourceRecordType String    @map("source_record_type") // 'purchase_order', 'supplier_invoice', etc.
   sourceRecordId   String    @map("source_record_id")
-  absorptionType   String    @map("absorption_type")     // 'po_commitment', 'po_reversal', 'si_actual', 'expense_actual', 'cn_reversal', 'ei_reserve_increase', 'ei_reserve_release'
-  reasonCode       String    @map("reason_code")         // 'no_category', 'no_budget', 'no_budget_category', 'no_budget_line'
+  absorptionType   String    @map("absorption_type") // 'po_commitment', 'po_reversal', 'si_actual', 'expense_actual', 'cn_reversal', 'ei_reserve_increase', 'ei_reserve_release'
+  reasonCode       String    @map("reason_code") // 'no_category', 'no_budget', 'no_budget_category', 'no_budget_line'
   message          String
-  severity         String    @default("warning")         // 'warning', 'error'
-  status           String    @default("open")            // 'open', 'resolved'
+  severity         String    @default("warning") // 'warning', 'error'
+  status           String    @default("open") // 'open', 'resolved'
   resolutionNote   String?   @map("resolution_note")
   resolvedAt       DateTime? @map("resolved_at")
   resolvedBy       String?   @map("resolved_by")
@@ -822,11 +840,11 @@ enum LetterType {
 // ---------------------------------------------------------------------------
 
 enum ExpenseSubtype {
-  ticket          @map("ticket")
-  accommodation   @map("accommodation")
-  transportation  @map("transportation")
-  equipment       @map("equipment")
-  general         @map("general")
+  ticket         @map("ticket")
+  accommodation  @map("accommodation")
+  transportation @map("transportation")
+  equipment      @map("equipment")
+  general        @map("general")
 
   @@map("expense_subtype")
 }
@@ -944,6 +962,16 @@ enum IpaStatus {
   @@map("ipa_status")
 }
 
+/// Provenance of an IPA record.
+///   live                = created via in-system workflow
+///   imported_historical = imported from a pre-adoption sheet; workflow transitions are blocked by origin
+enum IpaOrigin {
+  live                @map("live")
+  imported_historical @map("imported_historical")
+
+  @@map("ipa_origin")
+}
+
 enum IpcStatus {
   draft
   submitted
@@ -1040,52 +1068,65 @@ enum CorrespondenceStatus {
 // ---------------------------------------------------------------------------
 
 model Ipa {
-  id                String   @id @default(uuid()) @map("id")
+  id                String    @id @default(uuid()) @map("id")
   projectId         String    @map("project_id")
   status            IpaStatus @default(draft) @map("status")
   referenceNumber   String?   @unique @map("reference_number")
   periodNumber      Int       @map("period_number")
-  periodFrom        DateTime @map("period_from")
-  periodTo          DateTime @map("period_to")
-  grossAmount       Decimal  @map("gross_amount") @db.Decimal(18, 2)
-  retentionRate     Decimal  @map("retention_rate") @db.Decimal(5, 4)
-  retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
-  previousCertified Decimal  @map("previous_certified") @db.Decimal(18, 2)
-  currentClaim      Decimal  @map("current_claim") @db.Decimal(18, 2)
-  advanceRecovery   Decimal? @map("advance_recovery") @db.Decimal(18, 2)
-  otherDeductions   Decimal? @map("other_deductions") @db.Decimal(18, 2)
-  netClaimed        Decimal  @map("net_claimed") @db.Decimal(18, 2)
-  currency          String   @map("currency")
-  description       String?  @map("description")
-  createdBy         String   @map("created_by")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  periodFrom        DateTime  @map("period_from")
+  periodTo          DateTime  @map("period_to")
+  grossAmount       Decimal   @map("gross_amount") @db.Decimal(18, 2)
+  retentionRate     Decimal   @map("retention_rate") @db.Decimal(5, 4)
+  retentionAmount   Decimal   @map("retention_amount") @db.Decimal(18, 2)
+  previousCertified Decimal   @map("previous_certified") @db.Decimal(18, 2)
+  currentClaim      Decimal   @map("current_claim") @db.Decimal(18, 2)
+  advanceRecovery   Decimal?  @map("advance_recovery") @db.Decimal(18, 2)
+  otherDeductions   Decimal?  @map("other_deductions") @db.Decimal(18, 2)
+  netClaimed        Decimal   @map("net_claimed") @db.Decimal(18, 2)
+  currency          String    @map("currency")
+  description       String?   @map("description")
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ipcs    Ipc[]
+  // Import provenance — set only when origin=imported_historical.
+  origin               IpaOrigin @default(live) @map("origin")
+  importBatchId        String?   @map("import_batch_id")
+  importRowId          String?   @map("import_row_id")
+  /// Frozen snapshot of field values at import commit time. Never mutated.
+  importedOriginalJson Json?     @map("imported_original_json")
+  /// The user who ran commitBatch — distinct from createdBy by convention.
+  importedByUserId     String?   @map("imported_by_user_id")
+  importedAt           DateTime? @map("imported_at")
+
+  project           Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipcs              Ipc[]
+  adjustmentBatches IpaAdjustmentBatch[]
 
   @@unique([projectId, periodNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
+  @@index([projectId, origin])
+  @@index([projectId, periodFrom, periodTo])
   @@map("ipas")
 }
 
 model Ipc {
-  id                String   @id @default(uuid()) @map("id")
-  projectId         String   @map("project_id")
+  id                String    @id @default(uuid()) @map("id")
+  projectId         String    @map("project_id")
   ipaId             String    @map("ipa_id")
   status            IpcStatus @default(draft) @map("status")
   referenceNumber   String?   @unique @map("reference_number")
   certifiedAmount   Decimal   @map("certified_amount") @db.Decimal(18, 2)
-  retentionAmount   Decimal  @map("retention_amount") @db.Decimal(18, 2)
-  adjustments       Decimal? @map("adjustments") @db.Decimal(18, 2)
-  netCertified      Decimal  @map("net_certified") @db.Decimal(18, 2)
-  certificationDate DateTime @map("certification_date")
-  currency          String   @map("currency")
-  remarks           String?  @map("remarks")
-  createdBy         String   @map("created_by")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  retentionAmount   Decimal   @map("retention_amount") @db.Decimal(18, 2)
+  adjustments       Decimal?  @map("adjustments") @db.Decimal(18, 2)
+  netCertified      Decimal   @map("net_certified") @db.Decimal(18, 2)
+  certificationDate DateTime  @map("certification_date")
+  currency          String    @map("currency")
+  remarks           String?   @map("remarks")
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
   ipa         Ipa          @relation(fields: [ipaId], references: [id], onDelete: Restrict)
@@ -1127,11 +1168,11 @@ model Variation {
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
-  project               Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  parentVariation       Variation?            @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
-  childVariations       Variation[]           @relation("VariationParent")
-  costProposals         CostProposal[]
-  engineerInstructions  EngineerInstruction[]
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  parentVariation      Variation?            @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
+  childVariations      Variation[]           @relation("VariationParent")
+  costProposals        CostProposal[]
+  engineerInstructions EngineerInstruction[]
 
   @@index([projectId, subtype, status])
   @@index([projectId, status])
@@ -1140,25 +1181,25 @@ model Variation {
 }
 
 model CostProposal {
-  id                String   @id @default(uuid()) @map("id")
-  projectId         String   @map("project_id")
+  id                String             @id @default(uuid()) @map("id")
+  projectId         String             @map("project_id")
   variationId       String?            @map("variation_id")
   status            CostProposalStatus @default(draft) @map("status")
   referenceNumber   String?            @unique @map("reference_number")
   revisionNumber    Int                @map("revision_number")
-  estimatedCost     Decimal  @map("estimated_cost") @db.Decimal(18, 2)
-  estimatedTimeDays Int?     @map("estimated_time_days")
-  methodology       String?  @map("methodology")
-  costBreakdown     String?  @map("cost_breakdown")
-  currency          String   @map("currency")
+  estimatedCost     Decimal            @map("estimated_cost") @db.Decimal(18, 2)
+  estimatedTimeDays Int?               @map("estimated_time_days")
+  methodology       String?            @map("methodology")
+  costBreakdown     String?            @map("cost_breakdown")
+  currency          String             @map("currency")
   // Assessment fields (Addendum A) — populated during review/approve
-  assessedCost      Decimal? @map("assessed_cost") @db.Decimal(18, 2)
-  assessedTimeDays  Int?     @map("assessed_time_days")
-  approvedCost      Decimal? @map("approved_cost") @db.Decimal(18, 2)
-  approvedTimeDays  Int?     @map("approved_time_days")
-  createdBy         String   @map("created_by")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  assessedCost      Decimal?           @map("assessed_cost") @db.Decimal(18, 2)
+  assessedTimeDays  Int?               @map("assessed_time_days")
+  approvedCost      Decimal?           @map("approved_cost") @db.Decimal(18, 2)
+  approvedTimeDays  Int?               @map("approved_time_days")
+  createdBy         String             @map("created_by")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
   variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
@@ -1170,28 +1211,28 @@ model CostProposal {
 }
 
 model TaxInvoice {
-  id              String    @id @default(uuid()) @map("id")
-  projectId       String    @map("project_id")
-  ipcId           String          @map("ipc_id")
+  id              String           @id @default(uuid()) @map("id")
+  projectId       String           @map("project_id")
+  ipcId           String           @map("ipc_id")
   status          TaxInvoiceStatus @default(draft) @map("status")
   referenceNumber String?          @unique @map("reference_number")
   invoiceNumber   String           @map("invoice_number")
-  invoiceDate     DateTime  @map("invoice_date")
-  grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
-  vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
-  vatAmount       Decimal   @map("vat_amount") @db.Decimal(18, 2)
-  totalAmount     Decimal   @map("total_amount") @db.Decimal(18, 2)
-  dueDate         DateTime? @map("due_date")
-  currency        String    @map("currency")
-  buyerName       String    @map("buyer_name")
-  buyerTaxId      String?   @map("buyer_tax_id")
-  sellerTaxId     String    @map("seller_tax_id")
-  createdBy       String    @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  invoiceDate     DateTime         @map("invoice_date")
+  grossAmount     Decimal          @map("gross_amount") @db.Decimal(18, 2)
+  vatRate         Decimal          @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount       Decimal          @map("vat_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal          @map("total_amount") @db.Decimal(18, 2)
+  dueDate         DateTime?        @map("due_date")
+  currency        String           @map("currency")
+  buyerName       String           @map("buyer_name")
+  buyerTaxId      String?          @map("buyer_tax_id")
+  sellerTaxId     String           @map("seller_tax_id")
+  createdBy       String           @map("created_by")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  project     Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ipc         Ipc                  @relation(fields: [ipcId], references: [id], onDelete: Restrict)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ipc         Ipc                 @relation(fields: [ipcId], references: [id], onDelete: Restrict)
   collections InvoiceCollection[]
 
   @@unique([projectId, invoiceNumber])
@@ -1230,10 +1271,10 @@ model InvoiceCollection {
 model Correspondence {
   id                     String                @id @default(uuid()) @map("id")
   projectId              String                @map("project_id")
-  subtype                CorrespondenceSubtype  @map("subtype")
-  status                 CorrespondenceStatus   @default(draft) @map("status")
-  referenceNumber        String?                @unique @map("reference_number")
-  subject                String                 @map("subject")
+  subtype                CorrespondenceSubtype @map("subtype")
+  status                 CorrespondenceStatus  @default(draft) @map("status")
+  referenceNumber        String?               @unique @map("reference_number")
+  subject                String                @map("subject")
   body                   String                @map("body")
   recipientName          String                @map("recipient_name")
   recipientOrg           String?               @map("recipient_org")
@@ -1266,7 +1307,7 @@ model Correspondence {
   childCorrespondences Correspondence[] @relation("CorrespondenceParent")
   inReplyTo            Correspondence?  @relation("CorrespondenceReply", fields: [inReplyToId], references: [id], onDelete: Restrict)
   replies              Correspondence[] @relation("CorrespondenceReply")
-  creditNotes          CreditNote[]     // M3 back_charge cross-reference
+  creditNotes          CreditNote[] // M3 back_charge cross-reference
 
   @@index([projectId, subtype, status])
   @@index([projectId, status])
@@ -1364,35 +1405,35 @@ enum QuotationStatus {
 // ---------------------------------------------------------------------------
 
 model Vendor {
-  id                 String     @id @default(uuid())
-  entityId           String     @map("entity_id")
-  vendorCode         String     @map("vendor_code")
+  id                 String       @id @default(uuid())
+  entityId           String       @map("entity_id")
+  vendorCode         String       @map("vendor_code")
   name               String
-  tradeName          String?    @map("trade_name")
-  registrationNumber String?    @map("registration_number")
-  taxId              String?    @map("tax_id")
-  contactName        String?    @map("contact_name")
-  contactEmail       String?    @map("contact_email")
-  contactPhone       String?    @map("contact_phone")
+  tradeName          String?      @map("trade_name")
+  registrationNumber String?      @map("registration_number")
+  taxId              String?      @map("tax_id")
+  contactName        String?      @map("contact_name")
+  contactEmail       String?      @map("contact_email")
+  contactPhone       String?      @map("contact_phone")
   address            String?
   city               String?
   country            String?
-  classification     String?      // Category reference (soft FK to ProcurementCategory)
+  classification     String? // Category reference (soft FK to ProcurementCategory)
   status             VendorStatus @default(draft)
   notes              String?
-  createdBy          String     @map("created_by")
-  createdAt          DateTime   @default(now()) @map("created_at")
-  updatedAt          DateTime   @updatedAt @map("updated_at")
+  createdBy          String       @map("created_by")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  entity             Entity     @relation(fields: [entityId], references: [id], onDelete: Restrict)
-  projectVendors     ProjectVendor[]
-  vendorContracts    VendorContract[]
+  entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  projectVendors      ProjectVendor[]
+  vendorContracts     VendorContract[]
   frameworkAgreements FrameworkAgreement[]
-  purchaseOrders     PurchaseOrder[]
-  supplierInvoices   SupplierInvoice[]
-  creditNotes        CreditNote[]
-  quotations         Quotation[]
-  rfqVendors         RFQVendor[]
+  purchaseOrders      PurchaseOrder[]
+  supplierInvoices    SupplierInvoice[]
+  creditNotes         CreditNote[]
+  quotations          Quotation[]
+  rfqVendors          RFQVendor[]
 
   @@unique([entityId, vendorCode])
   @@index([entityId, status])
@@ -1418,15 +1459,15 @@ model ProjectVendor {
 }
 
 model ProcurementCategory {
-  id        String                    @id @default(uuid())
-  entityId  String                    @map("entity_id")
+  id        String                   @id @default(uuid())
+  entityId  String                   @map("entity_id")
   name      String
   code      String
   level     ProcurementCategoryLevel
-  parentId  String?                   @map("parent_id")
-  status    String                    @default("active")
-  createdAt DateTime                  @default(now()) @map("created_at")
-  updatedAt DateTime                  @updatedAt @map("updated_at")
+  parentId  String?                  @map("parent_id")
+  status    String                   @default("active")
+  createdAt DateTime                 @default(now()) @map("created_at")
+  updatedAt DateTime                 @updatedAt @map("updated_at")
 
   entity           Entity                @relation(fields: [entityId], references: [id], onDelete: Restrict)
   parent           ProcurementCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
@@ -1450,18 +1491,18 @@ model ItemCatalog {
   itemCode    String   @map("item_code")
   description String
   unit        String
-  categoryId  String?              @map("category_id")
-  status      String               @default("active")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  categoryId  String?  @map("category_id")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  entity                 Entity                  @relation(fields: [entityId], references: [id], onDelete: Restrict)
-  category               ProcurementCategory?    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  entity                  Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  category                ProcurementCategory?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   // H6 hardening: reverse relations for soft FK fields
   frameworkAgreementItems FrameworkAgreementItem[]
-  rfqItems               RFQItem[]
-  quotationLineItems     QuotationLineItem[]
-  purchaseOrderItems     PurchaseOrderItem[]
+  rfqItems                RFQItem[]
+  quotationLineItems      QuotationLineItem[]
+  purchaseOrderItems      PurchaseOrderItem[]
 
   @@unique([entityId, itemCode])
   @@index([entityId, status])
@@ -1470,19 +1511,19 @@ model ItemCatalog {
 }
 
 model VendorContract {
-  id               String             @id @default(uuid())
-  projectId        String             @map("project_id")
-  vendorId         String             @map("vendor_id")
-  contractNumber   String             @unique @map("contract_number")
+  id               String               @id @default(uuid())
+  projectId        String               @map("project_id")
+  vendorId         String               @map("vendor_id")
+  contractNumber   String               @unique @map("contract_number")
   title            String
   description      String?
-  contractType     VendorContractType @map("contract_type")
-  startDate        DateTime           @map("start_date")
-  endDate          DateTime           @map("end_date")
-  totalValue       Decimal            @map("total_value") @db.Decimal(18, 2)
+  contractType     VendorContractType   @map("contract_type")
+  startDate        DateTime             @map("start_date")
+  endDate          DateTime             @map("end_date")
+  totalValue       Decimal              @map("total_value") @db.Decimal(18, 2)
   currency         String
   terms            String?
-  signedDate       DateTime?          @map("signed_date")
+  signedDate       DateTime?            @map("signed_date")
   parentContractId String?              @map("parent_contract_id")
   status           VendorContractStatus @default(draft)
   referenceNumber  String?              @unique @map("reference_number")
@@ -1503,25 +1544,25 @@ model VendorContract {
 }
 
 model FrameworkAgreement {
-  id                  String    @id @default(uuid())
-  vendorId            String    @map("vendor_id")
-  projectId           String?   @map("project_id")
-  entityId            String    @map("entity_id")
-  agreementNumber     String    @unique @map("agreement_number")
+  id                  String                   @id @default(uuid())
+  vendorId            String                   @map("vendor_id")
+  projectId           String?                  @map("project_id")
+  entityId            String                   @map("entity_id")
+  agreementNumber     String                   @unique @map("agreement_number")
   title               String
   description         String?
-  validFrom           DateTime  @map("valid_from")
-  validTo             DateTime  @map("valid_to")
+  validFrom           DateTime                 @map("valid_from")
+  validTo             DateTime                 @map("valid_to")
   currency            String
-  totalCommittedValue Decimal?                @map("total_committed_value") @db.Decimal(18, 2)
+  totalCommittedValue Decimal?                 @map("total_committed_value") @db.Decimal(18, 2)
   status              FrameworkAgreementStatus @default(draft)
-  createdBy           String                  @map("created_by")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  createdBy           String                   @map("created_by")
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @updatedAt @map("updated_at")
 
-  vendor  Vendor                  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  project Project?                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  entity  Entity                  @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  vendor  Vendor                   @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  project Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entity  Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
   items   FrameworkAgreementItem[]
 
   @@index([entityId, status])
@@ -1617,20 +1658,20 @@ model RFQVendor {
 }
 
 model Quotation {
-  id            String    @id @default(uuid())
-  rfqId         String    @map("rfq_id")
-  vendorId      String    @map("vendor_id")
-  quotationRef  String?   @map("quotation_ref")
-  receivedDate  DateTime  @map("received_date")
-  validUntil    DateTime? @map("valid_until")
-  totalAmount   Decimal   @map("total_amount") @db.Decimal(18, 2)
+  id            String          @id @default(uuid())
+  rfqId         String          @map("rfq_id")
+  vendorId      String          @map("vendor_id")
+  quotationRef  String?         @map("quotation_ref")
+  receivedDate  DateTime        @map("received_date")
+  validUntil    DateTime?       @map("valid_until")
+  totalAmount   Decimal         @map("total_amount") @db.Decimal(18, 2)
   currency      String
   deliveryTerms String?         @map("delivery_terms")
   paymentTerms  String?         @map("payment_terms")
   status        QuotationStatus @default(received)
   createdBy     String          @map("created_by")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
 
   rfq       RFQ                 @relation(fields: [rfqId], references: [id], onDelete: Restrict)
   vendor    Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
@@ -1668,28 +1709,28 @@ model QuotationLineItem {
 }
 
 model PurchaseOrder {
-  id                    String    @id @default(uuid())
-  projectId             String    @map("project_id")
-  vendorId              String    @map("vendor_id")
-  rfqId                 String?   @map("rfq_id")
-  quotationId           String?   @map("quotation_id")
-  vendorContractId      String?   @map("vendor_contract_id")
-  frameworkAgreementId  String?   @map("framework_agreement_id")
-  categoryId            String?   @map("category_id")
-  poNumber              String    @unique @map("po_number")
+  id                    String              @id @default(uuid())
+  projectId             String              @map("project_id")
+  vendorId              String              @map("vendor_id")
+  rfqId                 String?             @map("rfq_id")
+  quotationId           String?             @map("quotation_id")
+  vendorContractId      String?             @map("vendor_contract_id")
+  frameworkAgreementId  String?             @map("framework_agreement_id")
+  categoryId            String?             @map("category_id")
+  poNumber              String              @unique @map("po_number")
   title                 String
   description           String?
-  totalAmount           Decimal   @map("total_amount") @db.Decimal(18, 2)
+  totalAmount           Decimal             @map("total_amount") @db.Decimal(18, 2)
   currency              String
-  deliveryDate          DateTime? @map("delivery_date")
-  deliveryAddress       String?   @map("delivery_address")
-  paymentTerms          String?   @map("payment_terms")
+  deliveryDate          DateTime?           @map("delivery_date")
+  deliveryAddress       String?             @map("delivery_address")
+  paymentTerms          String?             @map("payment_terms")
   hasFrameworkDeviation Boolean             @default(false) @map("has_framework_deviation")
   status                PurchaseOrderStatus @default(draft)
   referenceNumber       String?             @unique @map("reference_number")
-  createdBy             String    @map("created_by")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
+  createdBy             String              @map("created_by")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
 
   project          Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   vendor           Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
@@ -1719,7 +1760,7 @@ model PurchaseOrderItem {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
-  itemCatalog   ItemCatalog? @relation(fields: [itemCatalogId], references: [id], onDelete: Restrict)
+  itemCatalog   ItemCatalog?  @relation(fields: [itemCatalogId], references: [id], onDelete: Restrict)
 
   @@index([purchaseOrderId])
   @@index([itemCatalogId])
@@ -1727,24 +1768,24 @@ model PurchaseOrderItem {
 }
 
 model SupplierInvoice {
-  id              String    @id @default(uuid())
-  projectId       String    @map("project_id")
-  vendorId        String    @map("vendor_id")
-  purchaseOrderId String?   @map("purchase_order_id")
-  invoiceNumber   String    @map("invoice_number")
-  invoiceDate     DateTime  @map("invoice_date")
-  grossAmount     Decimal   @map("gross_amount") @db.Decimal(18, 2)
-  vatRate         Decimal   @map("vat_rate") @db.Decimal(5, 4)
-  vatAmount       Decimal   @map("vat_amount") @db.Decimal(18, 2)
-  totalAmount     Decimal   @map("total_amount") @db.Decimal(18, 2)
-  dueDate         DateTime? @map("due_date")
+  id              String                @id @default(uuid())
+  projectId       String                @map("project_id")
+  vendorId        String                @map("vendor_id")
+  purchaseOrderId String?               @map("purchase_order_id")
+  invoiceNumber   String                @map("invoice_number")
+  invoiceDate     DateTime              @map("invoice_date")
+  grossAmount     Decimal               @map("gross_amount") @db.Decimal(18, 2)
+  vatRate         Decimal               @map("vat_rate") @db.Decimal(5, 4)
+  vatAmount       Decimal               @map("vat_amount") @db.Decimal(18, 2)
+  totalAmount     Decimal               @map("total_amount") @db.Decimal(18, 2)
+  dueDate         DateTime?             @map("due_date")
   currency        String
-  categoryId      String?   @map("category_id")
+  categoryId      String?               @map("category_id")
   noPOReason      String?               @map("no_po_reason")
   status          SupplierInvoiceStatus @default(received)
   createdBy       String                @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
 
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   vendor        Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
@@ -1761,49 +1802,49 @@ model SupplierInvoice {
 }
 
 model Expense {
-  id                   String           @id @default(uuid())
-  projectId            String           @map("project_id")
+  id                   String             @id @default(uuid())
+  projectId            String             @map("project_id")
   subtype              ExpenseSubtype
   title                String
   description          String?
-  amount               Decimal          @db.Decimal(18, 2)
+  amount               Decimal            @db.Decimal(18, 2)
   currency             String
-  expenseDate          DateTime         @map("expense_date")
-  categoryId           String?          @map("category_id")
-  receiptReference     String?          @map("receipt_reference")
-  purchaseOrderId      String?          @map("purchase_order_id")
-  status               ExpenseStatus    @default(draft)
+  expenseDate          DateTime           @map("expense_date")
+  categoryId           String?            @map("category_id")
+  receiptReference     String?            @map("receipt_reference")
+  purchaseOrderId      String?            @map("purchase_order_id")
+  status               ExpenseStatus      @default(draft)
   // ticket-specific
-  ticketType           TicketType?      @map("ticket_type")
-  travelerName         String?          @map("traveler_name")
+  ticketType           TicketType?        @map("ticket_type")
+  travelerName         String?            @map("traveler_name")
   origin               String?
   destination          String?
-  travelDate           DateTime?        @map("travel_date")
-  returnDate           DateTime?        @map("return_date")
+  travelDate           DateTime?          @map("travel_date")
+  returnDate           DateTime?          @map("return_date")
   // accommodation-specific
-  guestName            String?          @map("guest_name")
-  checkIn              DateTime?        @map("check_in")
-  checkOut             DateTime?        @map("check_out")
-  hotelName            String?          @map("hotel_name")
-  expenseCity          String?          @map("expense_city")
-  nightlyRate          Decimal?         @map("nightly_rate") @db.Decimal(18, 2)
+  guestName            String?            @map("guest_name")
+  checkIn              DateTime?          @map("check_in")
+  checkOut             DateTime?          @map("check_out")
+  hotelName            String?            @map("hotel_name")
+  expenseCity          String?            @map("expense_city")
+  nightlyRate          Decimal?           @map("nightly_rate") @db.Decimal(18, 2)
   nights               Int?
   // transportation-specific
-  vehicleType          String?          @map("vehicle_type")
-  transportOrigin      String?          @map("transport_origin")
-  transportDestination String?          @map("transport_destination")
-  distance             Decimal?         @db.Decimal(10, 2)
+  vehicleType          String?            @map("vehicle_type")
+  transportOrigin      String?            @map("transport_origin")
+  transportDestination String?            @map("transport_destination")
+  distance             Decimal?           @db.Decimal(10, 2)
   rateType             TransportRateType? @map("rate_type")
   // equipment-specific
-  equipmentName        String?          @map("equipment_name")
-  equipmentType        String?          @map("equipment_type")
-  rentalPeriodFrom     DateTime?        @map("rental_period_from")
-  rentalPeriodTo       DateTime?        @map("rental_period_to")
-  dailyRate            Decimal?         @map("daily_rate") @db.Decimal(18, 2)
+  equipmentName        String?            @map("equipment_name")
+  equipmentType        String?            @map("equipment_type")
+  rentalPeriodFrom     DateTime?          @map("rental_period_from")
+  rentalPeriodTo       DateTime?          @map("rental_period_to")
+  dailyRate            Decimal?           @map("daily_rate") @db.Decimal(18, 2)
   days                 Int?
-  createdBy            String           @map("created_by")
-  createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @updatedAt @map("updated_at")
+  createdBy            String             @map("created_by")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
@@ -1816,22 +1857,22 @@ model Expense {
 }
 
 model CreditNote {
-  id                String           @id @default(uuid())
-  projectId         String           @map("project_id")
-  vendorId          String           @map("vendor_id")
+  id                String            @id @default(uuid())
+  projectId         String            @map("project_id")
+  vendorId          String            @map("vendor_id")
   subtype           CreditNoteSubtype
-  creditNoteNumber  String           @unique @map("credit_note_number")
-  supplierInvoiceId String?          @map("supplier_invoice_id")
-  purchaseOrderId   String?          @map("purchase_order_id")
-  correspondenceId  String?          @map("correspondence_id")
-  amount            Decimal          @db.Decimal(18, 2)
+  creditNoteNumber  String            @unique @map("credit_note_number")
+  supplierInvoiceId String?           @map("supplier_invoice_id")
+  purchaseOrderId   String?           @map("purchase_order_id")
+  correspondenceId  String?           @map("correspondence_id")
+  amount            Decimal           @db.Decimal(18, 2)
   currency          String
   reason            String
-  receivedDate      DateTime         @map("received_date")
-  status            CreditNoteStatus @default(received)
-  createdBy         String           @map("created_by")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
+  receivedDate      DateTime          @map("received_date")
+  status            CreditNoteStatus  @default(received)
+  createdBy         String            @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
   project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
   vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
@@ -1854,15 +1895,15 @@ model CreditNote {
 /// PO lifecycle: draft → submitted → approved → issued → delivered → closed
 /// Approved+ (committed_cost): approved, issued, partially_delivered, delivered, closed
 enum PurchaseOrderStatus {
-  draft                @map("draft")
-  submitted            @map("submitted")
-  approved             @map("approved")
-  issued               @map("issued")
-  partially_delivered  @map("partially_delivered")
-  delivered            @map("delivered")
-  closed               @map("closed")
-  rejected             @map("rejected")
-  cancelled            @map("cancelled")
+  draft               @map("draft")
+  submitted           @map("submitted")
+  approved            @map("approved")
+  issued              @map("issued")
+  partially_delivered @map("partially_delivered")
+  delivered           @map("delivered")
+  closed              @map("closed")
+  rejected            @map("rejected")
+  cancelled           @map("cancelled")
 
   @@map("purchase_order_status")
 }
@@ -1870,13 +1911,13 @@ enum PurchaseOrderStatus {
 /// SI lifecycle: received → under_review → approved → paid → closed
 /// Approved+ (actual_cost): approved, paid, closed
 enum SupplierInvoiceStatus {
-  received      @map("received")
-  under_review  @map("under_review")
-  approved      @map("approved")
-  disputed      @map("disputed")
-  paid          @map("paid")
-  closed        @map("closed")
-  rejected      @map("rejected")
+  received     @map("received")
+  under_review @map("under_review")
+  approved     @map("approved")
+  disputed     @map("disputed")
+  paid         @map("paid")
+  closed       @map("closed")
+  rejected     @map("rejected")
 
   @@map("supplier_invoice_status")
 }
@@ -1884,25 +1925,25 @@ enum SupplierInvoiceStatus {
 /// Expense lifecycle: draft → submitted → approved → paid → closed
 /// Approved+ (actual_cost): approved, paid, closed
 enum ExpenseStatus {
-  draft      @map("draft")
-  submitted  @map("submitted")
-  approved   @map("approved")
-  paid       @map("paid")
-  closed     @map("closed")
-  rejected   @map("rejected")
-  cancelled  @map("cancelled")
+  draft     @map("draft")
+  submitted @map("submitted")
+  approved  @map("approved")
+  paid      @map("paid")
+  closed    @map("closed")
+  rejected  @map("rejected")
+  cancelled @map("cancelled")
 
   @@map("expense_status")
 }
 
 /// CN lifecycle: received → verified → applied → closed
 enum CreditNoteStatus {
-  received   @map("received")
-  verified   @map("verified")
-  applied    @map("applied")
-  disputed   @map("disputed")
-  closed     @map("closed")
-  cancelled  @map("cancelled")
+  received  @map("received")
+  verified  @map("verified")
+  applied   @map("applied")
+  disputed  @map("disputed")
+  closed    @map("closed")
+  cancelled @map("cancelled")
 
   @@map("credit_note_status")
 }
@@ -1912,22 +1953,24 @@ enum CreditNoteStatus {
 // ---------------------------------------------------------------------------
 
 enum BudgetAdjustmentType {
-  baseline_change    @map("baseline_change")
-  contingency_change @map("contingency_change")
-  ei_reserve_change  @map("ei_reserve_change")
-  reallocation       @map("reallocation")
+  baseline_change        @map("baseline_change")
+  contingency_change     @map("contingency_change")
+  ei_reserve_change      @map("ei_reserve_change")
+  reallocation           @map("reallocation")
+  line_import            @map("line_import")
+  line_manual_adjustment @map("line_manual_adjustment")
 
   @@map("budget_adjustment_type")
 }
 
 /// EI lifecycle: received → under_evaluation → approved_reserve → converted/rejected/expired
 enum EiStatus {
-  received          @map("received")
-  under_evaluation  @map("under_evaluation")
-  approved_reserve  @map("approved_reserve")
-  converted         @map("converted")
-  rejected          @map("rejected")
-  expired           @map("expired")
+  received         @map("received")
+  under_evaluation @map("under_evaluation")
+  approved_reserve @map("approved_reserve")
+  converted        @map("converted")
+  rejected         @map("rejected")
+  expired          @map("expired")
 
   @@map("ei_status")
 }
@@ -1961,16 +2004,16 @@ model BudgetCategory {
 /// One budget header per project. Stores the internal delivery baseline
 /// which is distinct from the external contract value on the Project model.
 model ProjectBudget {
-  id               String   @id @default(uuid()) @map("id")
-  projectId        String   @unique @map("project_id")
-  internalBaseline Decimal  @map("internal_baseline") @db.Decimal(18, 2)
-  internalRevised  Decimal  @map("internal_revised") @db.Decimal(18, 2)
-  contingencyAmount Decimal @default(0) @map("contingency_amount") @db.Decimal(18, 2)
-  eiReserveTotal   Decimal  @default(0) @map("ei_reserve_total") @db.Decimal(18, 2)
-  notes            String?  @map("notes")
-  createdBy        String   @map("created_by")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @map("id")
+  projectId         String   @unique @map("project_id")
+  internalBaseline  Decimal  @map("internal_baseline") @db.Decimal(18, 2)
+  internalRevised   Decimal  @map("internal_revised") @db.Decimal(18, 2)
+  contingencyAmount Decimal  @default(0) @map("contingency_amount") @db.Decimal(18, 2)
+  eiReserveTotal    Decimal  @default(0) @map("ei_reserve_total") @db.Decimal(18, 2)
+  notes             String?  @map("notes")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   lines       BudgetLine[]
@@ -1995,8 +2038,18 @@ model BudgetLine {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  budget   ProjectBudget  @relation(fields: [budgetId], references: [id], onDelete: Restrict)
-  category BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  // Import provenance — set when this line was last written via an import commit.
+  // lastImportedAmount is the preserved "what the sheet said" value and is NOT
+  // mutated by subsequent manual adjustments — UI keeps showing imported vs current.
+  importBatchId      String?   @map("import_batch_id")
+  importRowId        String?   @map("import_row_id")
+  lastImportedAmount Decimal?  @map("last_imported_amount") @db.Decimal(18, 2)
+  importedByUserId   String?   @map("imported_by_user_id")
+  importedAt         DateTime? @map("imported_at")
+
+  budget      ProjectBudget      @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  category    BudgetCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  adjustments BudgetAdjustment[]
 
   @@unique([budgetId, categoryId])
   @@index([budgetId])
@@ -2005,19 +2058,32 @@ model BudgetLine {
 
 /// Auditable record of every change to the internal budget.
 /// Append-only by convention — no edit/delete.
+///
+/// Scope:
+///   - Header-level changes (baseline, contingency, ei_reserve, reallocation):
+///     budgetLineId is null; amount is the signed delta at the header.
+///   - Line-level changes (line_import, line_manual_adjustment):
+///     budgetLineId is set; beforeAmount/afterAmount carry the concrete values;
+///     amount = afterAmount - beforeAmount for convenience.
 model BudgetAdjustment {
   id             String               @id @default(uuid()) @map("id")
   budgetId       String               @map("budget_id")
+  budgetLineId   String?              @map("budget_line_id")
   adjustmentType BudgetAdjustmentType @map("adjustment_type")
   amount         Decimal              @map("amount") @db.Decimal(18, 2)
+  beforeAmount   Decimal?             @map("before_amount") @db.Decimal(18, 2)
+  afterAmount    Decimal?             @map("after_amount") @db.Decimal(18, 2)
   reason         String               @map("reason")
   approvedBy     String?              @map("approved_by")
   createdBy      String               @map("created_by")
+  importBatchId  String?              @map("import_batch_id")
   createdAt      DateTime             @default(now()) @map("created_at")
 
-  budget ProjectBudget @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  budget     ProjectBudget @relation(fields: [budgetId], references: [id], onDelete: Restrict)
+  budgetLine BudgetLine?   @relation(fields: [budgetLineId], references: [id], onDelete: Restrict)
 
   @@index([budgetId, createdAt])
+  @@index([budgetLineId, createdAt])
   @@map("budget_adjustments")
 }
 
@@ -2036,25 +2102,25 @@ model BudgetAdjustment {
 // ---------------------------------------------------------------------------
 
 model EngineerInstruction {
-  id              String    @id @default(uuid()) @map("id")
-  projectId       String    @map("project_id")
-  referenceNumber String?   @unique @map("reference_number")
-  title           String    @map("title")
-  description     String?   @map("description")
-  estimatedValue  Decimal   @map("estimated_value") @db.Decimal(18, 2)
-  currency        String    @map("currency")
-  status          EiStatus  @default(received) @map("status")
+  id              String   @id @default(uuid()) @map("id")
+  projectId       String   @map("project_id")
+  referenceNumber String?  @unique @map("reference_number")
+  title           String   @map("title")
+  description     String?  @map("description")
+  estimatedValue  Decimal  @map("estimated_value") @db.Decimal(18, 2)
+  currency        String   @map("currency")
+  status          EiStatus @default(received) @map("status")
   /// Reserve rate: fraction of estimatedValue held as internal provision.
   /// Default 0.50 (50%). Configurable per EI for exceptional cases.
-  reserveRate     Decimal   @default(0.50) @map("reserve_rate") @db.Decimal(5, 4)
+  reserveRate     Decimal  @default(0.50) @map("reserve_rate") @db.Decimal(5, 4)
   /// Computed on creation: estimatedValue * reserveRate. Updated if rate changes.
-  reserveAmount   Decimal   @map("reserve_amount") @db.Decimal(18, 2)
+  reserveAmount   Decimal  @map("reserve_amount") @db.Decimal(18, 2)
   /// Set when EI is converted to a VO/CO.
-  variationId     String?   @map("variation_id")
-  notes           String?   @map("notes")
-  createdBy       String    @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  variationId     String?  @map("variation_id")
+  notes           String?  @map("notes")
+  createdBy       String   @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
   variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
@@ -2063,4 +2129,165 @@ model EngineerInstruction {
   @@index([projectId, createdAt])
   @@index([variationId])
   @@map("engineer_instructions")
+}
+
+// ---------------------------------------------------------------------------
+// Module 5: Controlled sheet import (staging + review queue)
+//
+// Goal: ingest pre-adoption or manually-prepared spreadsheet data into live
+// truth without polluting KPIs / workflows with ungoverned rows. Staging
+// tables hold parsed + validated rows; nothing enters live truth until
+// commitBatch runs inside a single transaction.
+//
+// Invariants:
+//   - Staging never affects KPIs, dashboards, workflow queues, or registers.
+//   - No row enters live truth without explicit commit.
+//   - Every committed live record carries importBatchId + importRowId
+//     + importedByUserId + importedAt for auditable lineage.
+//   - Imported historical IPAs receive origin=imported_historical and are
+//     blocked from in-system workflow transitions.
+//   - Imported-origin PostingEvents are distinguishable via
+//     PostingEvent.origin and never share an idempotencyKey namespace with
+//     live events (live: `*-{id}`, imported: `*-imported-{id}`).
+// ---------------------------------------------------------------------------
+
+enum ImportType {
+  budget_baseline @map("budget_baseline")
+  ipa_history     @map("ipa_history")
+
+  @@map("import_type")
+}
+
+enum ImportBatchStatus {
+  staged          @map("staged")
+  validated       @map("validated")
+  partially_valid @map("partially_valid")
+  committed       @map("committed")
+  rejected        @map("rejected")
+  cancelled       @map("cancelled")
+
+  @@map("import_batch_status")
+}
+
+enum ImportRowStatus {
+  pending   @map("pending")
+  valid     @map("valid")
+  invalid   @map("invalid")
+  conflict  @map("conflict")
+  committed @map("committed")
+  skipped   @map("skipped")
+
+  @@map("import_row_status")
+}
+
+model ImportBatch {
+  id                         String            @id @default(uuid()) @map("id")
+  projectId                  String            @map("project_id")
+  importType                 ImportType        @map("import_type")
+  sourceFileName             String            @map("source_file_name")
+  /// sha256 hex of the uploaded file bytes. Prevents silent duplicate uploads
+  /// of the same content for the same project+type.
+  sourceFileHash             String            @map("source_file_hash")
+  sourceStoragePath          String?           @map("source_storage_path")
+  uploadedBy                 String            @map("uploaded_by")
+  status                     ImportBatchStatus @default(staged) @map("status")
+  /// Row counts by status, totals, mapping stats. Populated at validation time.
+  summaryJson                Json              @map("summary_json")
+  // Freshness guard — commit refuses if any of these drift from current code/data.
+  parserVersion              String?           @map("parser_version")
+  validatorSchemaVersion     String?           @map("validator_schema_version")
+  referenceDataSnapshotJson  Json?             @map("reference_data_snapshot_json")
+  sourceFileHashAtValidation String?           @map("source_file_hash_at_validation")
+  validationRanAt            DateTime?         @map("validation_ran_at")
+  committedAt                DateTime?         @map("committed_at")
+  committedBy                String?           @map("committed_by")
+  cancelledAt                DateTime?         @map("cancelled_at")
+  cancelledBy                String?           @map("cancelled_by")
+  rejectedAt                 DateTime?         @map("rejected_at")
+  rejectedBy                 String?           @map("rejected_by")
+  rejectReason               String?           @map("reject_reason")
+  createdAt                  DateTime          @default(now()) @map("created_at")
+  updatedAt                  DateTime          @updatedAt @map("updated_at")
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  rows    ImportRow[]
+
+  @@unique([projectId, importType, sourceFileHash])
+  @@index([projectId, status])
+  @@index([importType, status])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id                   String          @id @default(uuid()) @map("id")
+  batchId              String          @map("batch_id")
+  rowNumber            Int             @map("row_number")
+  /// Original row values as parsed from the sheet, no normalization.
+  rawJson              Json            @map("raw_json")
+  /// Normalized / typed shape. Null if parse failed before normalization.
+  parsedJson           Json?           @map("parsed_json")
+  /// Array of { code, field, message }.
+  validationErrorsJson Json            @default("[]") @map("validation_errors_json")
+  /// Array of { code, field, message }.
+  warningsJson         Json            @default("[]") @map("warnings_json")
+  /// Structured conflict record when status=conflict. Shape depends on import type.
+  conflictJson         Json?           @map("conflict_json")
+  status               ImportRowStatus @default(pending) @map("status")
+  committedRecordType  String?         @map("committed_record_type")
+  /// Soft FK to the created live record. No cascade — survives record deletion.
+  committedRecordId    String?         @map("committed_record_id")
+  excludedByUserId     String?         @map("excluded_by_user_id")
+  excludedAt           DateTime?       @map("excluded_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("import_rows")
+}
+
+// ---------------------------------------------------------------------------
+// IPA adjustment groups (header + field-level children)
+//
+// Post-commit corrections to IPA records — especially imported historical IPAs
+// — must be structurally auditable. One AdjustmentBatch per operator action,
+// one AdjustmentField per changed field, and at most one IPA_ADJUSTMENT
+// PostingEvent per batch (emitted when monetary fields change).
+// ---------------------------------------------------------------------------
+
+model IpaAdjustmentBatch {
+  id             String   @id @default(uuid()) @map("id")
+  ipaId          String   @map("ipa_id")
+  /// 'imported_correction' | 'manual_correction' | 'period_recategorization'
+  adjustmentType String   @map("adjustment_type")
+  reason         String   @map("reason")
+  actorUserId    String   @map("actor_user_id")
+  approvedBy     String?  @map("approved_by")
+  /// The single IPA_ADJUSTMENT posting event emitted by this batch, if any.
+  postingEventId String?  @map("posting_event_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  ipa          Ipa                  @relation(fields: [ipaId], references: [id], onDelete: Restrict)
+  fields       IpaAdjustmentField[]
+  postingEvent PostingEvent?        @relation(fields: [postingEventId], references: [id])
+
+  @@index([ipaId, createdAt])
+  @@map("ipa_adjustment_batches")
+}
+
+model IpaAdjustmentField {
+  id          String   @id @default(uuid()) @map("id")
+  batchId     String   @map("batch_id")
+  fieldName   String   @map("field_name")
+  /// Stringified. Preserves Decimal precision for monetary fields.
+  beforeValue String   @map("before_value")
+  afterValue  String   @map("after_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  batch IpaAdjustmentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("ipa_adjustment_fields")
 }
