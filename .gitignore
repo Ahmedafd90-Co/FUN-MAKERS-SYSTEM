@@ -30,3 +30,10 @@ coverage/
 
 # Infrastructure
 cdk.out/
+
+# Local browser-proof artifacts and Claude workspace noise
+.playwright-mcp/
+.claude/worktrees/
+.claude/launch.json
+/*.png
+/*.yml
