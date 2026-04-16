@@ -44,6 +44,16 @@
      * interactive surfaces that need white foreground. */
     --brand-teal: 173 100% 39%;
     --brand-orange: 30 100% 50%;
+
+    /* Surface and soft-brand tokens — added in the brand-adaptation pass.
+     * No consumers yet; wired through the Tailwind preset for future
+     * chrome/shell polish phases. Neutral values keep the product visually
+     * unchanged until components opt in. */
+    --surface-elevated: 0 0% 99%;
+    --surface-sunken: 0 0% 97%;
+    --brand-teal-soft: 173 100% 95%;
+    --brand-orange-soft: 30 100% 95%;
+    --border-strong: 0 0% 82%;
   }
 
   .dark {
@@ -82,6 +92,14 @@
     /* Pico Play brand tokens — decorative only (see :root note). */
     --brand-teal: 173 100% 45%;
     --brand-orange: 30 100% 55%;
+
+    /* Surface and soft-brand tokens — dark-mode pair. Values tuned for
+     * dark backgrounds. No consumers yet. */
+    --surface-elevated: 0 0% 6%;
+    --surface-sunken: 0 0% 7%;
+    --brand-teal-soft: 173 50% 15%;
+    --brand-orange-soft: 30 50% 15%;
+    --border-strong: 0 0% 22%;
   }
 }
 
