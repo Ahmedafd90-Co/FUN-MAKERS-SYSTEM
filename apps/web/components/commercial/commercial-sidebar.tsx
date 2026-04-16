@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@fmksa/ui/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -46,11 +47,12 @@ export function CommercialSidebar({ projectId }: { projectId: string }) {
           <Link
             key={href}
             href={fullPath}
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+            className={cn(
+              'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors',
               isActive
-                ? 'bg-secondary text-secondary-foreground font-medium'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
+                ? 'border-primary bg-secondary text-secondary-foreground font-medium'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
           >
             <Icon className="h-4 w-4" />
             {label}
