@@ -91,7 +91,7 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface-elevated/95 backdrop-blur supports-[backdrop-filter]:bg-surface-elevated/70">
       <div className="mx-auto flex h-14 max-w-screen-2xl items-center px-4 lg:px-6">
         {/* Left: Branding */}
         <Link
@@ -139,7 +139,7 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
                 className={cn(
                   'relative px-3 py-1.5 text-sm rounded-md transition-colors',
                   item.active
-                    ? 'bg-accent text-accent-foreground font-medium'
+                    ? "bg-accent text-accent-foreground font-medium after:pointer-events-none after:absolute after:inset-x-3 after:bottom-1 after:h-[2px] after:rounded-full after:bg-primary"
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                 )}
               >
