@@ -1,6 +1,26 @@
 import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@fmksa/ui/lib/utils"
+
+// Additive compact variant for register table headers. Opt-in via
+// `<TableHead variant="compact">`; default preserves all existing callsites
+// exactly.
+const tableHeadVariants = cva(
+  "text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+  {
+    variants: {
+      variant: {
+        default: "h-10 px-2",
+        compact:
+          "h-8 px-2 bg-muted/40 border-b border-border-strong text-[11px] uppercase tracking-wider",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
 const Table = React.forwardRef<
   HTMLTableElement,
@@ -66,19 +86,19 @@ const TableRow = React.forwardRef<
 ))
 TableRow.displayName = "TableRow"
 
-const TableHead = React.forwardRef<
-  HTMLTableCellElement,
-  React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <th
-    ref={ref}
-    className={cn(
-      "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-      className
-    )}
-    {...props}
-  />
-))
+interface TableHeadProps
+  extends React.ThHTMLAttributes<HTMLTableCellElement>,
+    VariantProps<typeof tableHeadVariants> {}
+
+const TableHead = React.forwardRef<HTMLTableCellElement, TableHeadProps>(
+  ({ className, variant, ...props }, ref) => (
+    <th
+      ref={ref}
+      className={cn(tableHeadVariants({ variant, className }))}
+      {...props}
+    />
+  )
+)
 TableHead.displayName = "TableHead"
 
 const TableCell = React.forwardRef<
