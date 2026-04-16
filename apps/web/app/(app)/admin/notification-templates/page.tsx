@@ -34,7 +34,7 @@ const SAMPLE_PAYLOAD: Record<string, string> = {
   projectName: 'Sample Project',
   projectCode: 'PROJ-001',
   stepName: 'Finance Review',
-  entityName: 'Fun Makers KSA LLC',
+  entityName: 'Pico Play',
   documentTitle: 'Contract Agreement',
   approverName: 'Sarah Al-Zahrawi',
   reason: 'Pending review',

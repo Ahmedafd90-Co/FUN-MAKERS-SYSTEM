@@ -6,7 +6,7 @@ import { ProfileInfo } from '@/components/profile/profile-info';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Profile — Pico Play Fun Makers KSA',
+  title: 'Profile — Pico Play',
 };
 
 export default function ProfilePage() {

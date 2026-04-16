@@ -13,9 +13,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Pico Play Fun Makers KSA',
-  description:
-    'Internal operations platform for Pico Play Fun Makers KSA — construction and project delivery.',
+  title: 'Pico Play',
+  description: 'Internal operations platform for Pico Play.',
 };
 
 export default function RootLayout({

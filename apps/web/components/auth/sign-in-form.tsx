@@ -11,6 +11,7 @@ import { Input } from '@fmksa/ui/components/input';
 import { Label } from '@fmksa/ui/components/label';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -81,16 +82,25 @@ export function SignInForm() {
   return (
     <Card className="w-full max-w-sm border-border bg-card shadow-lg">
       <CardHeader className="space-y-3 text-center pb-2">
-        {/* Brand accent line */}
-        <div className="mx-auto h-1 w-12 rounded-full bg-primary" />
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Fun Makers KSA
-          </h1>
-          <p className="text-sm text-muted-foreground leading-snug">
-            Project Operations &amp; Commercial Workflow Platform
-          </p>
-        </div>
+        <Image
+          src="/logo-colour.png"
+          alt="Pico Play"
+          width={160}
+          height={42}
+          priority
+          className="mx-auto h-10 w-auto dark:hidden"
+        />
+        <Image
+          src="/logo-colour-white.png"
+          alt="Pico Play"
+          width={160}
+          height={42}
+          priority
+          className="mx-auto hidden h-10 w-auto dark:block"
+        />
+        <p className="text-sm text-muted-foreground leading-snug">
+          Project Operations &amp; Commercial Workflow Platform
+        </p>
       </CardHeader>
 
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -110,7 +120,7 @@ export function SignInForm() {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="you@funmakers.sa"
+              placeholder="you@company.com"
               {...register('email')}
             />
             {errors.email && (

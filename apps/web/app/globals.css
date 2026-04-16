@@ -4,15 +4,19 @@
 
 @layer base {
   :root {
-    /* shadcn/ui — new-york style, neutral base (light mode). */
+    /* shadcn/ui — new-york style, Pico Play brand (light mode).
+     * --primary is an operational teal (darker than brand teal) so white
+     * foreground text passes WCAG AA on buttons/badges. The brighter brand
+     * teal lives in --brand-teal for decorative use (accent lines, tinted
+     * surfaces) where no white text is layered on top. */
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 173 100% 25%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
@@ -23,7 +27,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --ring: 173 100% 25%;
     --radius: 0.5rem;
 
     /* Status chip tokens — Module 1 design spec §8.3. */
@@ -34,18 +38,26 @@
     --status-signed: 150 80% 30%;
     --status-superseded: 38 92% 50%;
     --status-exception: 271 91% 65%;
+
+    /* Pico Play brand tokens — decorative use only. Never layer white text
+     * directly on --brand-teal (fails WCAG AA). Use --primary for
+     * interactive surfaces that need white foreground. */
+    --brand-teal: 173 100% 39%;
+    --brand-orange: 30 100% 50%;
   }
 
   .dark {
-    /* shadcn/ui — new-york style, neutral base (dark mode). */
+    /* shadcn/ui — new-york style, Pico Play brand (dark mode).
+     * --primary stays a readable teal (white-on-teal passes WCAG AA).
+     * --brand-teal is a brighter decorative variant for dark surfaces. */
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+    --primary: 173 100% 26%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14.9%;
@@ -56,7 +68,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --ring: 173 100% 26%;
 
     /* Status chip tokens — same hues, retuned slightly for dark backgrounds. */
     --status-draft: 220 9% 64%;
@@ -66,6 +78,10 @@
     --status-signed: 150 60% 50%;
     --status-superseded: 38 92% 60%;
     --status-exception: 271 91% 75%;
+
+    /* Pico Play brand tokens — decorative only (see :root note). */
+    --brand-teal: 173 100% 45%;
+    --brand-orange: 30 100% 55%;
   }
 }
 
