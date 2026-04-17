@@ -143,6 +143,7 @@ export function AbsorptionExceptionList({
   return (
     <div className="space-y-4">
       <PageHeader
+        eyebrow="Administration"
         title="Absorption Exceptions"
         description="Budget absorption failures across all projects. Open exceptions mean budget lines are not tracking committed or actual costs."
       />

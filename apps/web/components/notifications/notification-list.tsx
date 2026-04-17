@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/lib/trpc-client';
 
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Relative-time helper (no external dependency)
@@ -174,28 +175,26 @@ export function NotificationList({ unreadOnly = false }: NotificationListProps) 
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Notifications</h1>
-          {unreadCount > 0 && (
-            <p className="text-sm text-muted-foreground">
-              {unreadCount} unread
-            </p>
-          )}
-        </div>
-        {unreadCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => markAllRead.mutate()}
-            disabled={markAllRead.isPending}
-          >
-            <CheckCheck className="mr-2 h-4 w-4" />
-            Mark all as read
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Inbox"
+        title="Notifications"
+        {...(unreadCount > 0 ? { description: `${unreadCount} unread` } : {})}
+        {...(unreadCount > 0
+          ? {
+              actions: (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => markAllRead.mutate()}
+                  disabled={markAllRead.isPending}
+                >
+                  <CheckCheck className="mr-2 h-4 w-4" />
+                  Mark all as read
+                </Button>
+              ),
+            }
+          : {})}
+      />
 
       {/* Loading skeleton */}
       {isLoading && allItems.length === 0 && (

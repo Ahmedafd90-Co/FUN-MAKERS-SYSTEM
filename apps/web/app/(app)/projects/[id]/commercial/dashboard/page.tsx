@@ -8,7 +8,11 @@ export default function CommercialDashboardPage() {
   const params = useParams<{ id: string }>();
   return (
     <div className="space-y-6">
-      <PageHeader title="Commercial Dashboard" description="Overview of commercial activities" />
+      <PageHeader
+        eyebrow="Commercial"
+        title="Commercial Dashboard"
+        description="Overview of commercial activities"
+      />
       <DashboardCards projectId={params.id} />
     </div>
   );

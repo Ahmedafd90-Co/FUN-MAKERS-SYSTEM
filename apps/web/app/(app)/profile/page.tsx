@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 lg:px-8">
-      <PageHeader title="Your Profile" />
+      <PageHeader eyebrow="Account" title="Your Profile" />
       <ProfileInfo />
       <ChangePasswordForm />
       <NotificationPreferences />
