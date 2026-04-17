@@ -2,8 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ShieldOff } from 'lucide-react';
+import { ArrowLeft, ShieldOff, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
@@ -18,6 +20,8 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -64,6 +68,7 @@ function formatRate(val: unknown): string {
 export default function SupplierInvoiceDetailPage() {
   const params = useParams<{ id: string; siId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: userPermissions } = trpc.procurement.myPermissions.useQuery();
 
@@ -156,24 +161,41 @@ export default function SupplierInvoiceDetailPage() {
             recordLabel="Supplier Invoice"
           />
         </div>
-        <ProcurementTransitionActions
-          currentStatus={data.status}
-          recordFamily="supplier_invoice"
-          userPermissions={userPermissions ?? []}
-          isLoading={transitionMut.isPending}
-          hasActiveWorkflow={hasActiveWorkflow}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.siId,
-              action,
-              comment,
-            });
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          <ProcurementTransitionActions
+            currentStatus={data.status}
+            recordFamily="supplier_invoice"
+            userPermissions={userPermissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.siId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
       </div>
 
       <WorkflowStatusCard recordType="supplier_invoice" recordId={params.siId} />
+
+      {/* ── Attachments (WS1 Phase E) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="supplier_invoice"
+        recordId={params.siId}
+      />
 
       <Separator />
 
@@ -276,6 +298,20 @@ export default function SupplierInvoiceDetailPage() {
           variant="actual"
         />
       ) : null}
+
+      {/* ── Evidence drawer (WS1 Phase E) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="supplier_invoice"
+        recordId={params.siId}
+        recordLabel={
+          (data as { invoiceNumber?: string; referenceNumber?: string }).invoiceNumber ??
+          (data as { referenceNumber?: string }).referenceNumber ??
+          'Supplier Invoice'
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }

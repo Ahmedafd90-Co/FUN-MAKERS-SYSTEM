@@ -2,8 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, CalendarClock } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
@@ -18,6 +20,8 @@ import { InvoiceCollectionsSection } from '@/components/commercial/invoice-colle
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 import { formatMoney, formatRate, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function isDueSoon(dueDate: string | null): boolean {
   if (!dueDate) return false;
@@ -35,6 +39,7 @@ function isOverdue(dueDate: string | null): boolean {
 export default function TaxInvoiceDetailPage() {
   const params = useParams<{ id: string; invoiceId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: me } = trpc.auth.me.useQuery();
 
@@ -140,21 +145,31 @@ export default function TaxInvoiceDetailPage() {
             </div>
           )}
         </div>
-        <TransitionActions
-          currentStatus={data.status}
-          recordFamily="taxInvoice"
-          permissions={me?.permissions ?? []}
-          isLoading={transitionMut.isPending}
-          hasActiveWorkflow={hasActiveWorkflow}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.invoiceId,
-              action,
-              comment,
-            });
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          <TransitionActions
+            currentStatus={data.status}
+            recordFamily="taxInvoice"
+            permissions={me?.permissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.invoiceId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
       </div>
 
       <WorkflowStatusHint
@@ -165,6 +180,13 @@ export default function TaxInvoiceDetailPage() {
 
       {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="tax_invoice" recordId={params.invoiceId} />
+
+      {/* ── Attachments (WS1 Phase C) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="tax_invoice"
+        recordId={params.invoiceId}
+      />
 
       {/* ── Summary Strip — financial context at a glance ── */}
       <SummaryStrip>
@@ -336,6 +358,16 @@ export default function TaxInvoiceDetailPage() {
         invoiceCurrency={data.currency}
         invoiceDueDate={dueDateStr}
         canRecord={me?.permissions?.includes('tax_invoice.edit') ?? false}
+      />
+
+      {/* ── Evidence drawer (WS1 Phase C) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="tax_invoice"
+        recordId={params.invoiceId}
+        recordLabel={data.referenceNumber ?? 'Tax Invoice'}
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
       />
     </div>
   );

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, Award, Pencil, ShieldOff } from 'lucide-react';
+import { ArrowLeft, BarChart3, Award, Pencil, ShieldOff, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@fmksa/ui/components/button';
 import {
@@ -20,6 +20,8 @@ import { RfqItemsTable } from '@/components/procurement/rfq-items-table';
 import { RfqVendorsList } from '@/components/procurement/rfq-vendors-list';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function Field({
   label,
@@ -55,6 +57,7 @@ export default function RfqDetailPage() {
   const params = useParams<{ id: string; rfqId: string }>();
   const utils = trpc.useUtils();
   const [awardingQuotationId, setAwardingQuotationId] = useState<string | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   // Real permissions — no fake tokens
   const { data: userPermissions } = trpc.procurement.myPermissions.useQuery();
@@ -164,6 +167,14 @@ export default function RfqDetailPage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
           {canEdit && (
             <Button variant="outline" size="sm" asChild>
               <Link
@@ -257,6 +268,13 @@ export default function RfqDetailPage() {
 
       <WorkflowStatusCard recordType="rfq" recordId={params.rfqId} />
 
+      {/* ── Attachments (WS1 Phase D) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="rfq"
+        recordId={params.rfqId}
+      />
+
       {/* RFQ Details */}
       <Card>
         <CardHeader>
@@ -326,6 +344,20 @@ export default function RfqDetailPage() {
           <RfqItemsTable items={data.items ?? []} />
         </CardContent>
       </Card>
+
+      {/* ── Evidence drawer (WS1 Phase D) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="rfq"
+        recordId={params.rfqId}
+        recordLabel={
+          data.referenceNumber ??
+          data.rfqNumber ??
+          'RFQ'
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }

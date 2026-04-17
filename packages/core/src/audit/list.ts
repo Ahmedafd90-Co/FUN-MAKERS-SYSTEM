@@ -9,6 +9,13 @@ import { prisma } from '@fmksa/db';
 export type AuditLogFilters = {
   action?: string | undefined;
   resourceType?: string | undefined;
+  /**
+   * Optional exact-match filter on the audit row's `resourceId`. Paired
+   * with `resourceType`, this scopes the list to a single business record
+   * (e.g. a specific IPA). The existing `(resourceType, resourceId, createdAt)`
+   * composite index on `audit_logs` makes this lookup fast.
+   */
+  resourceId?: string | undefined;
   actorSource?: string | undefined;
   actorUserId?: string | undefined;
   projectId?: string | undefined;
@@ -34,6 +41,7 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
   const {
     action,
     resourceType,
+    resourceId,
     actorSource,
     actorUserId,
     projectId,
@@ -47,6 +55,7 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
 
   if (action) where['action'] = { contains: action, mode: 'insensitive' };
   if (resourceType) where['resourceType'] = resourceType;
+  if (resourceId) where['resourceId'] = resourceId;
   if (actorSource) where['actorSource'] = actorSource;
   if (actorUserId) where['actorUserId'] = actorUserId;
   if (projectId) where['projectId'] = projectId;

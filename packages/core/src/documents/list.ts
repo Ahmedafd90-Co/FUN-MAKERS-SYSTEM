@@ -9,6 +9,14 @@ export interface ListDocumentsInput {
   category?: string;
   status?: string;
   search?: string;
+  /**
+   * Polymorphic record filter — when both are set, limits the result to
+   * Documents whose `recordType` + `recordId` match. Additive to existing
+   * filters; existing callers that omit these two fields see unchanged
+   * behaviour.
+   */
+  recordType?: string;
+  recordId?: string;
   skip?: number;
   take?: number;
 }
@@ -26,6 +34,8 @@ export async function listDocuments(input: ListDocumentsInput) {
     category,
     status,
     search,
+    recordType,
+    recordId,
     skip = 0,
     take = 20,
   } = input;
@@ -46,6 +56,14 @@ export async function listDocuments(input: ListDocumentsInput) {
       contains: search,
       mode: 'insensitive',
     };
+  }
+
+  if (recordType) {
+    where.recordType = recordType;
+  }
+
+  if (recordId) {
+    where.recordId = recordId;
   }
 
   const [items, total] = await Promise.all([
