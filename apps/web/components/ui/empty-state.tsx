@@ -18,7 +18,9 @@ type EmptyStateProps = {
 export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <Icon className="h-10 w-10 text-muted-foreground/40" />
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/15 bg-primary/5">
+        <Icon className="h-6 w-6 text-muted-foreground/60" />
+      </div>
       <div className="space-y-1">
         <p className="text-sm font-medium text-foreground">{title}</p>
         {description && (

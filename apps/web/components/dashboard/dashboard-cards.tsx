@@ -157,9 +157,12 @@ export function DashboardCards() {
         </Card>
       </Link>
 
-      {/* My Projects — informational card */}
+      {/* My Projects — informational anchor card. Teal left bar marks
+          this as the portfolio anchor on the dashboard; the other cards
+          (Active Workflows, Notifications) keep their semantic amber /
+          blue left borders which signal attention state. */}
       <Link href="/projects" className="group">
-        <Card className="transition-all group-hover:shadow-md">
+        <Card className="border-l-2 border-l-primary transition-all group-hover:shadow-md">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               My Projects
