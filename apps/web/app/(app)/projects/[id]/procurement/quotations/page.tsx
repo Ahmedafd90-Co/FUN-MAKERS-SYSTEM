@@ -93,13 +93,13 @@ export default function QuotationListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Vendor</TableHead>
-                <TableHead>RFQ</TableHead>
-                <TableHead className="text-right">Total Amount</TableHead>
-                <TableHead>Currency</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Valid Until</TableHead>
-                <TableHead>Received</TableHead>
+                <TableHead variant="compact">Vendor</TableHead>
+                <TableHead variant="compact">RFQ</TableHead>
+                <TableHead variant="compact" className="text-right">Total Amount</TableHead>
+                <TableHead variant="compact">Currency</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Valid Until</TableHead>
+                <TableHead variant="compact">Received</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

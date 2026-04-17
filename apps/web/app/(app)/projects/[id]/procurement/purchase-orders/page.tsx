@@ -93,13 +93,13 @@ export default function PurchaseOrderListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>PO #</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Delivery</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">PO #</TableHead>
+                <TableHead variant="compact">Title</TableHead>
+                <TableHead variant="compact">Vendor</TableHead>
+                <TableHead variant="compact" className="text-right">Total</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Delivery</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

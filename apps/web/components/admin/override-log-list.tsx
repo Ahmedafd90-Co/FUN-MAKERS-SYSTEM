@@ -65,6 +65,7 @@ export function OverrideLogList() {
   return (
     <div className="space-y-4">
       <PageHeader
+        eyebrow="Administration"
         title="Override Log"
         description="Record of all administrative overrides and approvals."
       />

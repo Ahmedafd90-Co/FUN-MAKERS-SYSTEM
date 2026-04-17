@@ -140,12 +140,12 @@ export default function IpaListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference #</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead className="text-right">Gross Amount</TableHead>
-                <TableHead className="text-right">Net Claimed</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact">Period</TableHead>
+                <TableHead variant="compact" className="text-right">Gross Amount</TableHead>
+                <TableHead variant="compact" className="text-right">Net Claimed</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

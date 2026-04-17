@@ -69,6 +69,7 @@ export function SystemHealthDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Administration"
         title="System Health"
         description="Connection status, queue stats, and recent job failures. Refreshes every 30 seconds."
       />

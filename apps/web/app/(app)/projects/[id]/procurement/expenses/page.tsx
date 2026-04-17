@@ -100,12 +100,12 @@ export default function ExpenseListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Expense Date</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Title</TableHead>
+                <TableHead variant="compact">Type</TableHead>
+                <TableHead variant="compact" className="text-right">Amount</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Expense Date</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

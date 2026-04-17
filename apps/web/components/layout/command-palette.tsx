@@ -30,6 +30,17 @@ import { useRouter } from 'next/navigation';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 
 // ---------------------------------------------------------------------------
+// Selected-item styling — overrides the shadcn primitive's default
+// data-[selected=true]:bg-accent with a soft teal tint and a small teal
+// left bar (::before) so the keyboard-focused row reads as branded without
+// flooding the palette. Left bar uses before: so it does not affect layout.
+// ---------------------------------------------------------------------------
+
+const selectedItemClass =
+  'data-[selected=true]:bg-brand-teal-soft data-[selected=true]:text-foreground ' +
+  "before:content-[''] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[2px] before:rounded-full before:bg-primary before:opacity-0 data-[selected=true]:before:opacity-100";
+
+// ---------------------------------------------------------------------------
 // Navigation items
 // ---------------------------------------------------------------------------
 
@@ -84,6 +95,7 @@ export function CommandPalette({ permissions }: CommandPaletteProps) {
             return (
               <CommandItem
                 key={item.href}
+                className={selectedItemClass}
                 onSelect={() => navigate(item.href)}
               >
                 <Icon />
@@ -102,6 +114,7 @@ export function CommandPalette({ permissions }: CommandPaletteProps) {
                 return (
                   <CommandItem
                     key={item.href}
+                    className={selectedItemClass}
                     onSelect={() => navigate(item.href)}
                   >
                     <Icon />

@@ -43,10 +43,22 @@ module.exports = {
         // Neutral + accent tokens (HSL CSS variables, shadcn/ui compatible).
         // Uses `hsl(var(--name) / <alpha-value>)` so Tailwind opacity modifiers work.
         border: 'hsl(var(--border) / <alpha-value>)',
+        // Stronger border for table head underlines and emphasized card
+        // edges. Opt-in via `border-border-strong`.
+        'border-strong': 'hsl(var(--border-strong) / <alpha-value>)',
         input: 'hsl(var(--input) / <alpha-value>)',
         ring: 'hsl(var(--ring) / <alpha-value>)',
         background: 'hsl(var(--background) / <alpha-value>)',
         foreground: 'hsl(var(--foreground) / <alpha-value>)',
+        // Shell surface tokens — lifted or sunken one shade from the page
+        // background. Reserved for top-nav, sidebars, and auth backdrop.
+        // Consumers opt in via `bg-surface-elevated` / `bg-surface-sunken`.
+        // `surface` alone aliases to the page background for clarity.
+        surface: {
+          DEFAULT: 'hsl(var(--background) / <alpha-value>)',
+          elevated: 'hsl(var(--surface-elevated) / <alpha-value>)',
+          sunken: 'hsl(var(--surface-sunken) / <alpha-value>)',
+        },
         primary: {
           DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
           foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
@@ -90,9 +102,14 @@ module.exports = {
         // `brand-orange` is a restrained interactive accent. Do not layer
         // white text on `brand-teal` — use `primary` for that (it resolves to
         // a darker operational teal that passes WCAG AA with white text).
+        // `brand-teal-soft` and `brand-orange-soft` are very light washes
+        // intended for selected-row tints, active-step glows, and other
+        // decorative subtleties — never for text backgrounds.
         brand: {
           teal: 'hsl(var(--brand-teal) / <alpha-value>)',
+          'teal-soft': 'hsl(var(--brand-teal-soft) / <alpha-value>)',
           orange: 'hsl(var(--brand-orange) / <alpha-value>)',
+          'orange-soft': 'hsl(var(--brand-orange-soft) / <alpha-value>)',
         },
       },
       borderRadius: {

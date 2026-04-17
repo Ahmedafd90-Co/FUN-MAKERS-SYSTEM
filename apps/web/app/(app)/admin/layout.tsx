@@ -99,7 +99,7 @@ export default function AdminLayout({
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
       {/* Sidebar */}
-      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-border bg-card">
+      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-border bg-surface-elevated">
         <div className="px-4 py-4">
           <h2 className="text-sm font-semibold text-foreground tracking-tight">
             Administration
@@ -116,9 +116,11 @@ export default function AdminLayout({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                  // border-l-2 is always present (transparent on inactive) so
+                  // the active state adds no horizontal shift.
+                  'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-accent text-accent-foreground font-medium'
+                    ? 'border-primary bg-accent text-accent-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                 )}
               >

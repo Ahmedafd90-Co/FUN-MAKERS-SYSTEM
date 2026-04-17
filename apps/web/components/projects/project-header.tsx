@@ -42,6 +42,9 @@ export function ProjectHeader({
   return (
     <div className="flex items-start justify-between">
       <div>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Project
+        </p>
         <h1 className="text-xl font-semibold tracking-tight">{name}</h1>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-xs font-mono text-muted-foreground">{code}</span>

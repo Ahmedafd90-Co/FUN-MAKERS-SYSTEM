@@ -189,6 +189,7 @@ export default function FinancialHealthPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Administration"
         title="Financial Health"
         description="Three-way reconciliation: source records vs posting ledger vs displayed KPIs. Select a project to verify."
       />

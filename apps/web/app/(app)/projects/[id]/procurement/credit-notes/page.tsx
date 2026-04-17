@@ -92,13 +92,13 @@ export default function CreditNoteListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>CN #</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Linked Invoice</TableHead>
-                <TableHead>Received</TableHead>
+                <TableHead variant="compact">CN #</TableHead>
+                <TableHead variant="compact">Vendor</TableHead>
+                <TableHead variant="compact">Type</TableHead>
+                <TableHead variant="compact" className="text-right">Amount</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Linked Invoice</TableHead>
+                <TableHead variant="compact">Received</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

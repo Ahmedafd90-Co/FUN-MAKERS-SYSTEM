@@ -61,7 +61,7 @@ export function ProcurementSidebar({ projectId }: { projectId: string }) {
           return (
             <div
               key={item.href}
-              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground/40 cursor-not-allowed"
+              className="flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm text-muted-foreground/40 cursor-not-allowed"
               title={`${item.label} — coming soon`}
             >
               <Icon className="h-4 w-4" />
@@ -75,9 +75,9 @@ export function ProcurementSidebar({ projectId }: { projectId: string }) {
             key={item.href}
             href={href}
             className={cn(
-              'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
+              'flex items-center gap-2 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors',
               isActive
-                ? 'bg-accent text-accent-foreground font-medium'
+                ? 'border-primary bg-accent text-accent-foreground font-medium'
                 : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
             )}
           >

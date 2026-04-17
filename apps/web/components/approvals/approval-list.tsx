@@ -137,6 +137,7 @@ export function ApprovalList() {
   return (
     <div className="space-y-4">
       <PageHeader
+        eyebrow="Queue"
         title="My Approvals"
         description="Records that need your decision — approve, return for revision, or reject."
       />

@@ -140,11 +140,11 @@ export default function CostProposalsListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference #</TableHead>
-                <TableHead>Revision</TableHead>
-                <TableHead className="text-right">Estimated Cost</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact">Revision</TableHead>
+                <TableHead variant="compact" className="text-right">Estimated Cost</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
