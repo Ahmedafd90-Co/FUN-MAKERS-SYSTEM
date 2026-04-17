@@ -144,13 +144,13 @@ export default function RfqListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>RFQ #</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead className="text-right">Vendors</TableHead>
-                <TableHead className="text-right">Est. Budget</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Required By</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">RFQ #</TableHead>
+                <TableHead variant="compact">Title</TableHead>
+                <TableHead variant="compact" className="text-right">Vendors</TableHead>
+                <TableHead variant="compact" className="text-right">Est. Budget</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Required By</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

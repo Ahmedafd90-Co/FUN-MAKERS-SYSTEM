@@ -171,12 +171,12 @@ export default function VariationsListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference #</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Subtype</TableHead>
-                <TableHead className="text-right">Cost Impact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact">Title</TableHead>
+                <TableHead variant="compact">Subtype</TableHead>
+                <TableHead variant="compact" className="text-right">Cost Impact</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

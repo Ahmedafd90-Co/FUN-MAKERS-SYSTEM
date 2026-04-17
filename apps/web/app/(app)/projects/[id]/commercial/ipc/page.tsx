@@ -140,12 +140,12 @@ export default function IpcListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference #</TableHead>
-                <TableHead>IPA Ref</TableHead>
-                <TableHead className="text-right">Certified Amount</TableHead>
-                <TableHead className="text-right">Net Certified</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact">IPA Ref</TableHead>
+                <TableHead variant="compact" className="text-right">Certified Amount</TableHead>
+                <TableHead variant="compact" className="text-right">Net Certified</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

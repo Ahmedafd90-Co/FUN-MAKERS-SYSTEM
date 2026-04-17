@@ -167,12 +167,12 @@ export default function CorrespondenceListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference #</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Subtype</TableHead>
-                <TableHead>Recipient</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact">Subject</TableHead>
+                <TableHead variant="compact">Subtype</TableHead>
+                <TableHead variant="compact">Recipient</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

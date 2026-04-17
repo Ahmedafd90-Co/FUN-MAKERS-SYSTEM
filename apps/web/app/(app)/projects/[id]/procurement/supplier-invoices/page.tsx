@@ -92,14 +92,14 @@ export default function SupplierInvoiceListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Invoice #</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>PO</TableHead>
-                <TableHead className="text-right">Gross</TableHead>
-                <TableHead className="text-right">VAT</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Due Date</TableHead>
+                <TableHead variant="compact">Invoice #</TableHead>
+                <TableHead variant="compact">Vendor</TableHead>
+                <TableHead variant="compact">PO</TableHead>
+                <TableHead variant="compact" className="text-right">Gross</TableHead>
+                <TableHead variant="compact" className="text-right">VAT</TableHead>
+                <TableHead variant="compact" className="text-right">Total</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Due Date</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

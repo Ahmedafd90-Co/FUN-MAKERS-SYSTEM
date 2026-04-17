@@ -153,14 +153,14 @@ export default function TaxInvoiceListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Invoice #</TableHead>
-                <TableHead>Reference #</TableHead>
-                <TableHead className="text-right">Gross Amount</TableHead>
-                <TableHead className="text-right">VAT</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead variant="compact">Invoice #</TableHead>
+                <TableHead variant="compact">Reference #</TableHead>
+                <TableHead variant="compact" className="text-right">Gross Amount</TableHead>
+                <TableHead variant="compact" className="text-right">VAT</TableHead>
+                <TableHead variant="compact" className="text-right">Total</TableHead>
+                <TableHead variant="compact">Due Date</TableHead>
+                <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
