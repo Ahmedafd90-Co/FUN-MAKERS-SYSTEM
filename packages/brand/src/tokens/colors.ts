@@ -54,6 +54,32 @@ export interface ColorTokens {
     strong: HslTriplet;
   };
 
+  /** Glass surface tokens — for cards and form controls rendered on dark
+   *  anchor surfaces (sign-in, forgot-password, 404 cinematic hero).
+   *  Values are stored as full CSS color strings (not HSL triplets)
+   *  because glass surfaces are defined by alpha, not by hue. */
+  glass: {
+    /** Card / container surface — barely-there translucent fill. */
+    surface: string;
+    /** Border around the glass surface. */
+    surfaceBorder: string;
+    /** Input background — slightly stronger than the card surface so
+     *  inputs remain distinguishable against the glass card. */
+    inputBg: string;
+    /** Input border. */
+    inputBorder: string;
+    /** Input text color — effectively white at full opacity. */
+    inputFg: string;
+    /** Placeholder text — visibly muted against dark anchor. */
+    placeholder: string;
+    /** Label text — UPPERCASE tracked labels on glass. */
+    label: string;
+    /** Meta / supporting text — timestamps, hints. */
+    muted: string;
+    /** Hover / link text default. */
+    link: string;
+  };
+
   /** Shadcn-compatible semantic tokens. These drive the existing design
    *  system and must resolve to values that work with the rest of the UI. */
   semantic: {

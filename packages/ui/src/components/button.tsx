@@ -4,8 +4,14 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@fmksa/ui/lib/utils"
 
+// Button type scale comes from the brand theme (`typography.scale.button`):
+// 13/20 weight-500 tracking +0.005em. The `text-btn` Tailwind class maps
+// to that role, set up once in @fmksa/config/tailwind/preset.cjs.
+//
+// Size variants preserve the existing pixel heights — this is a
+// typography pass only; layout-affecting changes are out of Phase 3 scope.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-btn transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -22,7 +28,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
+        sm: "h-8 rounded-md px-3",
         lg: "h-10 rounded-md px-8",
         icon: "h-9 w-9",
       },

@@ -59,6 +59,18 @@ function colorsToCss(colors: ColorTokens): string {
     `--surface-elevated: ${colors.surface.elevated};`,
     `--surface-sunken: ${colors.surface.sunken};`,
     `--border-strong: ${colors.border.strong};`,
+    // Glass-surface tokens — rgba color strings (not HSL triplets) because
+    // glass surfaces are defined by alpha, not by hue. Consumers reference
+    // them via `bg-glass-surface` etc. in Tailwind (see preset.cjs).
+    `--glass-surface: ${colors.glass.surface};`,
+    `--glass-surface-border: ${colors.glass.surfaceBorder};`,
+    `--glass-input-bg: ${colors.glass.inputBg};`,
+    `--glass-input-border: ${colors.glass.inputBorder};`,
+    `--glass-input-fg: ${colors.glass.inputFg};`,
+    `--glass-placeholder: ${colors.glass.placeholder};`,
+    `--glass-label: ${colors.glass.label};`,
+    `--glass-muted: ${colors.glass.muted};`,
+    `--glass-link: ${colors.glass.link};`,
   ].join(' ');
 }
 

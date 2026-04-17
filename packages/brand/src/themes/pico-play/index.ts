@@ -60,6 +60,20 @@ export const picoPlayTheme: Theme = {
         subtle: '0 0% 89.8%',
         strong: '0 0% 82%',
       },
+      // Glass surface — always rendered on a dark anchor. Values stay the
+      // same between light and dark theme blocks because the anchor
+      // surface is always dark regardless of user-agent theme.
+      glass: {
+        surface: 'rgba(255, 255, 255, 0.04)',
+        surfaceBorder: 'rgba(255, 255, 255, 0.10)',
+        inputBg: 'rgba(255, 255, 255, 0.06)',
+        inputBorder: 'rgba(255, 255, 255, 0.15)',
+        inputFg: 'rgba(255, 255, 255, 0.95)',
+        placeholder: 'rgba(255, 255, 255, 0.30)',
+        label: 'rgba(255, 255, 255, 0.70)',
+        muted: 'rgba(255, 255, 255, 0.55)',
+        link: 'rgba(255, 255, 255, 0.50)',
+      },
       semantic: {
         // `primary` = `brand.tealInk` — WCAG-safe for white foreground.
         primary: '173 100% 25%',
@@ -109,6 +123,17 @@ export const picoPlayTheme: Theme = {
       border: {
         subtle: '0 0% 14.9%',
         strong: '0 0% 22%',
+      },
+      glass: {
+        surface: 'rgba(255, 255, 255, 0.04)',
+        surfaceBorder: 'rgba(255, 255, 255, 0.10)',
+        inputBg: 'rgba(255, 255, 255, 0.06)',
+        inputBorder: 'rgba(255, 255, 255, 0.15)',
+        inputFg: 'rgba(255, 255, 255, 0.95)',
+        placeholder: 'rgba(255, 255, 255, 0.30)',
+        label: 'rgba(255, 255, 255, 0.70)',
+        muted: 'rgba(255, 255, 255, 0.55)',
+        link: 'rgba(255, 255, 255, 0.50)',
       },
       semantic: {
         primary: '173 100% 26%',

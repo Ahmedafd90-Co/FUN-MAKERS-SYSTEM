@@ -30,6 +30,42 @@ module.exports = {
         sans: ['var(--font-sans)', ...defaultTheme.fontFamily.sans],
         mono: ['var(--font-mono)', ...defaultTheme.fontFamily.mono],
       },
+      // --------------------------------------------------------------
+      // Typography scale tokens — mirrors the active theme scale in
+      // @fmksa/brand/themes/pico-play (typography.scale). Named after
+      // the role each size plays in the product (not the pixel size)
+      // so tenant themes can re-tune values without renaming classes.
+      //
+      // Weight rules encoded in the defaults:
+      //   - Light (300): display + KPI only
+      //   - Regular (400): all body, all table cells
+      //   - Medium (500): labels, buttons, badges, table headers,
+      //                    section headings, button text
+      //
+      // Usage: `<h1 className="text-heading-page">...</h1>`
+      //        `<p className="text-body">...</p>`
+      //        `<th className="text-th">...</th>`
+      //
+      // IMPORTANT: if you change these here, also update the matching
+      // values in packages/brand/src/themes/pico-play/index.ts so the
+      // theme token source and the Tailwind classes stay in lockstep.
+      // --------------------------------------------------------------
+      fontSize: {
+        'display-hero': ['3rem', { lineHeight: '3.5rem', letterSpacing: '-0.02em', fontWeight: '300' }],
+        'display-section': ['2rem', { lineHeight: '2.5rem', letterSpacing: '-0.015em', fontWeight: '300' }],
+        'heading-page': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.005em', fontWeight: '400' }],
+        'heading-section': ['1.125rem', { lineHeight: '1.5rem', letterSpacing: '0', fontWeight: '500' }],
+        'heading-sub': ['0.9375rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '500' }],
+        body: ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '400' }],
+        'body-sm': ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
+        label: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.08em', fontWeight: '500' }],
+        meta: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0', fontWeight: '400' }],
+        th: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.04em', fontWeight: '500' }],
+        td: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
+        kpi: ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '300' }],
+        btn: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0.005em', fontWeight: '500' }],
+        'badge-sm': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.04em', fontWeight: '500' }],
+      },
       colors: {
         // Neutral + accent tokens (HSL CSS variables, shadcn/ui compatible).
         // Uses `hsl(var(--name) / <alpha-value>)` so Tailwind opacity modifiers work.
@@ -110,6 +146,22 @@ module.exports = {
           charcoal: 'hsl(var(--brand-charcoal) / <alpha-value>)',
           // Premium neutral — meta text, refined borders.
           silver: 'hsl(var(--brand-silver) / <alpha-value>)',
+        },
+        // Glass-surface tokens — translucent values used on dark anchor
+        // surfaces (sign-in, forgot-password, 404 hero). Values live in
+        // the active theme; we expose them as CSS variables that resolve
+        // to full rgba() strings, so Tailwind opacity utilities DO NOT
+        // compose on top of these (alpha is already baked in).
+        glass: {
+          surface: 'var(--glass-surface)',
+          'surface-border': 'var(--glass-surface-border)',
+          'input-bg': 'var(--glass-input-bg)',
+          'input-border': 'var(--glass-input-border)',
+          'input-fg': 'var(--glass-input-fg)',
+          placeholder: 'var(--glass-placeholder)',
+          label: 'var(--glass-label)',
+          muted: 'var(--glass-muted)',
+          link: 'var(--glass-link)',
         },
       },
       borderRadius: {

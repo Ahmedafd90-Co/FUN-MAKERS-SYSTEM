@@ -3,17 +3,20 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@fmksa/ui/lib/utils"
 
-// Additive compact variant for register table headers. Opt-in via
-// `<TableHead variant="compact">`; default preserves all existing callsites
-// exactly.
+// Table-head variants. `default` preserves every pre-existing callsite
+// (body-sized medium-weight labels); `compact` adopts the brand
+// `table-header` type role (12/16 weight-500 tracking +0.04em UPPERCASE)
+// and the strong-border underline. Register tables opted into `compact`
+// in an earlier phase; Phase 3 refines the compact chrome without
+// changing its opt-in surface.
 const tableHeadVariants = cva(
-  "text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+  "text-left align-middle text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
   {
     variants: {
       variant: {
-        default: "h-10 px-2",
+        default: "h-10 px-2 font-medium",
         compact:
-          "h-8 px-2 bg-muted/40 border-b border-border-strong text-[11px] uppercase tracking-wider",
+          "h-8 px-2 bg-muted/40 border-b border-border-strong text-th uppercase",
       },
     },
     defaultVariants: {

@@ -40,19 +40,13 @@ function friendlyError(message: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Component — cinematic dark-anchor treatment.
+//
+// All glass-surface chrome (card bg, input bg/border, label color, muted
+// text) comes from brand tokens exposed as Tailwind `glass-*` utilities.
+// No page-level hardcoded white/N opacity values — a future tenant theme
+// could shift the whole glass palette without editing this file.
 // ---------------------------------------------------------------------------
-//
-// Cinematic dark-anchor treatment:
-//   - The parent (auth)/layout paints the <BrandedBackdrop variant="anchor">
-//     so this component focuses on composition only.
-//   - Hero logo (reversed/white) leads the surface; tagline sits below
-//     in display weight. The form card uses a glass treatment
-//     (bg-white/[0.04] + backdrop-blur) with white-on-dark inputs.
-//   - The sign-in button fill is the operational teal (WCAG-AA safe).
-//     A 2px brand-orange border-left stripe is the single restrained
-//     orange accent on this page — no orange flood.
-//
 export function SignInForm() {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -82,28 +76,25 @@ export function SignInForm() {
 
   return (
     <div className="w-full max-w-sm space-y-10">
-      {/* Hero block — the reversed logo already carries the "We Create Fun"
-          tagline as part of the brand lockup artwork, so we do NOT add a
-          second standalone tagline here (brand rule: tagline never dominates).
-          The platform description sits below as a supporting line. */}
+      {/* Hero block — the reversed logo already carries "We Create Fun"
+          as part of the brand lockup artwork; no second display tagline. */}
       <div className="flex flex-col items-center gap-5 text-center">
         <BrandLogo variant="reversed" size="hero" priority />
-        <p className="text-[13px] leading-5 text-white/50 max-w-[18rem]">
+        <p className="text-body-sm text-glass-muted max-w-[18rem]">
           {activeTheme.copy.platformDescription}
         </p>
       </div>
 
-      {/* Glass form card. `bg-white/[0.04]` is deliberate — high enough to
-          define the surface, low enough to keep the backdrop visible. */}
+      {/* Glass form card — all surface colors come from brand tokens. */}
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="rounded-xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]"
+        className="rounded-xl border border-glass-surface-border bg-glass-surface p-6 backdrop-blur-sm shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]"
         noValidate
       >
         {serverError && (
           <div
             role="alert"
-            className="mb-5 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-100"
+            className="mb-5 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-body-sm text-red-100"
           >
             {serverError}
           </div>
@@ -111,10 +102,7 @@ export function SignInForm() {
 
         <div className="space-y-5">
           <div className="space-y-1.5">
-            <Label
-              htmlFor="email"
-              className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/70"
-            >
+            <Label htmlFor="email" variant="onDark">
               Email
             </Label>
             <Input
@@ -122,19 +110,17 @@ export function SignInForm() {
               type="email"
               autoComplete="email"
               placeholder="you@company.com"
-              className="h-10 border-white/15 bg-white/[0.06] text-white placeholder:text-white/30 focus-visible:ring-[hsl(var(--brand-teal)/0.55)] focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--brand-teal))]"
+              variant="onDark"
+              className="h-10"
               {...register('email')}
             />
             {errors.email && (
-              <p className="text-xs text-red-200/90">{errors.email.message}</p>
+              <p className="text-meta text-red-200/90">{errors.email.message}</p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label
-              htmlFor="password"
-              className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/70"
-            >
+            <Label htmlFor="password" variant="onDark">
               Password
             </Label>
             <Input
@@ -142,23 +128,24 @@ export function SignInForm() {
               type="password"
               autoComplete="current-password"
               placeholder="Enter your password"
-              className="h-10 border-white/15 bg-white/[0.06] text-white placeholder:text-white/30 focus-visible:ring-[hsl(var(--brand-teal)/0.55)] focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--brand-teal))]"
+              variant="onDark"
+              className="h-10"
               {...register('password')}
             />
             {errors.password && (
-              <p className="text-xs text-red-200/90">
+              <p className="text-meta text-red-200/90">
                 {errors.password.message}
               </p>
             )}
           </div>
         </div>
 
-        {/* Button anchored by a 2px orange stripe on the left edge — the
-            single restrained orange accent on this page. */}
-        <div className="mt-6 border-l-2 border-[hsl(var(--brand-orange))]">
+        {/* Restrained orange accent: a 2px stripe on the button's left edge.
+            The single orange moment on this surface. Not a fill. */}
+        <div className="mt-6 border-l-2 border-brand-orange">
           <Button
             type="submit"
-            className="w-full rounded-[0.5rem] rounded-l-none h-10 text-[13px] font-medium tracking-[0.005em]"
+            className="w-full rounded-[0.5rem] rounded-l-none h-10"
             disabled={signInMutation.isPending}
           >
             {signInMutation.isPending ? (
@@ -175,7 +162,7 @@ export function SignInForm() {
         <div className="mt-5 text-center">
           <Link
             href="/forgot-password"
-            className="text-xs text-white/50 hover:text-white/80 transition-colors"
+            className="text-meta text-glass-link hover:text-white/80 transition-colors"
           >
             Forgot your password?
           </Link>
