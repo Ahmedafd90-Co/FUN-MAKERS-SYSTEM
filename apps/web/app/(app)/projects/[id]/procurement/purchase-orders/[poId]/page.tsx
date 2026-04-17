@@ -2,8 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ShieldOff } from 'lucide-react';
+import { ArrowLeft, ShieldOff, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
@@ -17,6 +19,8 @@ import { ProcurementTransitionActions } from '@/components/procurement/procureme
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -45,6 +49,7 @@ function formatMoney(val: unknown): string {
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string; poId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: userPermissions } = trpc.procurement.myPermissions.useQuery();
 
@@ -137,24 +142,41 @@ export default function PurchaseOrderDetailPage() {
             recordLabel="Purchase Order"
           />
         </div>
-        <ProcurementTransitionActions
-          currentStatus={data.status}
-          recordFamily="purchase_order"
-          userPermissions={userPermissions ?? []}
-          isLoading={transitionMut.isPending}
-          hasActiveWorkflow={hasActiveWorkflow}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.poId,
-              action,
-              comment,
-            });
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          <ProcurementTransitionActions
+            currentStatus={data.status}
+            recordFamily="purchase_order"
+            userPermissions={userPermissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.poId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
       </div>
 
       <WorkflowStatusCard recordType="purchase_order" recordId={params.poId} />
+
+      {/* ── Attachments (WS1 Phase D) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="purchase_order"
+        recordId={params.poId}
+      />
 
       <Separator />
 
@@ -294,6 +316,20 @@ export default function PurchaseOrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Evidence drawer (WS1 Phase D) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="purchase_order"
+        recordId={params.poId}
+        recordLabel={
+          (data as { poNumber?: string; referenceNumber?: string }).poNumber ??
+          (data as { referenceNumber?: string }).referenceNumber ??
+          'Purchase Order'
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }

@@ -2,8 +2,9 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
 import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
@@ -16,6 +17,8 @@ import { trpc } from '@/lib/trpc-client';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { QuotationLineItems } from '@/components/procurement/quotation-line-items';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function Field({
   label,
@@ -50,6 +53,7 @@ function formatMoney(val: unknown): string {
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string; quotationId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   // Real permissions — no fake tokens
   const { data: userPermissions } = trpc.procurement.myPermissions.useQuery();
@@ -114,6 +118,14 @@ export default function QuotationDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
           {data.status === 'received' &&
             (userPermissions ?? []).includes('quotation.edit') && (
               <Button variant="outline" size="sm" asChild>
@@ -141,6 +153,13 @@ export default function QuotationDetailPage() {
           />
         </div>
       </div>
+
+      {/* ── Attachments (WS1 Phase D) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="quotation"
+        recordId={params.quotationId}
+      />
 
       <Separator />
 
@@ -194,6 +213,16 @@ export default function QuotationDetailPage() {
           />
         </CardContent>
       </Card>
+
+      {/* ── Evidence drawer (WS1 Phase D) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="quotation"
+        recordId={params.quotationId}
+        recordLabel={data.vendor?.name ?? 'Quotation'}
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }
