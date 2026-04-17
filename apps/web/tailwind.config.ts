@@ -21,6 +21,7 @@ const config = {
     resolve(here, './app/**/*.{ts,tsx}'),
     resolve(here, './components/**/*.{ts,tsx}'),
     resolve(here, '../../packages/ui/src/**/*.{ts,tsx}'),
+    resolve(here, '../../packages/brand/src/**/*.{ts,tsx}'),
   ],
   theme: {
     extend: {},

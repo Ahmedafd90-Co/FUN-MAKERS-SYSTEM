@@ -1,0 +1,38 @@
+{
+  "name": "@fmksa/brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Brand-configuration layer for the Fun Makers KSA platform — design tokens, themes, logo assets, typography, copy, and brand components. Swap the active theme to re-skin the product for any tenant without rewriting page components or business logic.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens/index.ts",
+    "./components": "./src/components/index.ts",
+    "./components/*": "./src/components/*.tsx",
+    "./themes/pico-play": "./src/themes/pico-play/index.ts",
+    "./themes/tenant-blank": "./src/themes/tenant-blank/index.ts",
+    "./config": "./src/config.ts",
+    "./css-vars": "./src/css-vars.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.5.0"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@fmksa/config": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "next": "^15.1.0",
+    "typescript": "^5.6.0"
+  }
+}
