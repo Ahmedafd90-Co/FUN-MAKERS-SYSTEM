@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@fmksa/ui/components/button';
 import { Input } from '@fmksa/ui/components/input';
@@ -26,6 +26,8 @@ import { trpc } from '@/lib/trpc-client';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 import {
   formatMoney,
   Field,
@@ -70,6 +72,7 @@ const CONFIRM_ACTIONS = ['reject', 'expire', 'convert'];
 export default function EngineerInstructionDetailPage() {
   const params = useParams<{ id: string; eiId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: me } = trpc.auth.me.useQuery();
 
@@ -208,10 +211,18 @@ export default function EngineerInstructionDetailPage() {
           />
         </div>
 
-        {/* ── Transition Buttons (hidden while a workflow is active) ── */}
-        {!hasActiveWorkflow && hasTransitionPerm && actions.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {actions.map(({ action, label, variant }) => (
+        {/* ── Header actions: Evidence (always) + Transitions (conditional) ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          {!hasActiveWorkflow && hasTransitionPerm && actions.length > 0 &&
+            actions.map(({ action, label, variant }) => (
               <Button
                 key={action}
                 size="sm"
@@ -222,11 +233,17 @@ export default function EngineerInstructionDetailPage() {
                 {loadingAction === action ? 'Processing...' : label}
               </Button>
             ))}
-          </div>
-        )}
+        </div>
       </div>
 
       <WorkflowStatusCard
+        recordType="engineer_instruction"
+        recordId={params.eiId}
+      />
+
+      {/* ── Attachments (WS1 Phase C) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
         recordType="engineer_instruction"
         recordId={params.eiId}
       />
@@ -410,6 +427,20 @@ export default function EngineerInstructionDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Evidence drawer (WS1 Phase C) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="engineer_instruction"
+        recordId={params.eiId}
+        recordLabel={
+          (data as { referenceNumber?: string }).referenceNumber ??
+          data.title ??
+          'Engineer Instruction'
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }

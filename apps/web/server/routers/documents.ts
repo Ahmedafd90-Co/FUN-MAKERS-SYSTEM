@@ -64,6 +64,8 @@ export const documentsRouter = router({
         ...(input.category != null ? { category: input.category } : {}),
         ...(input.status != null ? { status: input.status } : {}),
         ...(input.search != null ? { search: input.search } : {}),
+        ...(input.recordType != null ? { recordType: input.recordType } : {}),
+        ...(input.recordId != null ? { recordId: input.recordId } : {}),
         skip: input.skip,
         take: input.take,
       });

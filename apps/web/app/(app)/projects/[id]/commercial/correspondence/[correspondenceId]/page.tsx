@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState } from 'react';
-import { ArrowLeft, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Check, X, Loader2, ShieldCheck } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -21,6 +21,8 @@ import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 const SUBTYPE_LABELS: Record<string, string> = {
   letter: 'Letter',
@@ -48,6 +50,7 @@ const BC_RECOVERY_STATES = [
 export default function CorrespondenceDetailPage() {
   const params = useParams<{ id: string; correspondenceId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: me } = trpc.auth.me.useQuery();
 
@@ -214,21 +217,31 @@ export default function CorrespondenceDetailPage() {
               recordLabel="Correspondence"
             />
           </div>
-          <TransitionActions
-            currentStatus={data.status}
-            recordFamily="correspondence"
-            permissions={me?.permissions ?? []}
-            isLoading={transitionMut.isPending}
-            hasActiveWorkflow={hasActiveWorkflow}
-            onTransition={async (action, comment) => {
-              await transitionMut.mutateAsync({
-                projectId: params.id,
-                id: params.correspondenceId,
-                action,
-                comment,
-              });
-            }}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEvidenceOpen(true)}
+            >
+              <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+              Evidence
+            </Button>
+            <TransitionActions
+              currentStatus={data.status}
+              recordFamily="correspondence"
+              permissions={me?.permissions ?? []}
+              isLoading={transitionMut.isPending}
+              hasActiveWorkflow={hasActiveWorkflow}
+              onTransition={async (action, comment) => {
+                await transitionMut.mutateAsync({
+                  projectId: params.id,
+                  id: params.correspondenceId,
+                  action,
+                  comment,
+                });
+              }}
+            />
+          </div>
         </div>
 
         {/* ── Summary Strip ── */}
@@ -260,6 +273,13 @@ export default function CorrespondenceDetailPage() {
 
         {/* ── Workflow ── */}
         <WorkflowStatusCard
+          recordType="correspondence"
+          recordId={params.correspondenceId}
+        />
+
+        {/* ── Attachments (WS1 Phase C) ── */}
+        <AttachmentsPanel
+          projectId={params.id}
           recordType="correspondence"
           recordId={params.correspondenceId}
         />
@@ -631,6 +651,16 @@ export default function CorrespondenceDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* ── Evidence drawer (WS1 Phase C) ── */}
+        <EvidenceDrawer
+          projectId={params.id}
+          recordType="correspondence"
+          recordId={params.correspondenceId}
+          recordLabel={data.referenceNumber ?? 'Correspondence'}
+          open={evidenceOpen}
+          onOpenChange={setEvidenceOpen}
+        />
       </div>
     </>
   );
