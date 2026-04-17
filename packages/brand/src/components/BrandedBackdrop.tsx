@@ -75,8 +75,12 @@ export function BrandedBackdrop({
 function CanvasBackdrop() {
   return (
     <>
-      {/* Corner wash — top-left, bottom-right. Both use brand-teal-soft.
-          Very low alpha; kept off-center so cards stay on near-pure white. */}
+      {/* Corner wash only — two very soft teal radials anchored at opposite
+          corners. The triangle motif is intentionally NOT applied on canvas
+          surfaces: even at 2.5% opacity the repeat-tile reads as pattern,
+          not texture, once it lands behind tables and cards. Brand rule:
+          operational pages stay mostly white. The motif is reserved for
+          anchor surfaces where dark backgrounds tolerate it. */}
       <div
         className="absolute inset-0"
         style={{
@@ -85,13 +89,6 @@ function CanvasBackdrop() {
             'radial-gradient(50% 50% at 100% 100%, hsl(var(--brand-teal-soft) / 0.4) 0%, transparent 55%)',
         }}
       />
-      {/* Triangle motif tile — extremely low opacity, reads as texture. */}
-      <div
-        className="absolute inset-0 text-[hsl(var(--brand-teal))]"
-        style={{ opacity: 0.025 }}
-      >
-        <TriangleTile />
-      </div>
     </>
   );
 }
