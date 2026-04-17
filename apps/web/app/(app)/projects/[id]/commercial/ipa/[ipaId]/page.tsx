@@ -2,8 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
@@ -16,10 +18,13 @@ import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 import { formatMoney, formatRate, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 export default function IpaDetailPage() {
   const params = useParams<{ id: string; ipaId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: me } = trpc.auth.me.useQuery();
 
@@ -135,21 +140,31 @@ export default function IpaDetailPage() {
             recordLabel="IPA"
           />
         </div>
-        <TransitionActions
-          currentStatus={data.status}
-          recordFamily="ipa"
-          permissions={me?.permissions ?? []}
-          isLoading={transitionMut.isPending}
-          hasActiveWorkflow={hasActiveWorkflow}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.ipaId,
-              action,
-              comment,
-            });
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          <TransitionActions
+            currentStatus={data.status}
+            recordFamily="ipa"
+            permissions={me?.permissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.ipaId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
       </div>
 
       {/* ── Summary Strip ── */}
@@ -181,6 +196,13 @@ export default function IpaDetailPage() {
 
       {/* ── Workflow ── */}
       <WorkflowStatusCard recordType="ipa" recordId={params.ipaId} />
+
+      {/* ── Attachments (WS1 Phase A) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="ipa"
+        recordId={params.ipaId}
+      />
 
       {/* ── Financial Detail ── */}
       <Card>
@@ -272,6 +294,19 @@ export default function IpaDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Evidence drawer (WS1 Phase A) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="ipa"
+        recordId={params.ipaId}
+        recordLabel={
+          data.referenceNumber ??
+          (data.status === 'draft' ? 'Draft IPA' : 'IPA')
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }

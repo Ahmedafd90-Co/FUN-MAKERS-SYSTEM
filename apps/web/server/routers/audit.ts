@@ -17,7 +17,7 @@ import {
   getOverrideLog,
 } from '@fmksa/core';
 
-import { router, adminProcedure } from '../trpc';
+import { router, adminProcedure, projectProcedure } from '../trpc';
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -42,6 +42,19 @@ const OverrideListInputSchema = z.object({
   dateTo: z.coerce.date().optional(),
   skip: z.number().int().min(0).optional(),
   take: z.number().int().min(1).max(100).optional(),
+});
+
+/**
+ * Per-record audit list — scoped to a single business record inside a
+ * project. Uses `projectProcedure` (not `adminProcedure`) so assigned
+ * project members can see the audit trail for records they already have
+ * access to (IPA, IPC, etc.). Returns the last N entries newest-first.
+ */
+const AuditForRecordInputSchema = z.object({
+  projectId: z.string().uuid(),
+  resourceType: z.string().min(1),
+  resourceId: z.string().min(1),
+  take: z.number().int().min(1).max(50).optional().default(10),
 });
 
 // ---------------------------------------------------------------------------
@@ -77,5 +90,21 @@ export const auditRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Override log entry not found.' });
       }
       return entry;
+    }),
+
+  /**
+   * Per-record audit trail — used by the Evidence drawer on record detail
+   * pages. Project-scoped, not admin-only. Thin wrapper around the shared
+   * `listAuditLogs` helper.
+   */
+  forRecord: projectProcedure
+    .input(AuditForRecordInputSchema)
+    .query(async ({ input }) => {
+      return listAuditLogs({
+        projectId: input.projectId,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        take: input.take,
+      });
     }),
 });

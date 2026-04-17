@@ -64,6 +64,15 @@ export const ListDocumentsSchema = z.object({
   category: DocumentCategorySchema.optional(),
   status: DocumentStatusSchema.optional(),
   search: z.string().optional(),
+  /**
+   * Optional polymorphic record filter. When both are provided, returns only
+   * Documents attached to the given record (e.g. an IPA, IPC, Variation).
+   * Matches the existing `Document.recordType` / `Document.recordId` schema
+   * columns. Enables record-scoped attachment panels without changing the
+   * shape of existing list-page callers.
+   */
+  recordType: z.string().optional(),
+  recordId: z.string().uuid().optional(),
   skip: z.number().int().min(0).default(0),
   take: z.number().int().min(1).max(100).default(20),
 });

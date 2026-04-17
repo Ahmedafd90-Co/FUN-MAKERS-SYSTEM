@@ -12,6 +12,7 @@
  * codes instead of blanket system.admin. Master admin bypasses via system.admin.
  */
 import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
 import {
   ListPostingEventsInputSchema,
   GetPostingEventInputSchema,
@@ -22,7 +23,7 @@ import {
 } from '@fmksa/contracts';
 import { postingExceptionService } from '@fmksa/core';
 import { prisma } from '@fmksa/db';
-import { router, protectedProcedure } from '../trpc';
+import { router, protectedProcedure, projectProcedure } from '../trpc';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,6 +111,46 @@ const eventsRouter = router({
       }
 
       return event;
+    }),
+
+  /**
+   * Per-record posting-event feed — used by the Evidence drawer on
+   * record detail pages. Project-scoped (reuses assignment check) and
+   * read-only; returns the ledger events a single business record has
+   * produced, plus related exceptions. Thin Prisma projection only.
+   */
+  forRecord: projectProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        sourceRecordType: z.string().min(1),
+        sourceRecordId: z.string().min(1),
+        take: z.number().int().min(1).max(50).optional().default(20),
+      }),
+    )
+    .query(async ({ input }) => {
+      const events = await prisma.postingEvent.findMany({
+        where: {
+          projectId: input.projectId,
+          sourceRecordType: input.sourceRecordType,
+          sourceRecordId: input.sourceRecordId,
+        },
+        select: {
+          id: true,
+          eventType: true,
+          status: true,
+          origin: true,
+          postedAt: true,
+          createdAt: true,
+          idempotencyKey: true,
+          exceptions: {
+            select: { id: true, reason: true, resolvedAt: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: input.take,
+      });
+      return { items: events, total: events.length };
     }),
 });
 

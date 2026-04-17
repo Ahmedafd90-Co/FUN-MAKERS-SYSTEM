@@ -79,6 +79,13 @@ type UploadWidgetProps = {
   /** Optional: pre-fill for supersede mode */
   mode?: 'create' | 'supersede';
   documentId?: string;
+  /**
+   * Optional polymorphic link to a business record (IPA, IPC, Variation, ...).
+   * When both are set on a `create`-mode upload, the new document is attached
+   * to that record so it surfaces in the record's AttachmentsPanel.
+   */
+  recordType?: string;
+  recordId?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +98,8 @@ export function UploadWidget({
   onOpenChange,
   mode = 'create',
   documentId,
+  recordType,
+  recordId,
 }: UploadWidgetProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
@@ -210,6 +219,11 @@ export function UploadWidget({
       if (mode === 'create') {
         formData.append('title', title.trim());
         formData.append('category', category);
+        // Attach to a business record (e.g. IPA) if the caller provided the
+        // polymorphic link. The API route forwards these into
+        // `documentService.createDocument`.
+        if (recordType) formData.append('recordType', recordType);
+        if (recordId) formData.append('recordId', recordId);
       }
 
       if (mode === 'supersede') {
