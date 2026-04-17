@@ -2,8 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ShieldOff } from 'lucide-react';
+import { ArrowLeft, ShieldOff, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import { Button } from '@fmksa/ui/components/button';
 import {
   Card,
   CardContent,
@@ -18,6 +20,8 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import { AttachmentsPanel } from '@/components/attachments/attachments-panel';
+import { EvidenceDrawer } from '@/components/evidence/evidence-drawer';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -46,6 +50,7 @@ function formatMoney(val: unknown): string {
 export default function CreditNoteDetailPage() {
   const params = useParams<{ id: string; cnId: string }>();
   const utils = trpc.useUtils();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const { data: userPermissions } = trpc.procurement.myPermissions.useQuery();
 
@@ -136,24 +141,41 @@ export default function CreditNoteDetailPage() {
             recordLabel="Credit Note"
           />
         </div>
-        <ProcurementTransitionActions
-          currentStatus={d.status}
-          recordFamily="credit_note"
-          userPermissions={userPermissions ?? []}
-          isLoading={transitionMut.isPending}
-          hasActiveWorkflow={hasActiveWorkflow}
-          onTransition={async (action, comment) => {
-            await transitionMut.mutateAsync({
-              projectId: params.id,
-              id: params.cnId,
-              action,
-              comment,
-            });
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEvidenceOpen(true)}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Evidence
+          </Button>
+          <ProcurementTransitionActions
+            currentStatus={d.status}
+            recordFamily="credit_note"
+            userPermissions={userPermissions ?? []}
+            isLoading={transitionMut.isPending}
+            hasActiveWorkflow={hasActiveWorkflow}
+            onTransition={async (action, comment) => {
+              await transitionMut.mutateAsync({
+                projectId: params.id,
+                id: params.cnId,
+                action,
+                comment,
+              });
+            }}
+          />
+        </div>
       </div>
 
       <WorkflowStatusCard recordType="credit_note" recordId={params.cnId} />
+
+      {/* ── Attachments (WS1 Phase E) ── */}
+      <AttachmentsPanel
+        projectId={params.id}
+        recordType="credit_note"
+        recordId={params.cnId}
+      />
 
       <Separator />
 
@@ -269,6 +291,20 @@ export default function CreditNoteDetailPage() {
           variant="reversal"
         />
       ) : null}
+
+      {/* ── Evidence drawer (WS1 Phase E) ── */}
+      <EvidenceDrawer
+        projectId={params.id}
+        recordType="credit_note"
+        recordId={params.cnId}
+        recordLabel={
+          (d as { creditNoteNumber?: string; referenceNumber?: string }).creditNoteNumber ??
+          (d as { referenceNumber?: string }).referenceNumber ??
+          'Credit Note'
+        }
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+      />
     </div>
   );
 }
