@@ -51,7 +51,7 @@ export default function CreateCostProposalPage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.costProposal.create.useMutation({
     onSuccess: (data) => {

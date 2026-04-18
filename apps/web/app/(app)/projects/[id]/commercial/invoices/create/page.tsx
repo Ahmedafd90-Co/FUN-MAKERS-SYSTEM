@@ -55,7 +55,7 @@ export default function CreateTaxInvoicePage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.taxInvoice.create.useMutation({
     onSuccess: (data) => {

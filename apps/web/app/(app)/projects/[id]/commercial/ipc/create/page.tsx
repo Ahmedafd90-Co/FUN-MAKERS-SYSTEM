@@ -52,7 +52,7 @@ export default function CreateIpcPage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.ipc.create.useMutation({
     onSuccess: (data) => {
