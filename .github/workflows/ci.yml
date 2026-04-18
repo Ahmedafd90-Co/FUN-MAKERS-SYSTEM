@@ -189,9 +189,12 @@ jobs:
       - name: Sync Prisma schema to test DB
         run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
 
-      - name: Seed test DB
-        run: pnpm --filter @fmksa/db db:seed
-
+      # Note: no explicit `db:seed` step. The `packages/db/tests/seed/*.ts`
+      # suites seed themselves and assert post-seed invariants from a clean
+      # schema — running the full seed beforehand causes double-seed
+      # collisions (IPA reference_number unique constraint, Postgres
+      # deadlocks on shared project codes, doubled project_assignment
+      # counts in idempotency checks). Tests own DB state.
       - name: Run tests
         run: pnpm turbo run test
 
