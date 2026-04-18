@@ -17,30 +17,12 @@ import { ProcurementTransitionActions } from '@/components/procurement/procureme
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import {
+  Field,
+  SummaryItem,
+  SummaryStrip,
+  formatMoney,
+} from '@/components/shared/detail-primitives';
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string; poId: string }>();
@@ -108,8 +90,14 @@ export default function PurchaseOrderDetailPage() {
     );
   }
 
+  // Narrow-field untyped access — tRPC return type has loose fields that the
+  // schema author hasn't fully typed yet. Collapse all casts into one alias
+  // (matches the CN / Expense pattern) to keep lint output tight.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/purchase-orders`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -118,24 +106,18 @@ export default function PurchaseOrderDetailPage() {
         Back to Purchase Orders
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">
-            {(data as any).poNumber ?? 'Purchase Order'}
-          </h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {d.poNumber ?? 'Purchase Order'}
+            </h1>
             <ProcurementStatusBadge status={data.status} />
-            {data.title && (
-              <span className="text-sm text-muted-foreground">
-                {data.title}
-              </span>
-            )}
           </div>
-          <WorkflowStatusHint
-            recordStatus={data.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Purchase Order"
-          />
+          {data.title && (
+            <p className="text-sm text-muted-foreground">{data.title}</p>
+          )}
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
@@ -154,9 +136,17 @@ export default function PurchaseOrderDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={data.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Purchase Order"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="purchase_order" recordId={params.poId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
@@ -164,13 +154,50 @@ export default function PurchaseOrderDetailPage() {
         sourceRecordId={params.poId}
       />
 
+      {/* ── Summary Strip — 4 facts additive to the PO Details card below ── */}
+      <SummaryStrip cols={4}>
+        <SummaryItem
+          label="Total Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.totalAmount)} {data.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="Delivery Date"
+          value={
+            d.deliveryDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date(d.deliveryDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Payment Terms"
+          value={
+            d.paymentTerms ?? (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Vendor"
+          value={d.vendor?.name ?? 'Unknown Vendor'}
+        />
+      </SummaryStrip>
+
       {/* PO Details */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Purchase Order Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={d.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Total Amount"
@@ -179,12 +206,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Delivery Date"
             value={
-              (data as any).deliveryDate
-                ? new Date((data as any).deliveryDate).toLocaleDateString()
+              d.deliveryDate
+                ? new Date(d.deliveryDate).toLocaleDateString()
                 : '-'
             }
           />
-          <Field label="Payment Terms" value={(data as any).paymentTerms ?? '-'} />
+          <Field label="Payment Terms" value={d.paymentTerms ?? '-'} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
@@ -201,12 +228,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="RFQ"
             value={
-              (data as any).rfq ? (
+              d.rfq ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/rfq/${(data as any).rfqId}`}
+                  href={`/projects/${params.id}/procurement/rfq/${d.rfqId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).rfq.referenceNumber ?? 'View RFQ'}
+                  {d.rfq.referenceNumber ?? 'View RFQ'}
                 </Link>
               ) : (
                 '-'
@@ -216,12 +243,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Quotation"
             value={
-              (data as any).quotation ? (
+              d.quotation ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/quotations/${(data as any).quotationId}`}
+                  href={`/projects/${params.id}/procurement/quotations/${d.quotationId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).quotation.quotationRef ?? 'View Quotation'}
+                  {d.quotation.quotationRef ?? 'View Quotation'}
                 </Link>
               ) : (
                 '-'
@@ -231,33 +258,33 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Budget Category"
             value={
-              (data as any).category?.name ??
-              ((data as any).categoryId ? 'Mapped' : 'Not mapped')
+              d.category?.name ??
+              (d.categoryId ? 'Mapped' : 'Not mapped')
             }
           />
         </CardContent>
       </Card>
 
       {/* Description */}
-      {(data as any).description && (
+      {d.description && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Description</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">
-              {(data as any).description}
+              {d.description}
             </p>
           </CardContent>
         </Card>
       )}
 
       {/* Line Items */}
-      {(data as any).items?.length > 0 && (
+      {d.items?.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">
-              Line Items ({(data as any).items.length})
+              Line Items ({d.items.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -273,7 +300,7 @@ export default function PurchaseOrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data as any).items.map((item: any, idx: number) => (
+                  {d.items.map((item: { id?: string; itemDescription: string; quantity: number; unit: string; unitPrice: number | string; totalPrice: number | string }, idx: number) => (
                     <tr key={item.id ?? idx} className="border-b last:border-0">
                       <td className="py-2 pr-4">{item.itemDescription}</td>
                       <td className="text-right py-2 px-4 tabular-nums">

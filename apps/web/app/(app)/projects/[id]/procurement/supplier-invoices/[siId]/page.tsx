@@ -18,48 +18,13 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-/**
- * Decimal rate (0.0–1.0) → "15.00%" percent string.
- *
- * The schema stores `vatRate` as `Decimal(5,4)` in the 0–1 range (0.15 = 15%),
- * so UI must multiply by 100 before display — `parseFloat` alone would
- * incorrectly render "0.15%" for a 15% tax.
- */
-function formatRate(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  if (!Number.isFinite(num)) return '—';
-  return `${(num * 100).toFixed(2)}%`;
-}
+import {
+  Field,
+  SummaryItem,
+  SummaryStrip,
+  formatMoney,
+  formatRate,
+} from '@/components/shared/detail-primitives';
 
 export default function SupplierInvoiceDetailPage() {
   const params = useParams<{ id: string; siId: string }>();
@@ -129,8 +94,14 @@ export default function SupplierInvoiceDetailPage() {
     );
   }
 
+  // Narrow-field untyped access — tRPC return type has loose fields that the
+  // schema author hasn't fully typed yet. Collapse all casts into one alias
+  // (matches the CN / Expense pattern) to keep lint output tight.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/supplier-invoices`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -139,22 +110,15 @@ export default function SupplierInvoiceDetailPage() {
         Back to Supplier Invoices
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">
-            {(data as any).invoiceNumber ?? 'Supplier Invoice'}
-          </h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {d.invoiceNumber ?? 'Supplier Invoice'}
+            </h1>
             <ProcurementStatusBadge status={data.status} />
-            <span className="text-sm text-muted-foreground">
-              {(data as any).vendor?.name ?? 'Unknown Vendor'}
-            </span>
           </div>
-          <WorkflowStatusHint
-            recordStatus={data.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Supplier Invoice"
-          />
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
@@ -173,9 +137,17 @@ export default function SupplierInvoiceDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={data.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Supplier Invoice"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="supplier_invoice" recordId={params.siId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
@@ -183,29 +155,71 @@ export default function SupplierInvoiceDetailPage() {
         sourceRecordId={params.siId}
       />
 
+      {/* ── Summary Strip — 4 facts that are additive to the Invoice Details card below ── */}
+      <SummaryStrip cols={4}>
+        <SummaryItem
+          label="Total Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.totalAmount)} {data.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="VAT"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(d.vatAmount)} {data.currency}
+              {d.vatRate != null && (
+                <span className="text-muted-foreground text-[10px] ml-1">
+                  ({formatRate(d.vatRate)})
+                </span>
+              )}
+            </span>
+          }
+        />
+        <SummaryItem
+          label="Due Date"
+          value={
+            d.dueDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date(d.dueDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Vendor"
+          value={d.vendor?.name ?? 'Unknown Vendor'}
+        />
+      </SummaryStrip>
+
       {/* Invoice Details */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Invoice Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={d.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Gross Amount"
-            value={`${formatMoney((data as any).grossAmount)} ${data.currency}`}
+            value={`${formatMoney(d.grossAmount)} ${data.currency}`}
           />
           <Field
             label="VAT Rate"
             value={
-              (data as any).vatRate != null
-                ? formatRate((data as any).vatRate)
+              d.vatRate != null
+                ? formatRate(d.vatRate)
                 : '-'
             }
           />
           <Field
             label="VAT Amount"
-            value={`${formatMoney((data as any).vatAmount)} ${data.currency}`}
+            value={`${formatMoney(d.vatAmount)} ${data.currency}`}
           />
           <Field
             label="Total Amount"
@@ -214,16 +228,16 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Invoice Date"
             value={
-              (data as any).invoiceDate
-                ? new Date((data as any).invoiceDate).toLocaleDateString()
+              d.invoiceDate
+                ? new Date(d.invoiceDate).toLocaleDateString()
                 : '-'
             }
           />
           <Field
             label="Due Date"
             value={
-              (data as any).dueDate
-                ? new Date((data as any).dueDate).toLocaleDateString()
+              d.dueDate
+                ? new Date(d.dueDate).toLocaleDateString()
                 : '-'
             }
           />
@@ -243,21 +257,21 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Purchase Order"
             value={
-              (data as any).purchaseOrder ? (
+              d.purchaseOrder ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/purchase-orders/${(data as any).purchaseOrderId}`}
+                  href={`/projects/${params.id}/procurement/purchase-orders/${d.purchaseOrderId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).purchaseOrder.poNumber ?? 'View PO'}
+                  {d.purchaseOrder.poNumber ?? 'View PO'}
                 </Link>
               ) : (
-                (data as any).noPOReason ?? 'None'
+                d.noPOReason ?? 'None'
               )
             }
           />
           <Field
             label="Budget Category"
-            value={(data as any).category?.name ?? ((data as any).categoryId ? 'Mapped' : 'Not mapped')}
+            value={d.category?.name ?? (d.categoryId ? 'Mapped' : 'Not mapped')}
           />
         </CardContent>
       </Card>

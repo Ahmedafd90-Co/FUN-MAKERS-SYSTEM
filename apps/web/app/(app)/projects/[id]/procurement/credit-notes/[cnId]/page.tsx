@@ -18,30 +18,12 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import {
+  Field,
+  SummaryItem,
+  SummaryStrip,
+  formatMoney,
+} from '@/components/shared/detail-primitives';
 
 export default function CreditNoteDetailPage() {
   const params = useParams<{ id: string; cnId: string }>();
@@ -112,7 +94,7 @@ export default function CreditNoteDetailPage() {
   const d = data as any;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/credit-notes`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -121,20 +103,20 @@ export default function CreditNoteDetailPage() {
         Back to Credit Notes
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">{d.creditNoteNumber}</h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {d.creditNoteNumber}
+            </h1>
             <ProcurementStatusBadge status={d.status} />
-            <span className="text-sm text-muted-foreground capitalize">
-              {d.subtype?.replace(/_/g, ' ') ?? ''}
-            </span>
           </div>
-          <WorkflowStatusHint
-            recordStatus={d.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Credit Note"
-          />
+          {d.subtype && (
+            <p className="text-sm text-muted-foreground capitalize">
+              {d.subtype.replace(/_/g, ' ')}
+            </p>
+          )}
         </div>
         <ProcurementTransitionActions
           currentStatus={d.status}
@@ -153,15 +135,74 @@ export default function CreditNoteDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={d.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Credit Note"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="credit_note" recordId={params.cnId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
         sourceRecordType="credit_note"
         sourceRecordId={params.cnId}
       />
+
+      {/* ── Summary Strip — 4 facts additive to the Credit Note Details card below ── */}
+      <SummaryStrip cols={4}>
+        <SummaryItem
+          label="Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(d.amount)} {d.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="Received Date"
+          value={
+            d.receivedDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date(d.receivedDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Vendor"
+          value={d.vendor?.name ?? 'Unknown Vendor'}
+        />
+        <SummaryItem
+          label="Credit Against"
+          value={
+            d.supplierInvoice ? (
+              <Link
+                href={`/projects/${params.id}/procurement/supplier-invoices/${d.supplierInvoiceId}`}
+                className="text-primary hover:underline"
+              >
+                {d.supplierInvoice.invoiceNumber ?? 'View Invoice'}
+              </Link>
+            ) : d.purchaseOrder ? (
+              <Link
+                href={`/projects/${params.id}/procurement/purchase-orders/${d.purchaseOrderId}`}
+                className="text-primary hover:underline"
+              >
+                {d.purchaseOrder.poNumber ?? 'View PO'}
+              </Link>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not linked</span>
+            )
+          }
+        />
+      </SummaryStrip>
 
       {/* Credit Note Details */}
       <Card>
