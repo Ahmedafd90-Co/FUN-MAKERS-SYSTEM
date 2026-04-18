@@ -17,30 +17,12 @@ import { ProcurementTransitionActions } from '@/components/procurement/procureme
 import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-exception-alert';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import {
+  Field,
+  SummaryItem,
+  SummaryStrip,
+  formatMoney,
+} from '@/components/shared/detail-primitives';
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string; poId: string }>();
@@ -109,7 +91,7 @@ export default function PurchaseOrderDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/purchase-orders`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -118,24 +100,18 @@ export default function PurchaseOrderDetailPage() {
         Back to Purchase Orders
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">
-            {(data as any).poNumber ?? 'Purchase Order'}
-          </h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {(data as any).poNumber ?? 'Purchase Order'}
+            </h1>
             <ProcurementStatusBadge status={data.status} />
-            {data.title && (
-              <span className="text-sm text-muted-foreground">
-                {data.title}
-              </span>
-            )}
           </div>
-          <WorkflowStatusHint
-            recordStatus={data.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Purchase Order"
-          />
+          {data.title && (
+            <p className="text-sm text-muted-foreground">{data.title}</p>
+          )}
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
@@ -154,15 +130,60 @@ export default function PurchaseOrderDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={data.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Purchase Order"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="purchase_order" recordId={params.poId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
         sourceRecordType="purchase_order"
         sourceRecordId={params.poId}
       />
+
+      {/* ── Summary Strip — 4 facts additive to the PO Details card below ── */}
+      <SummaryStrip cols={4}>
+        <SummaryItem
+          label="Total Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.totalAmount)} {data.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="Delivery Date"
+          value={
+            (data as any).deliveryDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date((data as any).deliveryDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Payment Terms"
+          value={
+            (data as any).paymentTerms ?? (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Vendor"
+          value={(data as any).vendor?.name ?? 'Unknown Vendor'}
+        />
+      </SummaryStrip>
 
       {/* PO Details */}
       <Card>
