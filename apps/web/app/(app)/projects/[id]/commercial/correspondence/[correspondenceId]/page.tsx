@@ -20,6 +20,10 @@ import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import {
+  deriveWorkflowSummary,
+  WorkflowSummaryValue,
+} from '@/lib/workflow-summary';
 import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 const SUBTYPE_LABELS: Record<string, string> = {
@@ -150,17 +154,7 @@ export default function CorrespondenceDetailPage() {
     });
   }
 
-  const workflowLabel = workflowData
-    ? workflowData.status === 'approved'
-      ? 'Approved'
-      : workflowData.status === 'rejected'
-        ? 'Rejected'
-        : workflowData.status === 'returned'
-          ? 'Returned'
-          : 'In Progress'
-    : data.status === 'draft'
-      ? 'Not started'
-      : '—';
+  const workflowSummary = deriveWorkflowSummary(workflowData, data.status);
 
   // Primary financial figure for the summary
   const primaryAmount =
@@ -248,7 +242,10 @@ export default function CorrespondenceDetailPage() {
             label="Status"
             value={<CommercialStatusBadge status={data.status} />}
           />
-          <SummaryItem label="Workflow" value={workflowLabel} />
+          <SummaryItem
+            label="Workflow"
+            value={<WorkflowSummaryValue summary={workflowSummary} />}
+          />
           <SummaryItem label="Recipient" value={data.recipientName ?? '—'} />
           {data.settledAmount != null && (
             <SummaryItem

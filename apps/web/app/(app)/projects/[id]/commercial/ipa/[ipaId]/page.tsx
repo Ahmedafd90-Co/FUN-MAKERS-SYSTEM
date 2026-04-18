@@ -15,6 +15,10 @@ import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import {
+  deriveWorkflowSummary,
+  WorkflowSummaryValue,
+} from '@/lib/workflow-summary';
 import { formatMoney, formatRate, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 export default function IpaDetailPage() {
@@ -62,17 +66,7 @@ export default function IpaDetailPage() {
     );
   }
 
-  const workflowLabel = workflowData
-    ? workflowData.status === 'approved'
-      ? 'Approved'
-      : workflowData.status === 'rejected'
-        ? 'Rejected'
-        : workflowData.status === 'returned'
-          ? 'Returned'
-          : 'In Progress'
-    : data.status === 'draft'
-      ? 'Not started'
-      : '—';
+  const workflowSummary = deriveWorkflowSummary(workflowData, data.status);
 
   return (
     <div className="space-y-4">
@@ -168,7 +162,10 @@ export default function IpaDetailPage() {
           value={`${formatMoney(data.retentionAmount)} ${data.currency}`}
         />
         <SummaryItem label="Status" value={<CommercialStatusBadge status={data.status} />} />
-        <SummaryItem label="Workflow" value={workflowLabel} />
+        <SummaryItem
+          label="Workflow"
+          value={<WorkflowSummaryValue summary={workflowSummary} />}
+        />
         <SummaryItem
           label="Period"
           value={
