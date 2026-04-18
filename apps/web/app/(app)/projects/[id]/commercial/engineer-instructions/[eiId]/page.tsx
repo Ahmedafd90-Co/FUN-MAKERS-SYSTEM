@@ -161,7 +161,14 @@ export default function EngineerInstructionDetailPage() {
   ) => {
     setLoadingAction(action);
     try {
-      const input: Record<string, unknown> = {
+      // EI transition schema is inline in the router (not in @fmksa/contracts).
+      // Derive the input type from the mutation itself rather than extracting
+      // the schema — extraction is architectural cleanup, out of CI-cleanup
+      // scope per branch operating rule.
+      type TransitionEiInput = Parameters<
+        typeof transitionMut.mutateAsync
+      >[0];
+      const input: TransitionEiInput = {
         projectId: params.id,
         id: params.eiId,
         action,
@@ -170,7 +177,7 @@ export default function EngineerInstructionDetailPage() {
       if (action === 'convert' && convertVariationId) {
         input.variationId = convertVariationId;
       }
-      await transitionMut.mutateAsync(input as any);
+      await transitionMut.mutateAsync(input);
     } finally {
       setLoadingAction(null);
       setConfirmAction(null);

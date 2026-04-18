@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateIpaInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Create IPA Page
@@ -73,7 +74,7 @@ export default function CreateIpaPage() {
     if (!canSubmit) return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    const input: CreateIpaInput = {
       projectId,
       periodNumber: parseInt(periodNumber, 10),
       periodFrom: new Date(periodFrom).toISOString(),
@@ -91,7 +92,7 @@ export default function CreateIpaPage() {
     if (otherDeductions) input.otherDeductions = parseFloat(otherDeductions);
     if (description.trim()) input.description = description.trim();
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (
