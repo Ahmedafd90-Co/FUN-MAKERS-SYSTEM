@@ -19,30 +19,7 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import { Field, formatMoney } from '@/components/shared/detail-primitives';
 
 const SUBTYPE_LABELS: Record<string, string> = {
   ticket: 'Ticket',
@@ -121,7 +98,7 @@ export default function ExpenseDetailPage() {
   const subtype = d.subtype as string;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/expenses`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -130,20 +107,16 @@ export default function ExpenseDetailPage() {
         Back to Expenses
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">{d.title}</h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">{d.title}</h1>
             <ProcurementStatusBadge status={d.status} />
             <Badge variant="outline" className="capitalize">
               {SUBTYPE_LABELS[subtype] ?? subtype}
             </Badge>
           </div>
-          <WorkflowStatusHint
-            recordStatus={d.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Expense"
-          />
         </div>
         <ProcurementTransitionActions
           currentStatus={d.status}
@@ -162,9 +135,17 @@ export default function ExpenseDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={d.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Expense"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="expense" recordId={params.expenseId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
