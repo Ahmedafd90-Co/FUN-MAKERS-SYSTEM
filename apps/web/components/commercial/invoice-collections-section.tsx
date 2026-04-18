@@ -193,7 +193,7 @@ export function InvoiceCollectionsSection({
             <>
             {/* Mobile: stacked cards */}
             <div className="sm:hidden space-y-2">
-              {collections.data.map((c: any) => (
+              {collections.data.map((c) => (
                 <div key={c.id} className="rounded-md border p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-mono tabular-nums font-medium">
@@ -234,7 +234,7 @@ export function InvoiceCollectionsSection({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {collections.data.map((c: any) => (
+                  {collections.data.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="text-sm font-mono tabular-nums">
                         {new Date(c.collectionDate).toLocaleDateString()}

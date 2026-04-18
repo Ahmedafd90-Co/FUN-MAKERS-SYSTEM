@@ -171,7 +171,7 @@ export default function EngineerInstructionsListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((ei: any) => (
+              {data.map((ei) => (
                 <TableRow
                   key={ei.id}
                   className="cursor-pointer hover:bg-muted/50"

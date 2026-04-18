@@ -113,7 +113,7 @@ export default function FrameworkAgreementsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((fa: any) => (
+              {items.map((fa) => (
                 <TableRow key={fa.id}>
                   <TableCell className="font-mono text-xs">
                     {fa.agreementNumber ?? '-'}

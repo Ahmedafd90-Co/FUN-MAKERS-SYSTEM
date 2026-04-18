@@ -98,7 +98,7 @@ export default function VendorContractsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((c: any) => (
+              {items.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-mono text-xs">
                     {c.contractNumber ?? '-'}

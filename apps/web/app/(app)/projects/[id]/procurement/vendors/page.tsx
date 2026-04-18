@@ -79,7 +79,7 @@ export default function ProjectVendorsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((pv: any) => (
+              {items.map((pv) => (
                 <TableRow key={pv.id}>
                   <TableCell className="font-mono text-xs">
                     {pv.vendor?.vendorCode ?? '-'}
