@@ -121,7 +121,7 @@ export default function PurchaseOrderDetailPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">
-            {(data as any).poNumber ?? 'Purchase Order'}
+            {data.poNumber ?? 'Purchase Order'}
           </h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={data.status} />
@@ -170,7 +170,7 @@ export default function PurchaseOrderDetailPage() {
           <CardTitle className="text-sm">Purchase Order Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={data.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Total Amount"
@@ -179,12 +179,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Delivery Date"
             value={
-              (data as any).deliveryDate
-                ? new Date((data as any).deliveryDate).toLocaleDateString()
+              data.deliveryDate
+                ? new Date(data.deliveryDate).toLocaleDateString()
                 : '-'
             }
           />
-          <Field label="Payment Terms" value={(data as any).paymentTerms ?? '-'} />
+          <Field label="Payment Terms" value={data.paymentTerms ?? '-'} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
@@ -201,12 +201,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="RFQ"
             value={
-              (data as any).rfq ? (
+              data.rfq ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/rfq/${(data as any).rfqId}`}
+                  href={`/projects/${params.id}/procurement/rfq/${data.rfqId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).rfq.referenceNumber ?? 'View RFQ'}
+                  {data.rfq.referenceNumber ?? 'View RFQ'}
                 </Link>
               ) : (
                 '-'
@@ -216,12 +216,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Quotation"
             value={
-              (data as any).quotation ? (
+              data.quotation ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/quotations/${(data as any).quotationId}`}
+                  href={`/projects/${params.id}/procurement/quotations/${data.quotationId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).quotation.quotationRef ?? 'View Quotation'}
+                  {data.quotation.quotationRef ?? 'View Quotation'}
                 </Link>
               ) : (
                 '-'
@@ -231,33 +231,33 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Budget Category"
             value={
-              (data as any).category?.name ??
-              ((data as any).categoryId ? 'Mapped' : 'Not mapped')
+              data.category?.name ??
+              (data.categoryId ? 'Mapped' : 'Not mapped')
             }
           />
         </CardContent>
       </Card>
 
       {/* Description */}
-      {(data as any).description && (
+      {data.description && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Description</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">
-              {(data as any).description}
+              {data.description}
             </p>
           </CardContent>
         </Card>
       )}
 
       {/* Line Items */}
-      {(data as any).items?.length > 0 && (
+      {data.items?.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">
-              Line Items ({(data as any).items.length})
+              Line Items ({data.items.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -273,11 +273,13 @@ export default function PurchaseOrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data as any).items.map((item: any, idx: number) => (
+                  {data.items.map((item, idx) => (
                     <tr key={item.id ?? idx} className="border-b last:border-0">
                       <td className="py-2 pr-4">{item.itemDescription}</td>
                       <td className="text-right py-2 px-4 tabular-nums">
-                        {item.quantity}
+                        {/* Prisma Decimal — stringify for React (prev `any`
+                            cast made this implicit). */}
+                        {String(item.quantity)}
                       </td>
                       <td className="py-2 px-4">{item.unit}</td>
                       <td className="text-right py-2 px-4 tabular-nums">
