@@ -176,6 +176,22 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # The postgres service container starts with an empty `fmksa_test`
+      # database. Tests assume the Prisma schema is applied AND workflow
+      # templates / base seed rows are present — vitest global-setup runs
+      # `workflowTemplate.updateMany(...)` straight away and several test
+      # files expect seeded entities. Without these two steps CI fails on
+      # "relation does not exist" / "column outcome_type does not exist".
+      #
+      # `prisma db push` (not `migrate deploy`) because this job uses an
+      # ephemeral DB — no migration history to preserve, and `db push` is
+      # faster + tolerant of any drift on feature branches.
+      - name: Sync Prisma schema to test DB
+        run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
+
+      - name: Seed test DB
+        run: pnpm --filter @fmksa/db db:seed
+
       - name: Run tests
         run: pnpm turbo run test
 
