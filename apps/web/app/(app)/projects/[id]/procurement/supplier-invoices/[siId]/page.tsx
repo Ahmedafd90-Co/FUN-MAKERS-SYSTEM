@@ -140,7 +140,8 @@ export default function SupplierInvoiceDetailPage() {
       {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="supplier_invoice" recordId={params.siId} />
 
-      <Separator />
+      {/* Separator only when there is an actual workflow block to divide from */}
+      {hasActiveWorkflow && <Separator />}
 
       <AbsorptionExceptionAlert
         projectId={params.id}
@@ -148,8 +149,8 @@ export default function SupplierInvoiceDetailPage() {
         sourceRecordId={params.siId}
       />
 
-      {/* ── Summary Strip — financial context at a glance ── */}
-      <SummaryStrip>
+      {/* ── Summary Strip — 4 facts that are additive to the Invoice Details card below ── */}
+      <SummaryStrip cols={4}>
         <SummaryItem
           label="Total Amount"
           value={
@@ -158,14 +159,6 @@ export default function SupplierInvoiceDetailPage() {
             </span>
           }
           emphasis
-        />
-        <SummaryItem
-          label="Gross Amount"
-          value={
-            <span className="font-mono tabular-nums">
-              {formatMoney((data as any).grossAmount)} {data.currency}
-            </span>
-          }
         />
         <SummaryItem
           label="VAT"
@@ -178,18 +171,6 @@ export default function SupplierInvoiceDetailPage() {
                 </span>
               )}
             </span>
-          }
-        />
-        <SummaryItem
-          label="Invoice Date"
-          value={
-            (data as any).invoiceDate ? (
-              <span className="font-mono tabular-nums">
-                {new Date((data as any).invoiceDate).toLocaleDateString()}
-              </span>
-            ) : (
-              <span className="text-muted-foreground/50 italic">Not set</span>
-            )
           }
         />
         <SummaryItem

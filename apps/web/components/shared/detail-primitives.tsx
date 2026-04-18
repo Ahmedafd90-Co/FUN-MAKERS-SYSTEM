@@ -111,10 +111,33 @@ export function SummaryItem({
 // SummaryStrip — horizontal strip of 3-6 key facts below the page header
 // ---------------------------------------------------------------------------
 
-export function SummaryStrip({ children }: { children: React.ReactNode }) {
+/**
+ * Column count at the `lg:` breakpoint. Below `lg`, the strip always falls
+ * back to 2 cols (mobile) / 3 cols (sm). 4 cols gives cells enough room to
+ * render "1,150,000.00 SAR"-style values without truncation on pages that
+ * have a module-level left nav (e.g. procurement).
+ */
+const LG_COLS_CLASS: Record<4 | 5 | 6, string> = {
+  4: 'lg:grid-cols-4',
+  5: 'lg:grid-cols-5',
+  6: 'lg:grid-cols-6',
+};
+
+export function SummaryStrip({
+  children,
+  cols = 6,
+}: {
+  children: React.ReactNode;
+  cols?: 4 | 5 | 6;
+}) {
   return (
     <div className="rounded-md border bg-muted/30 px-4 py-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-3">
+      <div
+        className={cn(
+          'grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3',
+          LG_COLS_CLASS[cols],
+        )}
+      >
         {children}
       </div>
     </div>
