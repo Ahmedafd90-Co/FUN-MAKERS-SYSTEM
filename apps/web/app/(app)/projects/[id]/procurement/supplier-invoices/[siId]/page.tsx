@@ -94,6 +94,12 @@ export default function SupplierInvoiceDetailPage() {
     );
   }
 
+  // Narrow-field untyped access — tRPC return type has loose fields that the
+  // schema author hasn't fully typed yet. Collapse all casts into one alias
+  // (matches the CN / Expense pattern) to keep lint output tight.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+
   return (
     <div className="space-y-4">
       <Link
@@ -109,7 +115,7 @@ export default function SupplierInvoiceDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {(data as any).invoiceNumber ?? 'Supplier Invoice'}
+              {d.invoiceNumber ?? 'Supplier Invoice'}
             </h1>
             <ProcurementStatusBadge status={data.status} />
           </div>
@@ -164,10 +170,10 @@ export default function SupplierInvoiceDetailPage() {
           label="VAT"
           value={
             <span className="font-mono tabular-nums">
-              {formatMoney((data as any).vatAmount)} {data.currency}
-              {(data as any).vatRate != null && (
+              {formatMoney(d.vatAmount)} {data.currency}
+              {d.vatRate != null && (
                 <span className="text-muted-foreground text-[10px] ml-1">
-                  ({formatRate((data as any).vatRate)})
+                  ({formatRate(d.vatRate)})
                 </span>
               )}
             </span>
@@ -176,9 +182,9 @@ export default function SupplierInvoiceDetailPage() {
         <SummaryItem
           label="Due Date"
           value={
-            (data as any).dueDate ? (
+            d.dueDate ? (
               <span className="font-mono tabular-nums">
-                {new Date((data as any).dueDate).toLocaleDateString()}
+                {new Date(d.dueDate).toLocaleDateString()}
               </span>
             ) : (
               <span className="text-muted-foreground/50 italic">Not set</span>
@@ -187,7 +193,7 @@ export default function SupplierInvoiceDetailPage() {
         />
         <SummaryItem
           label="Vendor"
-          value={(data as any).vendor?.name ?? 'Unknown Vendor'}
+          value={d.vendor?.name ?? 'Unknown Vendor'}
         />
       </SummaryStrip>
 
@@ -197,23 +203,23 @@ export default function SupplierInvoiceDetailPage() {
           <CardTitle className="text-sm">Invoice Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={d.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Gross Amount"
-            value={`${formatMoney((data as any).grossAmount)} ${data.currency}`}
+            value={`${formatMoney(d.grossAmount)} ${data.currency}`}
           />
           <Field
             label="VAT Rate"
             value={
-              (data as any).vatRate != null
-                ? formatRate((data as any).vatRate)
+              d.vatRate != null
+                ? formatRate(d.vatRate)
                 : '-'
             }
           />
           <Field
             label="VAT Amount"
-            value={`${formatMoney((data as any).vatAmount)} ${data.currency}`}
+            value={`${formatMoney(d.vatAmount)} ${data.currency}`}
           />
           <Field
             label="Total Amount"
@@ -222,16 +228,16 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Invoice Date"
             value={
-              (data as any).invoiceDate
-                ? new Date((data as any).invoiceDate).toLocaleDateString()
+              d.invoiceDate
+                ? new Date(d.invoiceDate).toLocaleDateString()
                 : '-'
             }
           />
           <Field
             label="Due Date"
             value={
-              (data as any).dueDate
-                ? new Date((data as any).dueDate).toLocaleDateString()
+              d.dueDate
+                ? new Date(d.dueDate).toLocaleDateString()
                 : '-'
             }
           />
@@ -251,21 +257,21 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Purchase Order"
             value={
-              (data as any).purchaseOrder ? (
+              d.purchaseOrder ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/purchase-orders/${(data as any).purchaseOrderId}`}
+                  href={`/projects/${params.id}/procurement/purchase-orders/${d.purchaseOrderId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).purchaseOrder.poNumber ?? 'View PO'}
+                  {d.purchaseOrder.poNumber ?? 'View PO'}
                 </Link>
               ) : (
-                (data as any).noPOReason ?? 'None'
+                d.noPOReason ?? 'None'
               )
             }
           />
           <Field
             label="Budget Category"
-            value={(data as any).category?.name ?? ((data as any).categoryId ? 'Mapped' : 'Not mapped')}
+            value={d.category?.name ?? (d.categoryId ? 'Mapped' : 'Not mapped')}
           />
         </CardContent>
       </Card>

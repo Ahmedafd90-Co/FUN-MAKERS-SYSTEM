@@ -90,6 +90,12 @@ export default function PurchaseOrderDetailPage() {
     );
   }
 
+  // Narrow-field untyped access — tRPC return type has loose fields that the
+  // schema author hasn't fully typed yet. Collapse all casts into one alias
+  // (matches the CN / Expense pattern) to keep lint output tight.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+
   return (
     <div className="space-y-4">
       <Link
@@ -105,7 +111,7 @@ export default function PurchaseOrderDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {(data as any).poNumber ?? 'Purchase Order'}
+              {d.poNumber ?? 'Purchase Order'}
             </h1>
             <ProcurementStatusBadge status={data.status} />
           </div>
@@ -162,9 +168,9 @@ export default function PurchaseOrderDetailPage() {
         <SummaryItem
           label="Delivery Date"
           value={
-            (data as any).deliveryDate ? (
+            d.deliveryDate ? (
               <span className="font-mono tabular-nums">
-                {new Date((data as any).deliveryDate).toLocaleDateString()}
+                {new Date(d.deliveryDate).toLocaleDateString()}
               </span>
             ) : (
               <span className="text-muted-foreground/50 italic">Not set</span>
@@ -174,14 +180,14 @@ export default function PurchaseOrderDetailPage() {
         <SummaryItem
           label="Payment Terms"
           value={
-            (data as any).paymentTerms ?? (
+            d.paymentTerms ?? (
               <span className="text-muted-foreground/50 italic">Not set</span>
             )
           }
         />
         <SummaryItem
           label="Vendor"
-          value={(data as any).vendor?.name ?? 'Unknown Vendor'}
+          value={d.vendor?.name ?? 'Unknown Vendor'}
         />
       </SummaryStrip>
 
@@ -191,7 +197,7 @@ export default function PurchaseOrderDetailPage() {
           <CardTitle className="text-sm">Purchase Order Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={d.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Total Amount"
@@ -200,12 +206,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Delivery Date"
             value={
-              (data as any).deliveryDate
-                ? new Date((data as any).deliveryDate).toLocaleDateString()
+              d.deliveryDate
+                ? new Date(d.deliveryDate).toLocaleDateString()
                 : '-'
             }
           />
-          <Field label="Payment Terms" value={(data as any).paymentTerms ?? '-'} />
+          <Field label="Payment Terms" value={d.paymentTerms ?? '-'} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
@@ -222,12 +228,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="RFQ"
             value={
-              (data as any).rfq ? (
+              d.rfq ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/rfq/${(data as any).rfqId}`}
+                  href={`/projects/${params.id}/procurement/rfq/${d.rfqId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).rfq.referenceNumber ?? 'View RFQ'}
+                  {d.rfq.referenceNumber ?? 'View RFQ'}
                 </Link>
               ) : (
                 '-'
@@ -237,12 +243,12 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Quotation"
             value={
-              (data as any).quotation ? (
+              d.quotation ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/quotations/${(data as any).quotationId}`}
+                  href={`/projects/${params.id}/procurement/quotations/${d.quotationId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).quotation.quotationRef ?? 'View Quotation'}
+                  {d.quotation.quotationRef ?? 'View Quotation'}
                 </Link>
               ) : (
                 '-'
@@ -252,33 +258,33 @@ export default function PurchaseOrderDetailPage() {
           <Field
             label="Budget Category"
             value={
-              (data as any).category?.name ??
-              ((data as any).categoryId ? 'Mapped' : 'Not mapped')
+              d.category?.name ??
+              (d.categoryId ? 'Mapped' : 'Not mapped')
             }
           />
         </CardContent>
       </Card>
 
       {/* Description */}
-      {(data as any).description && (
+      {d.description && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Description</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">
-              {(data as any).description}
+              {d.description}
             </p>
           </CardContent>
         </Card>
       )}
 
       {/* Line Items */}
-      {(data as any).items?.length > 0 && (
+      {d.items?.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">
-              Line Items ({(data as any).items.length})
+              Line Items ({d.items.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -294,7 +300,7 @@ export default function PurchaseOrderDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data as any).items.map((item: any, idx: number) => (
+                  {d.items.map((item: { id?: string; itemDescription: string; quantity: number; unit: string; unitPrice: number | string; totalPrice: number | string }, idx: number) => (
                     <tr key={item.id ?? idx} className="border-b last:border-0">
                       <td className="py-2 pr-4">{item.itemDescription}</td>
                       <td className="text-right py-2 px-4 tabular-nums">
