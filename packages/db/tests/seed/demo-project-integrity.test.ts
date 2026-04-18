@@ -35,6 +35,20 @@ beforeAll(async () => {
     create: { code: 'SAR', name: 'Saudi Riyal', symbol: 'SR', decimalPlaces: 2 },
   });
 
+  // seedCommercialDemoData resolves createdBy from the master-admin user (by email).
+  // When db:seed runs before tests that prerequisite is satisfied; when it doesn't,
+  // the seed silently skips. Upsert a minimal user row so this test is self-sufficient.
+  await prisma.user.upsert({
+    where: { email: 'ahmedafd90@gmail.com' },
+    update: {},
+    create: {
+      email: 'ahmedafd90@gmail.com',
+      name: 'Demo Integrity Test Admin',
+      passwordHash: 'test-hash',
+      status: 'active',
+    },
+  });
+
   // If the real FMKSA-2026-001 exists, temporarily rename it
   const existing = await prisma.project.findFirst({ where: { code: 'FMKSA-2026-001' } });
   if (existing) {
