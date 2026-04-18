@@ -18,48 +18,13 @@ import { AbsorptionExceptionAlert } from '@/components/procurement/absorption-ex
 import { BudgetImpactCard } from '@/components/procurement/budget-impact-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-wider">
-        {label}
-      </p>
-      <div className="text-sm mt-0.5">{value ?? '-'}</div>
-    </div>
-  );
-}
-
-function formatMoney(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-/**
- * Decimal rate (0.0–1.0) → "15.00%" percent string.
- *
- * The schema stores `vatRate` as `Decimal(5,4)` in the 0–1 range (0.15 = 15%),
- * so UI must multiply by 100 before display — `parseFloat` alone would
- * incorrectly render "0.15%" for a 15% tax.
- */
-function formatRate(val: unknown): string {
-  const num =
-    typeof val === 'string'
-      ? parseFloat(val)
-      : typeof val === 'number'
-        ? val
-        : 0;
-  if (!Number.isFinite(num)) return '—';
-  return `${(num * 100).toFixed(2)}%`;
-}
+import {
+  Field,
+  SummaryItem,
+  SummaryStrip,
+  formatMoney,
+  formatRate,
+} from '@/components/shared/detail-primitives';
 
 export default function SupplierInvoiceDetailPage() {
   const params = useParams<{ id: string; siId: string }>();
@@ -130,7 +95,7 @@ export default function SupplierInvoiceDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href={`/projects/${params.id}/procurement/supplier-invoices`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -139,22 +104,15 @@ export default function SupplierInvoiceDetailPage() {
         Back to Supplier Invoices
       </Link>
 
+      {/* ── Record Header ── */}
       <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <h1 className="text-xl font-semibold">
-            {(data as any).invoiceNumber ?? 'Supplier Invoice'}
-          </h1>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {(data as any).invoiceNumber ?? 'Supplier Invoice'}
+            </h1>
             <ProcurementStatusBadge status={data.status} />
-            <span className="text-sm text-muted-foreground">
-              {(data as any).vendor?.name ?? 'Unknown Vendor'}
-            </span>
           </div>
-          <WorkflowStatusHint
-            recordStatus={data.status}
-            hasActiveWorkflow={hasActiveWorkflow}
-            recordLabel="Supplier Invoice"
-          />
         </div>
         <ProcurementTransitionActions
           currentStatus={data.status}
@@ -173,6 +131,13 @@ export default function SupplierInvoiceDetailPage() {
         />
       </div>
 
+      <WorkflowStatusHint
+        recordStatus={data.status}
+        hasActiveWorkflow={hasActiveWorkflow}
+        recordLabel="Supplier Invoice"
+      />
+
+      {/* ── Workflow (renders null when no instance exists) ── */}
       <WorkflowStatusCard recordType="supplier_invoice" recordId={params.siId} />
 
       <Separator />
@@ -182,6 +147,68 @@ export default function SupplierInvoiceDetailPage() {
         sourceRecordType="supplier_invoice"
         sourceRecordId={params.siId}
       />
+
+      {/* ── Summary Strip — financial context at a glance ── */}
+      <SummaryStrip>
+        <SummaryItem
+          label="Total Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney(data.totalAmount)} {data.currency}
+            </span>
+          }
+          emphasis
+        />
+        <SummaryItem
+          label="Gross Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney((data as any).grossAmount)} {data.currency}
+            </span>
+          }
+        />
+        <SummaryItem
+          label="VAT"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatMoney((data as any).vatAmount)} {data.currency}
+              {(data as any).vatRate != null && (
+                <span className="text-muted-foreground text-[10px] ml-1">
+                  ({formatRate((data as any).vatRate)})
+                </span>
+              )}
+            </span>
+          }
+        />
+        <SummaryItem
+          label="Invoice Date"
+          value={
+            (data as any).invoiceDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date((data as any).invoiceDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Due Date"
+          value={
+            (data as any).dueDate ? (
+              <span className="font-mono tabular-nums">
+                {new Date((data as any).dueDate).toLocaleDateString()}
+              </span>
+            ) : (
+              <span className="text-muted-foreground/50 italic">Not set</span>
+            )
+          }
+        />
+        <SummaryItem
+          label="Vendor"
+          value={(data as any).vendor?.name ?? 'Unknown Vendor'}
+        />
+      </SummaryStrip>
 
       {/* Invoice Details */}
       <Card>
