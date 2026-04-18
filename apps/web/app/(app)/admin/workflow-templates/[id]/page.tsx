@@ -312,7 +312,7 @@ export default function WorkflowTemplateDetailPage() {
                         {rule.userId ? <>{' '}(<UserName userId={rule.userId as string} />)</> : ''}
                         {step.slaHours ? ` | SLA: ${step.slaHours}h` : ''}
                         {step.isOptional ? ' | Optional' : ''}
-                        {(step as any).outcomeType ? ` | Outcome: ${(step as any).outcomeType}` : ''}
+                        {step.outcomeType ? ` | Outcome: ${step.outcomeType}` : ''}
                       </p>
                     </div>
                     <Badge variant="outline" className="text-xs shrink-0">

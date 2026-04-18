@@ -163,7 +163,7 @@ export function AuditLogList() {
                       {formatDate(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {(entry as any).actorName ?? (entry.actorUserId ? entry.actorUserId.slice(0, 8) + '...' : '—')}
+                      {entry.actorName ?? (entry.actorUserId ? entry.actorUserId.slice(0, 8) + '...' : '—')}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-xs">{entry.actorSource}</Badge>

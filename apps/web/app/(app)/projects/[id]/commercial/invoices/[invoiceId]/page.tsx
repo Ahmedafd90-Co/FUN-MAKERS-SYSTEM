@@ -85,13 +85,7 @@ export default function TaxInvoiceDetailPage() {
 
   // IPC label — prefer referenceNumber, fall back to the IPC's IPA period
   // (e.g. "Period 2 IPC") so the link never reads "View IPC" in the UI.
-  const ipcData = (data as any).ipc as
-    | {
-        referenceNumber: string | null;
-        ipa?: { periodNumber: number } | null;
-      }
-    | null
-    | undefined;
+  const ipcData = data.ipc;
   const ipcRef: string | null = ipcData
     ? (ipcData.referenceNumber ??
       (ipcData.ipa ? `Period ${ipcData.ipa.periodNumber} IPC` : null))

@@ -47,13 +47,15 @@ export default function FrameworkAgreementsPage() {
   const entityId = project?.entity?.id;
 
   const { data, isLoading, error } = trpc.procurement.frameworkAgreement.list.useQuery(
-    entityId
-      ? {
-          entityId,
-          skip: page * pageSize,
-          take: pageSize,
-        }
-      : (undefined as any),
+    {
+      // entityId is always a string in the sent payload — an all-zero UUID
+      // placeholder is used while the real entityId is still loading. The
+      // query is gated by `enabled: !!entityId` below, so the placeholder
+      // never actually reaches the server.
+      entityId: entityId ?? '00000000-0000-0000-0000-000000000000',
+      skip: page * pageSize,
+      take: pageSize,
+    },
     { enabled: !!entityId },
   );
 

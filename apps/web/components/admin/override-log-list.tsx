@@ -120,6 +120,10 @@ export function OverrideLogList() {
                 </tr>
               </thead>
               <tbody>
+                {/* `items` comes from a tRPC query whose return shape isn't
+                    fully typed down to the array element. Keeping `: any`
+                    until that query's return type is tightened — see the
+                    invoice-collection contract-consistency follow-up lane. */}
                 {items.map((entry: any) => (
                   <tr
                     key={entry.id}

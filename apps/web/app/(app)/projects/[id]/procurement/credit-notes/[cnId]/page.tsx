@@ -109,7 +109,7 @@ export default function CreditNoteDetailPage() {
     );
   }
 
-  const d = data as any;
+  const d = data;
 
   return (
     <div className="space-y-6">
