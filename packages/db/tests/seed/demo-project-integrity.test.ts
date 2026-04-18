@@ -128,8 +128,14 @@ describe('Demo Project Integrity', () => {
   });
 
   it('has at least 2 IPAs', async () => {
+    // Anchor-agnostic: the seed owns this test project exclusively, so any IPA
+    // for it is by definition a demo IPA. The legacy `description: 'DEMO_SEED'`
+    // filter is stale — the seed switched its idempotency anchor to
+    // `referenceNumber: 'IPA-DEMO-001'` and no longer writes DEMO_SEED on
+    // new rows. Match the IPC/tax-invoice/variation assertions in this file
+    // which also filter on projectId alone.
     const count = await prisma.ipa.count({
-      where: { projectId: testProjectId, description: 'DEMO_SEED' },
+      where: { projectId: testProjectId },
     });
     expect(count).toBeGreaterThanOrEqual(2);
   });
