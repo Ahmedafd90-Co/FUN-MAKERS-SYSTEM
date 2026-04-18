@@ -336,7 +336,12 @@ async function upsertTemplate(
   code: string,
   name: string,
   recordType: string,
-  steps: Array<{ orderIndex: number; name: string; approverRule: Record<string, unknown> }>,
+  // `approverRule` is typed as `Prisma.InputJsonValue` (not
+  // `Record<string, unknown>`) so it passes cleanly into Prisma's JSON
+  // field input type on line 361 below. Previously failed typecheck with
+  // "Type 'Record<string, unknown>' is not assignable to type
+  // 'JsonNull | InputJsonValue'".
+  steps: Array<{ orderIndex: number; name: string; approverRule: Prisma.InputJsonValue }>,
 ) {
   // Delete existing steps and template if they exist (to handle re-runs cleanly)
   const existing = await prisma.workflowTemplate.findUnique({ where: { code } });

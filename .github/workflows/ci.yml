@@ -142,6 +142,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      # Prisma reads `DATABASE_URL` from the environment via
+      # `env("DATABASE_URL")` in `schema.prisma`. Previously this job only
+      # set `DATABASE_URL_TEST`, which nothing in runtime code reads, so
+      # vitest global-setup threw `PrismaClientInitializationError` before
+      # any test could run. Set both so existing docs/.env.example
+      # references to `DATABASE_URL_TEST` remain accurate if any shell
+      # still reads them.
+      DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
       DATABASE_URL_TEST: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
     steps:
       - name: Restore workspace
