@@ -74,7 +74,7 @@ export function AuditLogList() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Operations"
         title="Audit Log"
         description="Chronological record of all system actions."
       />

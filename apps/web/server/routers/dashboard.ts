@@ -1,11 +1,14 @@
 /**
- * Dashboard tRPC router — Phase 1.9
+ * Dashboard tRPC router.
  *
- * Provides a summary endpoint that aggregates data for the home dashboard:
- *   - Pending approval count (approver-rule filtered — matches /approvals)
- *   - Assigned projects (5 most recent)
- *   - Unread notification count
- *   - Recent audit activity (admin only)
+ * Single `summary` endpoint that aggregates every signal the home dashboard
+ * needs in one round-trip. Scoped to the authenticated user's assigned
+ * projects throughout — no cross-project leakage.
+ *
+ * Phase 4 additions (all read-only counts):
+ *   - commercialSignals   — IPC, variation, tax invoice, cost proposal
+ *   - procurementSignals  — PO, SI, expense, credit note
+ *   - adminSignals        — posting exceptions (admin only)
  */
 import { prisma } from '@fmksa/db';
 import { getUnreadCount, resolveApprovers } from '@fmksa/core';
@@ -17,18 +20,35 @@ export const dashboardRouter = router({
     const userId = ctx.user.id;
     const isAdmin = ctx.user.permissions.includes('system.admin');
 
-    // Run independent queries in parallel
-    const [pendingApprovals, assignedProjects, unreadNotifications, recentActivity] =
-      await Promise.all([
-        // 1. Count pending approvals for this user
-        countPendingApprovals(userId),
-        // 2. Recent assigned projects
-        fetchAssignedProjects(userId),
-        // 3. Unread notification count (reuse core function)
-        getUnreadCount(userId),
-        // 4. Recent audit log entries (admin only)
-        isAdmin ? fetchRecentActivity() : Promise.resolve([]),
-      ]);
+    // 1. Resolve the user's assigned project scope once.
+    const assignments = await (prisma as any).projectAssignment.findMany({
+      where: { userId },
+      select: { projectId: true, assignedAt: true },
+      orderBy: { assignedAt: 'desc' },
+    });
+    const projectIds: string[] = assignments.map(
+      (a: { projectId: string }) => a.projectId,
+    );
+
+    // 2. Run independent queries in parallel. Empty-project shortcuts
+    //    prevent pointless prisma round-trips for brand-new users.
+    const [
+      pendingApprovals,
+      assignedProjects,
+      unreadNotifications,
+      recentActivity,
+      commercialSignals,
+      procurementSignals,
+      adminSignals,
+    ] = await Promise.all([
+      countPendingApprovals(userId, projectIds),
+      fetchAssignedProjects(projectIds),
+      getUnreadCount(userId),
+      isAdmin ? fetchRecentActivity() : Promise.resolve([]),
+      fetchCommercialSignals(projectIds),
+      fetchProcurementSignals(projectIds),
+      isAdmin ? fetchAdminSignals() : Promise.resolve(null),
+    ]);
 
     return {
       pendingApprovals,
@@ -36,38 +56,23 @@ export const dashboardRouter = router({
       unreadNotifications,
       recentActivity: isAdmin ? recentActivity : [],
       isAdmin,
+      commercialSignals,
+      procurementSignals,
+      adminSignals,
     };
   }),
 });
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Pending approvals (unchanged semantics — matches /approvals queue)
 // ---------------------------------------------------------------------------
 
-/**
- * Count workflow instances where THIS user is a valid approver for the current
- * step. Mirrors the filter applied by `workflow.myApprovals` so the dashboard
- * number agrees with the /approvals queue exactly.
- *
- * Invariants:
- *  - Only projects the user is assigned to
- *  - Only instances in `in_progress` or `returned` status with a current step
- *  - Only instances where `resolveApprovers(currentStep.rule)` includes userId
- *
- * Instances whose approver rule fails to resolve are skipped (matches
- * myApprovals behavior — a broken rule is invisible, not counted).
- */
-async function countPendingApprovals(userId: string): Promise<number> {
-  // Get projects the user is assigned to
-  const assignments = await (prisma as any).projectAssignment.findMany({
-    where: { userId },
-    select: { projectId: true },
-  });
-  const projectIds = assignments.map((a: { projectId: string }) => a.projectId);
-
+async function countPendingApprovals(
+  userId: string,
+  projectIds: string[],
+): Promise<number> {
   if (projectIds.length === 0) return 0;
 
-  // Pull candidate instances with their current step's approver rule
   const instances = await prisma.workflowInstance.findMany({
     where: {
       projectId: { in: projectIds },
@@ -103,7 +108,6 @@ async function countPendingApprovals(userId: string): Promise<number> {
         instance.projectId,
       );
     } catch {
-      // NoApproversFoundError or similar — skip (matches myApprovals)
       continue;
     }
     if (approverIds.includes(userId)) count += 1;
@@ -111,31 +115,21 @@ async function countPendingApprovals(userId: string): Promise<number> {
   return count;
 }
 
-async function fetchAssignedProjects(userId: string) {
-  const assignments = await (prisma as any).projectAssignment.findMany({
-    where: { userId },
-    select: { projectId: true },
-    orderBy: { assignedAt: 'desc' },
-    take: 5,
-  });
-  const projectIds = assignments.map((a: { projectId: string }) => a.projectId);
-
+async function fetchAssignedProjects(projectIds: string[]) {
   if (projectIds.length === 0) return [];
-
   const projects = await prisma.project.findMany({
     where: { id: { in: projectIds } },
     select: { id: true, code: true, name: true, status: true },
     orderBy: { createdAt: 'desc' },
     take: 5,
   });
-
   return projects;
 }
 
 async function fetchRecentActivity() {
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: 'desc' },
-    take: 5,
+    take: 6,
     select: {
       id: true,
       action: true,
@@ -145,7 +139,6 @@ async function fetchRecentActivity() {
       createdAt: true,
     },
   });
-
   return logs.map((log) => ({
     id: log.id,
     action: log.action,
@@ -154,4 +147,153 @@ async function fetchRecentActivity() {
     actorSource: log.actorSource,
     createdAt: log.createdAt,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Commercial signals — counts of records requiring commercial attention
+// scoped to the user's assigned projects.
+//
+// Definitions:
+//   - ipcInReview:         IPCs in under_review / returned (approver queue)
+//   - variationsOpen:      Variations actively moving through the pipeline
+//   - taxInvoicesOverdue:  Status=overdue OR (issued past due, not collected)
+//   - costProposalsOpen:   Cost proposals in review lifecycle
+// ---------------------------------------------------------------------------
+
+async function fetchCommercialSignals(projectIds: string[]) {
+  if (projectIds.length === 0) {
+    return {
+      ipcInReview: 0,
+      variationsOpen: 0,
+      taxInvoicesOverdue: 0,
+      costProposalsOpen: 0,
+    };
+  }
+
+  const now = new Date();
+
+  const [ipcInReview, variationsOpen, taxInvoicesOverdue, costProposalsOpen] =
+    await Promise.all([
+      prisma.ipc.count({
+        where: {
+          projectId: { in: projectIds },
+          status: { in: ['under_review', 'returned'] as any[] },
+        },
+      }),
+      prisma.variation.count({
+        where: {
+          projectId: { in: projectIds },
+          status: {
+            in: [
+              'submitted',
+              'under_review',
+              'returned',
+              'client_pending',
+            ] as any[],
+          },
+        },
+      }),
+      prisma.taxInvoice.count({
+        where: {
+          projectId: { in: projectIds },
+          OR: [
+            { status: 'overdue' as any },
+            {
+              AND: [
+                {
+                  status: {
+                    in: ['issued', 'submitted', 'partially_collected'] as any[],
+                  },
+                },
+                { dueDate: { lt: now } },
+              ],
+            },
+          ],
+        },
+      }),
+      prisma.costProposal.count({
+        where: {
+          projectId: { in: projectIds },
+          status: { in: ['submitted', 'under_review', 'returned'] as any[] },
+        },
+      }),
+    ]);
+
+  return {
+    ipcInReview,
+    variationsOpen,
+    taxInvoicesOverdue,
+    costProposalsOpen,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Procurement signals
+//
+// Definitions:
+//   - posAwaitingApproval:     POs in submitted/under_review/returned
+//   - supplierInvoicesDisputed: SIs in disputed status (explicit block)
+//   - expensesPendingAction:   Expenses in submitted/returned (approver queue)
+//   - creditNotesReceived:     CNs in received (awaiting verify)
+// ---------------------------------------------------------------------------
+
+async function fetchProcurementSignals(projectIds: string[]) {
+  if (projectIds.length === 0) {
+    return {
+      posAwaitingApproval: 0,
+      supplierInvoicesDisputed: 0,
+      expensesPendingAction: 0,
+      creditNotesReceived: 0,
+    };
+  }
+
+  const [
+    posAwaitingApproval,
+    supplierInvoicesDisputed,
+    expensesPendingAction,
+    creditNotesReceived,
+  ] = await Promise.all([
+    prisma.purchaseOrder.count({
+      where: {
+        projectId: { in: projectIds },
+        status: { in: ['submitted'] as any[] },
+      },
+    }),
+    prisma.supplierInvoice.count({
+      where: {
+        projectId: { in: projectIds },
+        status: { in: ['disputed'] as any[] },
+      },
+    }),
+    prisma.expense.count({
+      where: {
+        projectId: { in: projectIds },
+        status: { in: ['submitted'] as any[] },
+      },
+    }),
+    prisma.creditNote.count({
+      where: {
+        projectId: { in: projectIds },
+        status: { in: ['received'] as any[] },
+      },
+    }),
+  ]);
+
+  return {
+    posAwaitingApproval,
+    supplierInvoicesDisputed,
+    expensesPendingAction,
+    creditNotesReceived,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Admin signals — platform-wide signals only surfaced to admin users.
+// ---------------------------------------------------------------------------
+
+async function fetchAdminSignals() {
+  const postingExceptionsOpen = await prisma.postingException.count({
+    where: { resolvedAt: null },
+  });
+  return { postingExceptionsOpen };
 }

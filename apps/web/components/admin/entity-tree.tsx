@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Building2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { statusBadgeStyle } from '@/lib/badge-variants';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Types — matching Prisma Entity shape from the entities router
@@ -141,18 +142,16 @@ export function EntityTree({ entities, onSelect, onCreateClick }: EntityTreeProp
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Entities</h1>
-          <p className="text-sm text-muted-foreground">
-            Multi-entity hierarchy. Click an entity to view or edit details.
-          </p>
-        </div>
-        <Button onClick={onCreateClick} size="sm">
-          Create Entity
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Organization"
+        title="Entities"
+        description="Multi-entity hierarchy. Click an entity to view or edit details."
+        actions={
+          <Button onClick={onCreateClick} size="sm">
+            Create Entity
+          </Button>
+        }
+      />
 
       {/* Tree table */}
       <div className="overflow-x-auto rounded-md border">

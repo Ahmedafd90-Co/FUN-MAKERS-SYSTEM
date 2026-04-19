@@ -2,106 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* shadcn/ui — new-york style, Pico Play brand (light mode).
-     * --primary is an operational teal (darker than brand teal) so white
-     * foreground text passes WCAG AA on buttons/badges. The brighter brand
-     * teal lives in --brand-teal for decorative use (accent lines, tinted
-     * surfaces) where no white text is layered on top. */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 173 100% 25%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 173 100% 25%;
-    --radius: 0.5rem;
-
-    /* Status chip tokens — Module 1 design spec §8.3. */
-    --status-draft: 220 9% 46%;
-    --status-in-review: 217 91% 60%;
-    --status-approved: 142 71% 45%;
-    --status-rejected: 0 84% 60%;
-    --status-signed: 150 80% 30%;
-    --status-superseded: 38 92% 50%;
-    --status-exception: 271 91% 65%;
-
-    /* Pico Play brand tokens — decorative use only. Never layer white text
-     * directly on --brand-teal (fails WCAG AA). Use --primary for
-     * interactive surfaces that need white foreground. */
-    --brand-teal: 173 100% 39%;
-    --brand-orange: 30 100% 50%;
-
-    /* Surface and soft-brand tokens — added in the brand-adaptation pass.
-     * No consumers yet; wired through the Tailwind preset for future
-     * chrome/shell polish phases. Neutral values keep the product visually
-     * unchanged until components opt in. */
-    --surface-elevated: 0 0% 99%;
-    --surface-sunken: 0 0% 97%;
-    --brand-teal-soft: 173 100% 95%;
-    --brand-orange-soft: 30 100% 95%;
-    --border-strong: 0 0% 82%;
-  }
-
-  .dark {
-    /* shadcn/ui — new-york style, Pico Play brand (dark mode).
-     * --primary stays a readable teal (white-on-teal passes WCAG AA).
-     * --brand-teal is a brighter decorative variant for dark surfaces. */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 173 100% 26%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 173 100% 26%;
-
-    /* Status chip tokens — same hues, retuned slightly for dark backgrounds. */
-    --status-draft: 220 9% 64%;
-    --status-in-review: 217 91% 70%;
-    --status-approved: 142 71% 55%;
-    --status-rejected: 0 84% 70%;
-    --status-signed: 150 60% 50%;
-    --status-superseded: 38 92% 60%;
-    --status-exception: 271 91% 75%;
-
-    /* Pico Play brand tokens — decorative only (see :root note). */
-    --brand-teal: 173 100% 45%;
-    --brand-orange: 30 100% 55%;
-
-    /* Surface and soft-brand tokens — dark-mode pair. Values tuned for
-     * dark backgrounds. No consumers yet. */
-    --surface-elevated: 0 0% 6%;
-    --surface-sunken: 0 0% 7%;
-    --brand-teal-soft: 173 50% 15%;
-    --brand-orange-soft: 30 50% 15%;
-    --border-strong: 0 0% 22%;
-  }
-}
+/*
+ * Brand CSS variables are injected by the root layout via a <style> tag
+ * (see apps/web/app/layout.tsx → brandCssVars from @fmksa/brand).
+ *
+ * This file now carries only structural rules:
+ *   - Tailwind layer directives (base/components/utilities)
+ *   - Global element resets via @layer base
+ *
+ * Do NOT add brand-specific HSL values here. Any palette change must go
+ * through the active theme in @fmksa/brand.
+ */
 
 @layer base {
   * {

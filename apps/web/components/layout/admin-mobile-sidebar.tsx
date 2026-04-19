@@ -9,39 +9,15 @@ import {
   SheetTrigger,
 } from '@fmksa/ui/components/sheet';
 import { cn } from '@fmksa/ui/lib/utils';
-import {
-  Menu,
-  Users,
-  Shield,
-  FolderKanban,
-  Building2,
-  Database,
-  GitBranch,
-  Bell,
-  ScrollText,
-  FileWarning,
-  Activity,
-  ArrowLeftRight,
-  Upload,
-} from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-const adminNavItems = [
-  { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
-  { label: 'Project Assignments', href: '/admin/assignments', icon: FolderKanban },
-  { label: 'Entities', href: '/admin/entities', icon: Building2 },
-  { label: 'Reference Data', href: '/admin/reference-data', icon: Database },
-  { label: 'Workflow Templates', href: '/admin/workflow-templates', icon: GitBranch },
-  { label: 'Notification Templates', href: '/admin/notification-templates', icon: Bell },
-  { label: 'Audit Log', href: '/admin/audit-log', icon: ScrollText },
-  { label: 'Override Log', href: '/admin/override-log', icon: ArrowLeftRight },
-  { label: 'Posting Exceptions', href: '/admin/posting-exceptions', icon: FileWarning },
-  { label: 'Sheet Imports', href: '/admin/imports', icon: Upload },
-  { label: 'System Health', href: '/admin/system-health', icon: Activity },
-];
+import {
+  ADMIN_NAV_GROUPS,
+  isAdminNavItemActive,
+} from '@/components/layout/admin-nav-config';
 
 export function AdminMobileSidebar() {
   const pathname = usePathname();
@@ -62,29 +38,41 @@ export function AdminMobileSidebar() {
               Administration
             </SheetTitle>
           </SheetHeader>
-          <nav className="flex-1 space-y-0.5 px-2 py-3">
-            {adminNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href || pathname.startsWith(item.href + '/');
+          <nav className="flex-1 px-2 py-3">
+            {ADMIN_NAV_GROUPS.map((group, groupIndex) => (
+              <div
+                key={group.label}
+                className={cn(groupIndex === 0 ? 'mt-1' : 'mt-5')}
+              >
+                <p className="px-3 pb-1.5 text-label uppercase text-muted-foreground">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isAdminNavItemActive(pathname, item.href);
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors',
-                    isActive
-                      ? 'bg-accent text-accent-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => setOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors',
+                          isActive
+                            ? 'bg-accent text-accent-foreground font-medium'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </SheetContent>
       </Sheet>

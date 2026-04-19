@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.34.3",
+    "@fmksa/brand": "workspace:*",
     "@fmksa/contracts": "workspace:^",
     "@fmksa/core": "workspace:^",
     "@fmksa/db": "workspace:^",

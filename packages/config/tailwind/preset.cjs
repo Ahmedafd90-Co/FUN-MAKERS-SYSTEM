@@ -5,28 +5,18 @@ const defaultTheme = require('tailwindcss/defaultTheme');
  *
  * Extends (never replaces) Tailwind defaults and exposes:
  *   - HSL color tokens compatible with shadcn/ui (consumed via CSS variables
- *     that the application layer defines in globals.css)
- *   - Inter as the default sans-serif font (wired through the CSS variable
- *     set by next/font in layout.tsx)
+ *     rendered from the active theme in @fmksa/brand and injected by the
+ *     app's root layout as a <style> tag)
+ *   - Source Sans 3 as the default sans-serif font and Geist Mono as the
+ *     monospace family, both wired through CSS variables set by next/font
+ *     in layout.tsx (--font-sans, --font-mono)
  *   - Status chip tokens from the Module 1 design spec §8.3
+ *   - Brand tokens (teal, orange, charcoal, silver) exposed for decorative
+ *     surfaces; operational teal comes through `primary` which resolves to
+ *     the WCAG-safe darker variant
  *
  * Color values use the `hsl(var(--name) / <alpha-value>)` pattern so that
  * Tailwind opacity modifiers (e.g. `bg-primary/50`) work correctly.
- * The consuming app's globals.css must store raw HSL triplets without the
- * `hsl()` wrapper (e.g. `--primary: 0 0% 9%;`).
- *
- * Status chip CSS variables the consuming app must expose in its global
- * stylesheet (HSL triplets so Tailwind can compose them with opacity):
- *
- *   :root {
- *     --status-draft:       220 9% 46%;   // gray
- *     --status-in-review:   217 91% 60%;  // blue
- *     --status-approved:    142 71% 45%;  // green
- *     --status-rejected:    0 84% 60%;    // red
- *     --status-signed:      150 80% 30%;  // dark green
- *     --status-superseded:  38 92% 50%;   // amber
- *     --status-exception:   271 91% 65%;  // purple
- *   }
  *
  * Consumers: `tailwind.config.ts` -> `presets: [require('@fmksa/config/tailwind/preset')]`.
  *
@@ -37,7 +27,44 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-inter)', ...defaultTheme.fontFamily.sans],
+        sans: ['var(--font-sans)', ...defaultTheme.fontFamily.sans],
+        mono: ['var(--font-mono)', ...defaultTheme.fontFamily.mono],
+      },
+      // --------------------------------------------------------------
+      // Typography scale tokens — mirrors the active theme scale in
+      // @fmksa/brand/themes/pico-play (typography.scale). Named after
+      // the role each size plays in the product (not the pixel size)
+      // so tenant themes can re-tune values without renaming classes.
+      //
+      // Weight rules encoded in the defaults:
+      //   - Light (300): display + KPI only
+      //   - Regular (400): all body, all table cells
+      //   - Medium (500): labels, buttons, badges, table headers,
+      //                    section headings, button text
+      //
+      // Usage: `<h1 className="text-heading-page">...</h1>`
+      //        `<p className="text-body">...</p>`
+      //        `<th className="text-th">...</th>`
+      //
+      // IMPORTANT: if you change these here, also update the matching
+      // values in packages/brand/src/themes/pico-play/index.ts so the
+      // theme token source and the Tailwind classes stay in lockstep.
+      // --------------------------------------------------------------
+      fontSize: {
+        'display-hero': ['3rem', { lineHeight: '3.5rem', letterSpacing: '-0.02em', fontWeight: '300' }],
+        'display-section': ['2rem', { lineHeight: '2.5rem', letterSpacing: '-0.015em', fontWeight: '300' }],
+        'heading-page': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.005em', fontWeight: '400' }],
+        'heading-section': ['1.125rem', { lineHeight: '1.5rem', letterSpacing: '0', fontWeight: '500' }],
+        'heading-sub': ['0.9375rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '500' }],
+        body: ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '0', fontWeight: '400' }],
+        'body-sm': ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
+        label: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.08em', fontWeight: '500' }],
+        meta: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0', fontWeight: '400' }],
+        th: ['0.75rem', { lineHeight: '1rem', letterSpacing: '0.04em', fontWeight: '500' }],
+        td: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0', fontWeight: '400' }],
+        kpi: ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.025em', fontWeight: '300' }],
+        btn: ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '0.005em', fontWeight: '500' }],
+        'badge-sm': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.04em', fontWeight: '500' }],
       },
       colors: {
         // Neutral + accent tokens (HSL CSS variables, shadcn/ui compatible).
@@ -106,10 +133,35 @@ module.exports = {
         // intended for selected-row tints, active-step glows, and other
         // decorative subtleties — never for text backgrounds.
         brand: {
+          // Decorative brand teal (Pantone 3265C, #00C7B1). Never layer
+          // white text directly — use `primary` for that.
           teal: 'hsl(var(--brand-teal) / <alpha-value>)',
+          // Operational interactive teal — WCAG-AA white-on-teal.
+          'teal-ink': 'hsl(var(--brand-teal-ink) / <alpha-value>)',
           'teal-soft': 'hsl(var(--brand-teal-soft) / <alpha-value>)',
+          // Feature emphasis only — one appearance per page maximum.
           orange: 'hsl(var(--brand-orange) / <alpha-value>)',
           'orange-soft': 'hsl(var(--brand-orange-soft) / <alpha-value>)',
+          // Dark hero anchor (sign-in, 404). Warmer than #000, reads premium.
+          charcoal: 'hsl(var(--brand-charcoal) / <alpha-value>)',
+          // Premium neutral — meta text, refined borders.
+          silver: 'hsl(var(--brand-silver) / <alpha-value>)',
+        },
+        // Glass-surface tokens — translucent values used on dark anchor
+        // surfaces (sign-in, forgot-password, 404 hero). Values live in
+        // the active theme; we expose them as CSS variables that resolve
+        // to full rgba() strings, so Tailwind opacity utilities DO NOT
+        // compose on top of these (alpha is already baked in).
+        glass: {
+          surface: 'var(--glass-surface)',
+          'surface-border': 'var(--glass-surface-border)',
+          'input-bg': 'var(--glass-input-bg)',
+          'input-border': 'var(--glass-input-border)',
+          'input-fg': 'var(--glass-input-fg)',
+          placeholder: 'var(--glass-placeholder)',
+          label: 'var(--glass-label)',
+          muted: 'var(--glass-muted)',
+          link: 'var(--glass-link)',
         },
       },
       borderRadius: {

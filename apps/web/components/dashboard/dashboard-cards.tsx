@@ -1,227 +1,287 @@
 'use client';
 
-import { Badge } from '@fmksa/ui/components/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@fmksa/ui/components/card';
+/**
+ * Dashboard composition for /home.
+ *
+ * Layout (12-col at lg, stacks at md/sm):
+ *
+ *   ┌─ Greeting band ───────────────────────────────────────┐
+ *   │                                                        │
+ *   ├─ Priority zone ────────────────────────┬─ Feature ────┤
+ *   │ KPI · KPI · (KPI)                      │ block        │
+ *   ├─ Portfolio (cols 1-7) ─────────────────┴─ Activity ──┤
+ *   ├─ Commercial signals ─────────────┬─ Procurement ─────┤
+ *   └────────────────────────────────────────────────────────┘
+ *
+ * Role awareness is light:
+ *   - Admin sees a third KPI card for posting exceptions
+ *   - Admin sees the Activity stream populated; non-admin sees the
+ *     same column but rendered as a quiet empty state
+ *
+ * The feature block is context-aware:
+ *   - Pending approvals > 0 → urges action with orange accent
+ *   - Quiet state otherwise → "Welcome back" with teal accent
+ */
 import {
-  CheckCircle2,
-  ClipboardList,
+  ClipboardCheck,
   Bell,
-  FolderKanban,
-  Activity,
+  AlertTriangle,
 } from 'lucide-react';
-import Link from 'next/link';
+import { Card, CardContent, CardHeader } from '@fmksa/ui/components/card';
 
 import { trpc } from '@/lib/trpc-client';
-import { statusBadgeStyle } from '@/lib/badge-variants';
 
-// ---------------------------------------------------------------------------
-// Human-readable activity label mapping
-// ---------------------------------------------------------------------------
+import { GreetingBand } from './greeting-band';
+import { KpiCard } from './kpi-card';
+import { FeatureBlock } from './feature-block';
+import { SummaryModule } from './summary-module';
+import { SignalRow } from './signal-row';
+import { PortfolioList } from './portfolio-list';
+import { ActivityStream } from './activity-stream';
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  'tax_invoice.transition.collection_partially_collected': 'Invoice partially collected',
-  'tax_invoice.transition.collection_collected': 'Invoice fully collected',
-  'invoice_collection.record': 'Collection recorded',
-  'tax_invoice.create': 'Tax invoice created',
-  'tax_invoice.transition.issue': 'Tax invoice issued',
-  'tax_invoice.transition.submit': 'Tax invoice submitted',
-  'ipc.create': 'IPC created',
-  'ipc.transition.sign': 'IPC signed',
-  'ipc.transition.approve_internal': 'IPC approved',
-  'ipa.create': 'IPA created',
-  'ipa.transition.approve_internal': 'IPA approved',
-  'ipa.transition.submit': 'IPA submitted',
-  'variation.create': 'Variation created',
-  'variation.transition.approve_internal': 'Variation approved',
-  'variation.transition.issue': 'Variation issued',
-  'variation.transition.client_approve': 'Variation client approved',
-  'cost_proposal.create': 'Cost proposal created',
-  'cost_proposal.transition.approve_internal': 'Cost proposal approved',
-  'correspondence.create': 'Correspondence created',
-  'correspondence.transition.issue': 'Correspondence issued',
-  'auth.sign_in': 'User signed in',
-  'auth.sign_out': 'User signed out',
-  'user.create': 'User created',
-  'user.update': 'User updated',
-  'project.create': 'Project created',
-  'project.update': 'Project settings updated',
+type DashboardCardsProps = {
+  /** First name / display name from server-side session. Avoids a client
+   *  round-trip just to greet the user. */
+  userName: string;
 };
 
-function humanizeAction(action: string): string {
-  if (ACTIVITY_LABELS[action]) return ACTIVITY_LABELS[action];
-  return action
-    .replace(/\./g, ' \u203A ')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 // ---------------------------------------------------------------------------
-// Relative time helper
-// ---------------------------------------------------------------------------
-
-function relativeTime(date: Date): string {
-  const diff = Date.now() - new Date(date).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-// ---------------------------------------------------------------------------
-// Skeleton
+// Skeleton — honest placeholder while the summary loads.
 // ---------------------------------------------------------------------------
 
 function DashboardSkeleton() {
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader className="pb-2">
-            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-          </CardHeader>
-          <CardContent>
-            <div className="h-8 w-16 animate-pulse rounded bg-muted" />
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="h-8 w-72 animate-pulse rounded-md bg-muted" />
+        <div className="h-4 w-96 animate-pulse rounded-md bg-muted/70" />
+      </div>
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-12">
+        <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="lg:col-span-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+              <div className="h-5 w-48 animate-pulse rounded bg-muted/70" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="h-4 w-full animate-pulse rounded bg-muted/60" />
+                <div className="h-4 w-3/4 animate-pulse rounded bg-muted/60" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Dashboard
 // ---------------------------------------------------------------------------
 
-export function DashboardCards() {
+export function DashboardCards({ userName }: DashboardCardsProps) {
   const { data, isLoading } = trpc.dashboard.summary.useQuery(undefined, {
     refetchInterval: 60_000,
   });
 
   if (isLoading || !data) return <DashboardSkeleton />;
 
+  const {
+    pendingApprovals,
+    unreadNotifications,
+    assignedProjects,
+    recentActivity,
+    isAdmin,
+    commercialSignals,
+    procurementSignals,
+    adminSignals,
+  } = data;
+
+  // Feature-block context — surfaces the single most important thing.
+  const featureBlock =
+    pendingApprovals > 0
+      ? {
+          tone: 'orange' as const,
+          eyebrow: 'Action needed',
+          title: `${pendingApprovals} ${pendingApprovals === 1 ? 'approval' : 'approvals'} waiting on you`,
+          description:
+            'Records sit in your queue waiting for a decision. Open the queue to triage by project and lifecycle.',
+          action: { label: 'Open my approvals', href: '/approvals' },
+        }
+      : isAdmin && (adminSignals?.postingExceptionsOpen ?? 0) > 0
+        ? {
+            tone: 'orange' as const,
+            eyebrow: 'Operations attention',
+            title: `${adminSignals!.postingExceptionsOpen} posting ${adminSignals!.postingExceptionsOpen === 1 ? 'exception' : 'exceptions'} open`,
+            description:
+              'Ledger postings paused on these records. Resolve to release them back into the operational flow.',
+            action: { label: 'Open posting exceptions', href: '/admin/posting-exceptions' },
+          }
+        : {
+            tone: 'quiet' as const,
+            eyebrow: 'All clear',
+            title: 'Your operations queue is clean.',
+            description:
+              'No approvals waiting, no operational exceptions to resolve. Use the quick links below to keep things moving.',
+            action: { label: 'Browse projects', href: '/projects' },
+          };
+
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Active Workflows — primary action card */}
-      <Link href="/approvals" className="group">
-        <Card className={`transition-all group-hover:shadow-md ${
-          data.pendingApprovals > 0 ? 'border-l-2 border-l-amber-500' : ''
-        }`}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Active Workflows
-            </CardTitle>
-            <ClipboardList className="h-4 w-4 text-muted-foreground/40" />
-          </CardHeader>
-          <CardContent>
-            {data.pendingApprovals === 0 ? (
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <span className="text-sm text-muted-foreground">All clear</span>
-              </div>
-            ) : (
-              <div>
-                <p className="text-2xl font-bold tabular-nums">{data.pendingApprovals}</p>
-                <p className="text-[11px] text-muted-foreground">awaiting action</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Link>
+    <div className="space-y-6">
+      <GreetingBand
+        userName={userName}
+        pendingApprovals={pendingApprovals}
+        unreadNotifications={unreadNotifications}
+      />
 
-      {/* Notifications — secondary action card */}
-      <Link href="/notifications" className="group">
-        <Card className={`transition-all group-hover:shadow-md ${
-          data.unreadNotifications > 0 ? 'border-l-2 border-l-blue-500' : ''
-        }`}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Notifications
-            </CardTitle>
-            <Bell className="h-4 w-4 text-muted-foreground/40" />
-          </CardHeader>
-          <CardContent>
-            {data.unreadNotifications === 0 ? (
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <span className="text-sm text-muted-foreground">All caught up</span>
-              </div>
-            ) : (
-              <div>
-                <p className="text-2xl font-bold tabular-nums">{data.unreadNotifications}</p>
-                <p className="text-[11px] text-muted-foreground">unread</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Link>
+      {/* Priority + feature row */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-12">
+        <div
+          className={`grid gap-4 grid-cols-1 sm:grid-cols-2 ${
+            isAdmin ? 'lg:col-span-8 lg:grid-cols-3' : 'lg:col-span-8 lg:grid-cols-2'
+          }`}
+        >
+          <KpiCard
+            label="My approvals"
+            count={pendingApprovals}
+            subLabel={pendingApprovals === 1 ? 'awaiting decision' : 'awaiting decisions'}
+            icon={ClipboardCheck}
+            href="/approvals"
+            tone="urgent"
+            zeroLabel="Queue clear"
+          />
+          <KpiCard
+            label="Notifications"
+            count={unreadNotifications}
+            subLabel={unreadNotifications === 1 ? 'unread message' : 'unread messages'}
+            icon={Bell}
+            href="/notifications"
+            zeroLabel="All caught up"
+          />
+          {isAdmin && (
+            <KpiCard
+              label="Posting exceptions"
+              count={adminSignals?.postingExceptionsOpen ?? 0}
+              subLabel={
+                (adminSignals?.postingExceptionsOpen ?? 0) === 1
+                  ? 'awaiting resolution'
+                  : 'awaiting resolution'
+              }
+              icon={AlertTriangle}
+              href="/admin/posting-exceptions"
+              tone="urgent"
+              zeroLabel="No open exceptions"
+            />
+          )}
+        </div>
+        <div className="lg:col-span-4">
+          <FeatureBlock {...featureBlock} />
+        </div>
+      </div>
 
-      {/* My Projects — informational anchor card. Teal left bar marks
-          this as the portfolio anchor on the dashboard; the other cards
-          (Active Workflows, Notifications) keep their semantic amber /
-          blue left borders which signal attention state. */}
-      <Link href="/projects" className="group">
-        <Card className="border-l-2 border-l-primary transition-all group-hover:shadow-md">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              My Projects
-            </CardTitle>
-            <FolderKanban className="h-4 w-4 text-muted-foreground/40" />
-          </CardHeader>
-          <CardContent>
-            {data.assignedProjects.length === 0 ? (
-              <span className="text-sm text-muted-foreground">No projects assigned</span>
-            ) : (
-              <ul className="space-y-1">
-                {data.assignedProjects.map((p) => {
-                  const style = statusBadgeStyle(p.status);
-                  return (
-                    <li key={p.id} className="flex items-center gap-2 text-sm">
-                      <Badge variant={style.variant} className={`${style.className ?? ''} h-4 px-1.5 text-[10px]`.trim()}>
-                        {p.status}
-                      </Badge>
-                      <span className="truncate text-foreground/80">
-                        {p.name}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </Link>
+      {/* Portfolio + Activity row */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <SummaryModule
+            eyebrow="Portfolio"
+            title="My projects"
+            helper={
+              assignedProjects.length === 0
+                ? undefined
+                : `${assignedProjects.length} most recent`
+            }
+            footerLink={{ label: 'View all projects', href: '/projects' }}
+          >
+            <PortfolioList projects={assignedProjects} />
+          </SummaryModule>
+        </div>
+        <div className="lg:col-span-4">
+          <SummaryModule
+            eyebrow="Recent"
+            title="Activity"
+            helper={isAdmin ? undefined : 'Visible to admins only.'}
+            footerLink={
+              isAdmin ? { label: 'Open audit log', href: '/admin/audit-log' } : undefined
+            }
+          >
+            <ActivityStream entries={recentActivity} />
+          </SummaryModule>
+        </div>
+      </div>
 
-      {/* Recent Activity (admin only) — operational signal, not dev logs */}
-      {data.isAdmin && (
-        <Card className="bg-muted/20">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Recent Activity
-            </CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground/40" />
-          </CardHeader>
-          <CardContent>
-            {data.recentActivity.length === 0 ? (
-              <span className="text-sm text-muted-foreground">No recent activity</span>
-            ) : (
-              <ul className="space-y-2">
-                {data.recentActivity.map((entry) => (
-                  <li key={entry.id} className="flex items-center justify-between gap-2 text-xs">
-                    <span className="truncate text-foreground/80">
-                      {humanizeAction(entry.action)}
-                    </span>
-                    <span className="shrink-0 text-muted-foreground/60 font-mono tabular-nums text-[10px]">
-                      {relativeTime(entry.createdAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Signals row — commercial + procurement pressure */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+        <SummaryModule
+          eyebrow="Commercial"
+          title="What needs attention"
+          helper="Records in your assigned projects that are mid-lifecycle."
+        >
+          <div>
+            <SignalRow
+              label="IPCs in review"
+              count={commercialSignals.ipcInReview}
+              href="/projects"
+            />
+            <SignalRow
+              label="Variations open"
+              count={commercialSignals.variationsOpen}
+              href="/projects"
+            />
+            <SignalRow
+              label="Tax invoices overdue"
+              count={commercialSignals.taxInvoicesOverdue}
+              href="/projects"
+            />
+            <SignalRow
+              label="Cost proposals open"
+              count={commercialSignals.costProposalsOpen}
+              href="/projects"
+            />
+          </div>
+        </SummaryModule>
+
+        <SummaryModule
+          eyebrow="Procurement"
+          title="Pressure points"
+          helper="Records flagged for procurement attention across your projects."
+        >
+          <div>
+            <SignalRow
+              label="POs awaiting approval"
+              count={procurementSignals.posAwaitingApproval}
+              href="/projects"
+            />
+            <SignalRow
+              label="Supplier invoices disputed"
+              count={procurementSignals.supplierInvoicesDisputed}
+              href="/projects"
+            />
+            <SignalRow
+              label="Expenses pending action"
+              count={procurementSignals.expensesPendingAction}
+              href="/projects"
+            />
+            <SignalRow
+              label="Credit notes to verify"
+              count={procurementSignals.creditNotesReceived}
+              href="/projects"
+            />
+          </div>
+        </SummaryModule>
+      </div>
     </div>
   );
 }

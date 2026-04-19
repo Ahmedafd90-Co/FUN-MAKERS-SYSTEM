@@ -43,7 +43,7 @@ export function UserList({ onCreateClick }: UserListProps) {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Access"
         title="Users"
         description="Manage system users, their status, and role assignments."
         actions={

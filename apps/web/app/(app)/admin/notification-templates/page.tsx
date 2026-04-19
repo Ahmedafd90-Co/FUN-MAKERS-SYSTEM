@@ -24,6 +24,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Sample payload for the live preview
@@ -217,16 +218,11 @@ export default function NotificationTemplatesPage() {
   return (
     <>
       <div className="space-y-4">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Notification Templates
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage the subject and body templates for system notifications.
-            Changes take effect immediately for new notifications.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Configuration"
+          title="Notification Templates"
+          description="Manage the subject and body templates for system notifications. Changes take effect immediately for new notifications."
+        />
 
         {/* Loading */}
         {isLoading && (
