@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 type FilterState = {
   statusFilter: string[];
@@ -93,6 +94,15 @@ export default function CostProposalsListPage() {
       : {}),
   } as Parameters<typeof trpc.commercial.costProposal.list.useQuery>[0]);
 
+  const recordIds = (data?.items ?? []).map((cp) => cp.id);
+  const {
+    data: workflowMap,
+    isLoading: workflowLoading,
+  } = trpc.workflow.instances.listByRecords.useQuery(
+    { recordType: 'cost_proposal', recordIds },
+    { enabled: recordIds.length > 0 },
+  );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -144,6 +154,7 @@ export default function CostProposalsListPage() {
                 <TableHead variant="compact">Revision</TableHead>
                 <TableHead variant="compact" className="text-right">Estimated Cost</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -173,6 +184,13 @@ export default function CostProposalsListPage() {
                   </TableCell>
                   <TableCell>
                     <CommercialStatusBadge status={cp.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[cp.id]}
+                      recordStatus={cp.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(cp.createdAt).toLocaleDateString()}

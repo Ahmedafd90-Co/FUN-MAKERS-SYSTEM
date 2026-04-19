@@ -107,6 +107,78 @@ export function WorkflowSummaryValue({ summary }: { summary: WorkflowSummary }) 
   return <span className={cn('truncate', toneClass)}>{summary.text}</span>;
 }
 
+type RegisterWorkflowInstanceLike = {
+  status: string;
+  currentStep?: { name: string; outcomeType: string | null } | null;
+  lastReturnActor?: string | null;
+} | null | undefined;
+
+/**
+ * Register-flavored summary — denser than the detail strip. Drops the outcome
+ * verb (visible on the detail page) and adds a returned-by actor where we
+ * have one, so the cell reads operationally at a glance:
+ *
+ *   in_progress → "PM Review"            (step name)
+ *   returned    → "Returned · Sara"      (first name of the approver who
+ *                                         returned it, if available)
+ *   approved    → "Approved"
+ *   rejected    → "Rejected"
+ *   cancelled   → "Cancelled"
+ *   completed   → "Completed"
+ *   no instance, draft record  → "Not started"
+ *   no instance, other record  → "No workflow"
+ *
+ * Current approver is intentionally not resolved here — role-based rules
+ * often resolve to multiple users, and picking one would mislead.
+ */
+export function deriveRegisterWorkflowSummary(
+  instance: RegisterWorkflowInstanceLike,
+  recordStatus: string | null | undefined,
+): WorkflowSummary {
+  if (instance) {
+    const stepName = instance.currentStep?.name;
+    switch (instance.status) {
+      case 'in_progress':
+        return stepName
+          ? { text: stepName, tone: 'default' }
+          : { text: 'In progress', tone: 'default' };
+      case 'returned': {
+        const returner = firstName(instance.lastReturnActor);
+        if (returner) return { text: `Returned · ${returner}`, tone: 'warning' };
+        return stepName
+          ? { text: `Returned · ${stepName}`, tone: 'warning' }
+          : { text: 'Returned', tone: 'warning' };
+      }
+      case 'approved':
+        return { text: 'Approved', tone: 'positive' };
+      case 'completed':
+        return { text: 'Completed', tone: 'positive' };
+      case 'rejected':
+        return { text: 'Rejected', tone: 'negative' };
+      case 'cancelled':
+        return { text: 'Cancelled', tone: 'muted' };
+      case 'on_hold':
+        return { text: 'On hold', tone: 'warning' };
+      case 'draft':
+        return { text: 'Not started', tone: 'muted' };
+      default:
+        return { text: instance.status, tone: 'default' };
+    }
+  }
+
+  if (recordStatus === 'draft') {
+    return { text: 'Not started', tone: 'muted' };
+  }
+  return { text: 'No workflow', tone: 'muted' };
+}
+
+function firstName(full: string | null | undefined): string | null {
+  if (!full) return null;
+  const trimmed = full.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/)[0] ?? null;
+}
+
 const TONE_CLASSES: Record<Tone, string> = {
   muted: 'text-muted-foreground',
   default: 'text-foreground',

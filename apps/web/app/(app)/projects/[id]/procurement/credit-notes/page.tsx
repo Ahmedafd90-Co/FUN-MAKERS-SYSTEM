@@ -17,6 +17,7 @@ import { trpc } from '@/lib/trpc-client';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 function formatMoney(val: unknown): string {
   const num =
@@ -47,6 +48,13 @@ export default function CreditNoteListPage() {
   const items = data ?? [];
   const total = items.length;
   const paged = items.slice(page * pageSize, (page + 1) * pageSize);
+
+  const recordIds = paged.map((cn: any) => cn.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'credit_note', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
 
   return (
     <div className="space-y-4">
@@ -97,6 +105,7 @@ export default function CreditNoteListPage() {
                 <TableHead variant="compact">Type</TableHead>
                 <TableHead variant="compact" className="text-right">Amount</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Linked Invoice</TableHead>
                 <TableHead variant="compact">Received</TableHead>
               </TableRow>
@@ -126,6 +135,13 @@ export default function CreditNoteListPage() {
                   </TableCell>
                   <TableCell>
                     <ProcurementStatusBadge status={cn.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[cn.id]}
+                      recordStatus={cn.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {cn.supplierInvoice?.invoiceNumber ?? '-'}

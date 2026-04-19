@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 type FilterState = {
   statusFilter: string[];
@@ -110,6 +111,13 @@ export default function VariationsListPage() {
       : {}),
   } as Parameters<typeof trpc.commercial.variation.list.useQuery>[0]);
 
+  const recordIds = (data?.items ?? []).map((v) => v.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'variation', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -176,6 +184,7 @@ export default function VariationsListPage() {
                 <TableHead variant="compact">Subtype</TableHead>
                 <TableHead variant="compact" className="text-right">Cost Impact</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -210,6 +219,13 @@ export default function VariationsListPage() {
                   </TableCell>
                   <TableCell>
                     <CommercialStatusBadge status={variation.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[variation.id]}
+                      recordStatus={variation.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(variation.createdAt).toLocaleDateString()}

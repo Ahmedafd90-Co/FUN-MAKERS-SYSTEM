@@ -278,6 +278,97 @@ const instancesRouter = router({
 
       return { ...instance, currentApprovers };
     }),
+
+  /**
+   * Batch lookup for register cells — returns a compact workflow summary per
+   * (recordType, recordId) in a single pair of queries, with no approver
+   * resolution. Deliberately read-only and narrow: registers need enough to
+   * render "PM Review" / "Returned · Sara" / "Approved" / "No workflow",
+   * nothing more.
+   */
+  listByRecords: protectedProcedure
+    .input(z.object({
+      recordType: z.string().min(1),
+      recordIds: z.array(z.string().min(1)).max(100),
+    }))
+    .query(async ({ input }) => {
+      const empty: Record<string, null> = {};
+      if (input.recordIds.length === 0) return empty;
+
+      const instances = await prisma.workflowInstance.findMany({
+        where: {
+          recordType: input.recordType,
+          recordId: { in: input.recordIds },
+        },
+        orderBy: { startedAt: 'desc' },
+        include: {
+          template: {
+            select: {
+              steps: { select: { id: true, name: true, outcomeType: true } },
+            },
+          },
+          actions: {
+            where: { action: { in: ['returned', 'return'] } },
+            orderBy: { actedAt: 'desc' },
+            take: 1,
+            select: { actorUserId: true, actedAt: true },
+          },
+        },
+      });
+
+      // Keep the most recent instance per recordId (list is desc by startedAt)
+      const latestByRecord = new Map<string, (typeof instances)[number]>();
+      for (const inst of instances) {
+        if (!latestByRecord.has(inst.recordId)) {
+          latestByRecord.set(inst.recordId, inst);
+        }
+      }
+
+      // Resolve actor names for any returned instances in one query
+      const actorIds = new Set<string>();
+      for (const inst of latestByRecord.values()) {
+        const lastReturn = inst.actions[0];
+        if (lastReturn) actorIds.add(lastReturn.actorUserId);
+      }
+      const actors = actorIds.size
+        ? await prisma.user.findMany({
+            where: { id: { in: [...actorIds] } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const actorNameById = new Map(actors.map((a) => [a.id, a.name]));
+
+      const result: Record<
+        string,
+        {
+          status: string;
+          currentStep: { name: string; outcomeType: string | null } | null;
+          lastReturnActor: string | null;
+        } | null
+      > = {};
+      for (const recordId of input.recordIds) {
+        const inst = latestByRecord.get(recordId);
+        if (!inst) {
+          result[recordId] = null;
+          continue;
+        }
+        const currentStep = inst.currentStepId
+          ? inst.template.steps.find((s) => s.id === inst.currentStepId) ?? null
+          : null;
+        const lastReturn = inst.actions[0];
+        result[recordId] = {
+          status: inst.status,
+          currentStep: currentStep
+            ? { name: currentStep.name, outcomeType: currentStep.outcomeType }
+            : null,
+          lastReturnActor:
+            inst.status === 'returned' && lastReturn
+              ? actorNameById.get(lastReturn.actorUserId) ?? null
+              : null,
+        };
+      }
+      return result;
+    }),
 });
 
 // ---------------------------------------------------------------------------

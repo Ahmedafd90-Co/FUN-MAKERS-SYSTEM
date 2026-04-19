@@ -36,6 +36,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { formatMoney } from '@/components/commercial/shared';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 export default function EngineerInstructionsListPage() {
   const params = useParams<{ id: string }>();
@@ -60,6 +61,13 @@ export default function EngineerInstructionsListPage() {
     trpc.commercial.engineerInstruction.list.useQuery({
       projectId,
     });
+
+  const recordIds = ((data ?? []) as Array<{ id: string }>).map((ei) => ei.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'engineer_instruction', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
 
   const createMut = trpc.commercial.engineerInstruction.create.useMutation({
     onSuccess: (result) => {
@@ -167,6 +175,7 @@ export default function EngineerInstructionsListPage() {
                 <TableHead className="text-right">Estimated Value</TableHead>
                 <TableHead className="text-right">Reserve Amount</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Workflow</TableHead>
                 <TableHead>Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -205,6 +214,13 @@ export default function EngineerInstructionsListPage() {
                   </TableCell>
                   <TableCell>
                     <CommercialStatusBadge status={ei.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[ei.id]}
+                      recordStatus={ei.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(ei.createdAt).toLocaleDateString()}

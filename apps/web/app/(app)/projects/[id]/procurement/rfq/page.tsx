@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 type FilterState = {
   statusFilter: string[];
@@ -91,6 +92,13 @@ export default function RfqListPage() {
       : {}),
   });
 
+  const recordIds = (data?.items ?? []).map((rfq) => rfq.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'rfq', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -149,6 +157,7 @@ export default function RfqListPage() {
                 <TableHead variant="compact" className="text-right">Vendors</TableHead>
                 <TableHead variant="compact" className="text-right">Est. Budget</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Required By</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
@@ -184,6 +193,13 @@ export default function RfqListPage() {
                   </TableCell>
                   <TableCell>
                     <ProcurementStatusBadge status={rfq.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[rfq.id]}
+                      recordStatus={rfq.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {rfq.requiredByDate
