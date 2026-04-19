@@ -11,6 +11,11 @@ import {
   User,
   ShieldCheck,
   ArrowRight,
+  Eye,
+  FileSignature,
+  Send,
+  ClipboardCheck,
+  type LucideIcon,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc-client';
 import { outcomeCompletedLabel, outcomePendingLabel } from '@/lib/outcome-labels';
@@ -157,72 +162,17 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
           );
         })()}
 
-        {/* ── Step progress ── */}
+        {/* ── Route ribbon ── */}
         {data.template?.steps && data.template.steps.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              {data.template.steps.map(
-                (step: { id: string; orderIndex: number; name: string }, i: number) => {
-                  const isCurrent = step.id === data.currentStepId;
-                  const isPast = data.currentStep
-                    ? step.orderIndex < (data.currentStep as { orderIndex: number }).orderIndex
-                    : isApproved;
-                  const completedAll = isApproved;
-                  const isRejectedStep = isRejected && isCurrent;
-
-                  return (
-                    <div key={step.id} className="flex items-center gap-1 flex-1">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center h-7 w-7 rounded-full text-xs font-medium shrink-0 transition-colors',
-                          completedAll || isPast
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
-                            : isRejectedStep
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                              : isCurrent
-                                ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
-                                : 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {completedAll || isPast ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : isRejectedStep ? (
-                          <XCircle className="h-4 w-4" />
-                        ) : (
-                          i + 1
-                        )}
-                      </div>
-                      {i < data.template.steps.length - 1 && (
-                        <div
-                          className={cn(
-                            'h-0.5 flex-1 rounded-full transition-colors',
-                            completedAll || isPast
-                              ? 'bg-emerald-300 dark:bg-emerald-700'
-                              : 'bg-muted',
-                          )}
-                        />
-                      )}
-                    </div>
-                  );
-                },
-              )}
-            </div>
-            <div className="flex justify-between">
-              {data.template.steps.map((step: { id: string; name: string }) => (
-                <span
-                  key={step.id}
-                  className={cn(
-                    'text-[10px] leading-tight text-center flex-1',
-                    step.id === data.currentStepId
-                      ? 'text-foreground font-medium'
-                      : 'text-muted-foreground',
-                  )}
-                >
-                  {step.name}
-                </span>
-              ))}
-            </div>
-          </div>
+          <WorkflowRouteRibbon
+            steps={data.template.steps}
+            currentStepId={data.currentStepId}
+            currentStepOrderIndex={
+              (data.currentStep as { orderIndex: number } | null)?.orderIndex ?? null
+            }
+            actions={(data.actions ?? []) as RibbonAction[]}
+            status={data.status}
+          />
         )}
 
         {/* ── Current step + approvers (active only) ── */}
@@ -337,6 +287,251 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Route ribbon — premium step path visualization above the card body.
+//
+// Renders one pill per step with:
+//   - state dot (outcome icon or check / current arrow / rejected X)
+//   - step name
+//   - actor + date under completed steps (only if we have an 'approved'
+//     action on that step — we don't fabricate actor info)
+//
+// The ribbon is a denser, more readable evolution of the previous numbered-
+// circle strip. It reads as an operational route, not a progress bar.
+// ---------------------------------------------------------------------------
+
+type RibbonStep = {
+  id: string;
+  orderIndex: number;
+  name: string;
+  outcomeType?: string | undefined;
+};
+
+type RibbonAction = {
+  action: string;
+  actedAt: string | Date;
+  actor?: { name: string } | null;
+  step?: { id: string } | null;
+  stepId?: string;
+};
+
+type StepState = 'completed' | 'current' | 'rejected' | 'pending';
+
+function WorkflowRouteRibbon({
+  steps,
+  currentStepId,
+  currentStepOrderIndex,
+  actions,
+  status,
+}: {
+  steps: RibbonStep[];
+  currentStepId: string | null;
+  currentStepOrderIndex: number | null;
+  actions: RibbonAction[];
+  status: string;
+}) {
+  const isApproved = status === 'approved';
+  const isRejected = status === 'rejected';
+
+  // Pre-compute the completing action per step (latest approval action on
+  // that step). Used to surface actor + date under completed cells.
+  // The workflow service writes 'approved'; some demo/seed paths write the
+  // shorter 'approve' — accept both so the ribbon is truthful in either case.
+  const completingActionByStep = new Map<string, RibbonAction>();
+  for (const a of actions) {
+    if (a.action !== 'approved' && a.action !== 'approve') continue;
+    const stepId = a.step?.id ?? a.stepId;
+    if (!stepId) continue;
+    // If multiple approvals exist (e.g. return → re-approve), keep the latest.
+    const existing = completingActionByStep.get(stepId);
+    if (!existing || new Date(a.actedAt) > new Date(existing.actedAt)) {
+      completingActionByStep.set(stepId, a);
+    }
+  }
+
+  // For rejected instances, currentStepId is cleared by the service — so we
+  // recover the rejection step from the latest reject action. Without this,
+  // the ribbon would show every step as pending on a rejected workflow.
+  let rejectedStepId: string | null = null;
+  if (isRejected) {
+    let latestReject: RibbonAction | null = null;
+    for (const a of actions) {
+      if (a.action !== 'rejected' && a.action !== 'reject') continue;
+      if (!latestReject || new Date(a.actedAt) > new Date(latestReject.actedAt)) {
+        latestReject = a;
+      }
+    }
+    rejectedStepId = latestReject?.step?.id ?? latestReject?.stepId ?? null;
+  }
+  const rejectedStep = rejectedStepId
+    ? steps.find((s) => s.id === rejectedStepId) ?? null
+    : null;
+  const rejectedOrderIndex = rejectedStep?.orderIndex ?? null;
+
+  const stateFor = (step: RibbonStep): StepState => {
+    if (isApproved) return 'completed';
+    if (isRejected) {
+      if (rejectedStepId && step.id === rejectedStepId) return 'rejected';
+      if (rejectedOrderIndex != null && step.orderIndex < rejectedOrderIndex) {
+        return 'completed';
+      }
+      return 'pending';
+    }
+    if (step.id === currentStepId) return 'current';
+    if (currentStepOrderIndex != null && step.orderIndex < currentStepOrderIndex) {
+      return 'completed';
+    }
+    return 'pending';
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Dots row + connectors */}
+      <div className="flex items-stretch gap-1">
+        {steps.map((step, i) => {
+          const state = stateFor(step);
+          const isLast = i === steps.length - 1;
+          return (
+            <div key={step.id} className="flex items-center gap-1 flex-1 min-w-0">
+              <RibbonDot state={state} outcomeType={step.outcomeType} />
+              {!isLast && <RibbonConnector leftState={state} />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Labels row — step name + optional actor/date under completed cells */}
+      <div className="flex justify-between gap-1">
+        {steps.map((step) => {
+          const state = stateFor(step);
+          const completing = completingActionByStep.get(step.id);
+          return (
+            <div
+              key={step.id}
+              className="flex-1 min-w-0 text-center space-y-0.5 px-0.5"
+            >
+              <p
+                className={cn(
+                  'text-[11px] leading-tight truncate',
+                  state === 'current' && 'text-foreground font-semibold',
+                  state === 'completed' && 'text-foreground',
+                  state === 'rejected' && 'text-destructive font-semibold',
+                  state === 'pending' && 'text-muted-foreground',
+                )}
+                title={step.name}
+              >
+                {step.name}
+              </p>
+              {state === 'completed' && completing?.actor?.name && (
+                <p
+                  className="text-[10px] leading-tight text-muted-foreground truncate"
+                  title={`${completing.actor.name} · ${new Date(completing.actedAt).toLocaleDateString()}`}
+                >
+                  <span className="truncate">{completing.actor.name}</span>
+                  <span className="text-muted-foreground/50">
+                    {' · '}
+                    {formatShortDate(completing.actedAt)}
+                  </span>
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RibbonDot({
+  state,
+  outcomeType,
+}: {
+  state: StepState;
+  outcomeType?: string | undefined;
+}) {
+  const Icon = outcomeIcon(outcomeType);
+  const common =
+    'flex items-center justify-center h-8 w-8 rounded-full shrink-0 transition-colors';
+  switch (state) {
+    case 'completed':
+      return (
+        <div
+          className={cn(
+            common,
+            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+          )}
+        >
+          <CheckCircle2 className="h-4 w-4" />
+        </div>
+      );
+    case 'current':
+      return (
+        <div
+          className={cn(
+            common,
+            'bg-primary text-primary-foreground ring-2 ring-primary/25',
+          )}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+      );
+    case 'rejected':
+      return (
+        <div
+          className={cn(
+            common,
+            'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+          )}
+        >
+          <XCircle className="h-4 w-4" />
+        </div>
+      );
+    case 'pending':
+    default:
+      return (
+        <div
+          className={cn(
+            common,
+            'bg-muted text-muted-foreground/70 ring-1 ring-inset ring-border',
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      );
+  }
+}
+
+function RibbonConnector({ leftState }: { leftState: StepState }) {
+  // Line colour reflects the state of the step on the LEFT of the connector.
+  // Completed → emerald; anything else → muted.
+  const completed = leftState === 'completed';
+  return (
+    <div
+      className={cn(
+        'h-0.5 flex-1 rounded-full',
+        completed ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-muted',
+      )}
+    />
+  );
+}
+
+/** Map a step's outcomeType to a Lucide icon. Defaults to CheckCircle2. */
+function outcomeIcon(outcomeType?: string | undefined): LucideIcon {
+  switch (outcomeType) {
+    case 'review':
+      return Eye;
+    case 'sign':
+      return FileSignature;
+    case 'issue':
+      return Send;
+    case 'acknowledge':
+      return ClipboardCheck;
+    case 'approve':
+    default:
+      return CheckCircle2;
+  }
 }
 
 // ---------------------------------------------------------------------------
