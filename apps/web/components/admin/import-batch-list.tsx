@@ -181,7 +181,7 @@ export function ImportBatchList() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Operations"
         title="Sheet Imports"
         description="Upload, review, and commit budget baseline and IPA history sheets. Staging is isolated from live data until commit."
         actions={

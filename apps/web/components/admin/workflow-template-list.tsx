@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -53,22 +54,17 @@ export function WorkflowTemplateList({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Workflow Templates
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage approval workflow templates. Each template defines an ordered
-            sequence of approval steps.
-          </p>
-        </div>
-        <Button onClick={onCreateClick} size="sm">
-          <Plus className="h-4 w-4" />
-          Create Template
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Configuration"
+        title="Workflow Templates"
+        description="Manage approval workflow templates. Each template defines an ordered sequence of approval steps."
+        actions={
+          <Button onClick={onCreateClick} size="sm">
+            <Plus className="h-4 w-4" />
+            Create Template
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">

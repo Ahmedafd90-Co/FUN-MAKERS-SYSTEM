@@ -344,6 +344,7 @@ export function ImportBatchDetail({ batchId }: ImportBatchDetailProps) {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Operations"
         title={batch.sourceFileName}
         description={`${IMPORT_TYPE_LABELS[importType]} · ${batch.project.code} — ${batch.project.name}`}
         actions={

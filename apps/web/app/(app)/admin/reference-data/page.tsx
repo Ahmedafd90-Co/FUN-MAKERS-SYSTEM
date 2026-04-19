@@ -6,18 +6,17 @@ import { AppSettingsForm } from '@/components/admin/app-settings-form';
 import { CountriesTable } from '@/components/admin/countries-table';
 import { CurrenciesTable } from '@/components/admin/currencies-table';
 import { StatusDictionaryEditor } from '@/components/admin/status-dictionary-editor';
+import { PageHeader } from '@/components/layout/page-header';
 
 export default function AdminReferenceDataPage() {
   return (
     <>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Reference Data</h1>
-          <p className="text-sm text-muted-foreground">
-            System-wide reference data: countries, currencies, app settings, and
-            status dictionaries.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Organization"
+          title="Reference Data"
+          description="System-wide reference data: countries, currencies, app settings, and status dictionaries."
+        />
 
         <Tabs defaultValue="countries" className="w-full">
           <TabsList>

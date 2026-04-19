@@ -1,93 +1,14 @@
 'use client';
 
 import { cn } from '@fmksa/ui/lib/utils';
-import {
-  Users,
-  Shield,
-  FolderKanban,
-  Building2,
-  Database,
-  GitBranch,
-  Bell,
-  ScrollText,
-  FileWarning,
-  Activity,
-  ArrowLeftRight,
-  HeartPulse,
-  AlertCircle,
-  Upload,
-} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { AdminMobileSidebar } from '@/components/layout/admin-mobile-sidebar';
-
-// ---------------------------------------------------------------------------
-// Admin sidebar navigation items
-// ---------------------------------------------------------------------------
-
-type AdminNavItem = {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-const adminNavItems: AdminNavItem[] = [
-  { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
-  { label: 'Project Assignments', href: '/admin/assignments', icon: FolderKanban },
-  { label: 'Entities', href: '/admin/entities', icon: Building2 },
-  { label: 'Reference Data', href: '/admin/reference-data', icon: Database },
-  {
-    label: 'Workflow Templates',
-    href: '/admin/workflow-templates',
-    icon: GitBranch,
-  },
-  {
-    label: 'Notification Templates',
-    href: '/admin/notification-templates',
-    icon: Bell,
-  },
-  {
-    label: 'Audit Log',
-    href: '/admin/audit-log',
-    icon: ScrollText,
-  },
-  {
-    label: 'Override Log',
-    href: '/admin/override-log',
-    icon: ArrowLeftRight,
-  },
-  {
-    label: 'Posting Exceptions',
-    href: '/admin/posting-exceptions',
-    icon: FileWarning,
-  },
-  {
-    label: 'Absorption Exceptions',
-    href: '/admin/absorption-exceptions',
-    icon: AlertCircle,
-  },
-  {
-    label: 'Sheet Imports',
-    href: '/admin/imports',
-    icon: Upload,
-  },
-  {
-    label: 'Financial Health',
-    href: '/admin/financial-health',
-    icon: HeartPulse,
-  },
-  {
-    label: 'System Health',
-    href: '/admin/system-health',
-    icon: Activity,
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Layout
-// ---------------------------------------------------------------------------
+import {
+  ADMIN_NAV_GROUPS,
+  isAdminNavItemActive,
+} from '@/components/layout/admin-nav-config';
 
 export default function AdminLayout({
   children,
@@ -105,30 +26,42 @@ export default function AdminLayout({
             Administration
           </h2>
         </div>
-        <nav className="flex-1 space-y-0.5 px-2 pb-4">
-          {adminNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + '/');
+        <nav className="flex-1 px-2 pb-4">
+          {ADMIN_NAV_GROUPS.map((group, groupIndex) => (
+            <div
+              key={group.label}
+              className={cn(groupIndex === 0 ? 'mt-1' : 'mt-5')}
+            >
+              <p className="px-3 pb-1.5 text-label uppercase text-muted-foreground">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = isAdminNavItemActive(pathname, item.href);
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  // border-l-2 is always present (transparent on inactive) so
-                  // the active state adds no horizontal shift.
-                  'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors',
-                  isActive
-                    ? 'border-primary bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={isActive ? 'page' : undefined}
+                      // border-l-2 is always present (transparent on inactive) so
+                      // the active state adds no horizontal shift.
+                      className={cn(
+                        'flex items-center gap-3 rounded-md border-l-2 border-transparent px-3 py-2 text-sm transition-colors',
+                        isActive
+                          ? 'border-primary bg-accent text-accent-foreground font-medium'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
       </aside>
 

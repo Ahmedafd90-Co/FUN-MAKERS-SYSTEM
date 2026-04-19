@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Shield } from 'lucide-react';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Component — DB-backed, read-only
@@ -17,13 +18,11 @@ export function RoleList() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Roles & Permissions</h1>
-        <p className="text-sm text-muted-foreground">
-          Read-only view of system roles and their permission assignments.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Access"
+        title="Roles & Permissions"
+        description="Read-only view of system roles and their permission assignments."
+      />
 
       {isLoading && (
         <p className="text-sm text-muted-foreground py-8 text-center">Loading roles...</p>

@@ -111,7 +111,7 @@ export function PostingExceptionList({
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Administration"
+        eyebrow="Operations"
         title="Posting Exceptions"
         description="Monitor and manage posting pipeline failures. Open exceptions require attention."
       />

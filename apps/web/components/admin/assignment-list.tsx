@@ -15,6 +15,7 @@ import { Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
+import { PageHeader } from '@/components/layout/page-header';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -35,19 +36,17 @@ export function AssignmentList({ onAddClick }: AssignmentListProps) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Project Assignments</h1>
-          <p className="text-sm text-muted-foreground">
-            View and manage user-project-role assignments across all projects.
-          </p>
-        </div>
-        <Button onClick={onAddClick} size="sm">
-          <Plus className="h-4 w-4" />
-          Add Assignment
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Access"
+        title="Project Assignments"
+        description="View and manage user-project-role assignments across all projects."
+        actions={
+          <Button onClick={onAddClick} size="sm">
+            <Plus className="h-4 w-4" />
+            Add Assignment
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">
