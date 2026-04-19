@@ -86,6 +86,11 @@ describe('Permission Catalog Guardrail', () => {
     expect(PERMISSION_CATALOG.has('ipc.list')).toBe(false);
     expect(PERMISSION_CATALOG.has('variation.list')).toBe(false);
 
+    // Retired: *.transition was replaced by granular mapping in apps/web/server/routers/commercial/transition-permissions.ts.
+    expect(PERMISSION_CATALOG.has('ipa.transition')).toBe(false);
+    expect(PERMISSION_CATALOG.has('ipc.transition')).toBe(false);
+    expect(PERMISSION_CATALOG.has('variation.transition')).toBe(false);
+
     // These DO exist in the catalog
     expect(PERMISSION_CATALOG.has('ipa.view')).toBe(true);
     expect(PERMISSION_CATALOG.has('ipc.view')).toBe(true);
@@ -95,11 +100,8 @@ describe('Permission Catalog Guardrail', () => {
   it('should include the newly-added commercial actions', () => {
     // Added during System Integrity Pass to match existing router checks
     expect(PERMISSION_CATALOG.has('ipa.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('ipa.transition')).toBe(true);
     expect(PERMISSION_CATALOG.has('ipc.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('ipc.transition')).toBe(true);
     expect(PERMISSION_CATALOG.has('variation.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('variation.transition')).toBe(true);
   });
 
   it('every permission checked in tRPC routers must exist in the catalog', () => {
