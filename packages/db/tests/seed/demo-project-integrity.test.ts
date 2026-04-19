@@ -86,6 +86,11 @@ afterAll(async () => {
   await prisma.ipc.deleteMany({ where: { projectId: testProjectId } });
   await prisma.ipa.deleteMany({ where: { projectId: testProjectId } });
   await prisma.variation.deleteMany({ where: { projectId: testProjectId } });
+  // posting_events is append-only via the no-delete-on-immutable middleware,
+  // so cleanup goes through raw SQL (same pattern as clean-test-data.ts).
+  // The seed emits 7 posting_events that reference this project; without
+  // this delete, project.delete() below silently FK-fails and leaks rows.
+  await prisma.$executeRaw`DELETE FROM posting_events WHERE project_id = ${testProjectId}`;
   await prisma.projectSetting.deleteMany({ where: { projectId: testProjectId } }).catch(() => {});
   await prisma.project.delete({ where: { id: testProjectId } }).catch(() => {});
 
