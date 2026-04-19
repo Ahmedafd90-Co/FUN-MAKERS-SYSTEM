@@ -33,22 +33,33 @@ export const dashboardRouter = router({
     // 2. Run independent queries in parallel. Empty-project shortcuts
     //    prevent pointless prisma round-trips for brand-new users.
     const [
-      pendingApprovals,
+      myApprovalInstances,
       assignedProjects,
       unreadNotifications,
       recentActivity,
       commercialSignals,
       procurementSignals,
       adminSignals,
+      waitingWithOthersRaw,
+      recentApprovalsRaw,
     ] = await Promise.all([
-      countPendingApprovals(userId, projectIds),
+      fetchMyApprovalInstances(userId, projectIds),
       fetchAssignedProjects(projectIds),
       getUnreadCount(userId),
       isAdmin ? fetchRecentActivity() : Promise.resolve([]),
       fetchCommercialSignals(projectIds),
       fetchProcurementSignals(projectIds),
       isAdmin ? fetchAdminSignals() : Promise.resolve(null),
+      fetchStartedByMeInstances(userId, projectIds),
+      fetchMyRecentApprovalActions(userId, projectIds),
     ]);
+
+    const pendingApprovals = myApprovalInstances.length;
+    const workflowBand = await buildWorkflowBand({
+      myApprovalInstances,
+      startedByMe: waitingWithOthersRaw,
+      recentApprovals: recentApprovalsRaw,
+    });
 
     return {
       pendingApprovals,
@@ -59,19 +70,62 @@ export const dashboardRouter = router({
       commercialSignals,
       procurementSignals,
       adminSignals,
+      workflowBand,
     };
   }),
 });
 
 // ---------------------------------------------------------------------------
-// Pending approvals (unchanged semantics — matches /approvals queue)
+// Workflow band — dashboard workflow visibility (W4)
+//
+// Four modules derived from three raw fetches (one approver walk + one
+// started-by-me scan + one recent-actions scan), plus a batched reference-
+// number lookup grouped by recordType.
 // ---------------------------------------------------------------------------
 
-async function countPendingApprovals(
+type WorkflowBandRow = {
+  instanceId: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  recordType: string;
+  recordId: string;
+  referenceNumber: string | null;
+  currentStepName: string | null;
+  status: string;
+  updatedAt: Date;
+};
+
+type WorkflowBand = {
+  awaitingMyAction: WorkflowBandRow[];
+  returnedToMe: WorkflowBandRow[];
+  waitingWithOthers: WorkflowBandRow[];
+  recentlyApprovedByMe: WorkflowBandRow[];
+};
+
+type ApprovalInstance = {
+  id: string;
+  projectId: string;
+  project: { id: string; code: string; name: string };
+  status: string;
+  currentStepId: string | null;
+  currentStep: { id: string; name: string } | null;
+  recordType: string;
+  recordId: string;
+  updatedAt: Date;
+  startedBy: string;
+};
+
+/**
+ * Fetches instances in the user's project scope where the user is a valid
+ * current approver. Lifted from the old countPendingApprovals so the list
+ * can feed both the count (`.length`) and the dashboard workflow band.
+ */
+async function fetchMyApprovalInstances(
   userId: string,
   projectIds: string[],
-): Promise<number> {
-  if (projectIds.length === 0) return 0;
+): Promise<ApprovalInstance[]> {
+  if (projectIds.length === 0) return [];
 
   const instances = await prisma.workflowInstance.findMany({
     where: {
@@ -79,21 +133,28 @@ async function countPendingApprovals(
       status: { in: ['in_progress', 'returned'] },
       currentStepId: { not: null },
     },
+    orderBy: { startedAt: 'desc' },
     select: {
       id: true,
       projectId: true,
+      project: { select: { id: true, code: true, name: true } },
+      status: true,
       currentStepId: true,
+      recordType: true,
+      recordId: true,
+      startedAt: true,
+      startedBy: true,
       template: {
         select: {
           steps: {
-            select: { id: true, approverRuleJson: true },
+            select: { id: true, name: true, approverRuleJson: true },
           },
         },
       },
     },
   });
 
-  let count = 0;
+  const results: ApprovalInstance[] = [];
   for (const instance of instances) {
     if (!instance.currentStepId) continue;
     const currentStep = instance.template.steps.find(
@@ -110,9 +171,332 @@ async function countPendingApprovals(
     } catch {
       continue;
     }
-    if (approverIds.includes(userId)) count += 1;
+    if (!approverIds.includes(userId)) continue;
+
+    results.push({
+      id: instance.id,
+      projectId: instance.projectId,
+      project: instance.project,
+      status: instance.status,
+      currentStepId: instance.currentStepId,
+      currentStep: { id: currentStep.id, name: currentStep.name },
+      recordType: instance.recordType,
+      recordId: instance.recordId,
+      updatedAt: instance.startedAt,
+      startedBy: instance.startedBy,
+    });
   }
-  return count;
+  return results;
+}
+
+/**
+ * Active (in_progress/returned) instances started by the user. The final
+ * "Waiting With Others" module excludes any instance the user is also the
+ * current approver on — those live in Awaiting/Returned instead.
+ */
+async function fetchStartedByMeInstances(
+  userId: string,
+  projectIds: string[],
+): Promise<ApprovalInstance[]> {
+  if (projectIds.length === 0) return [];
+
+  const instances = await prisma.workflowInstance.findMany({
+    where: {
+      projectId: { in: projectIds },
+      startedBy: userId,
+      status: { in: ['in_progress', 'returned'] },
+    },
+    orderBy: { startedAt: 'desc' },
+    take: 25, // safety cap — we slice to 5 later after exclusion
+    select: {
+      id: true,
+      projectId: true,
+      project: { select: { id: true, code: true, name: true } },
+      status: true,
+      currentStepId: true,
+      recordType: true,
+      recordId: true,
+      startedAt: true,
+      startedBy: true,
+      template: {
+        select: {
+          steps: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  return instances.map((inst) => {
+    const currentStep = inst.currentStepId
+      ? inst.template.steps.find((s) => s.id === inst.currentStepId) ?? null
+      : null;
+    return {
+      id: inst.id,
+      projectId: inst.projectId,
+      project: inst.project,
+      status: inst.status,
+      currentStepId: inst.currentStepId,
+      currentStep: currentStep
+        ? { id: currentStep.id, name: currentStep.name }
+        : null,
+      recordType: inst.recordType,
+      recordId: inst.recordId,
+      updatedAt: inst.startedAt,
+      startedBy: inst.startedBy,
+    };
+  });
+}
+
+/**
+ * The user's five most recent approve actions within the project scope.
+ * Accepts both the service-written `approved` and the seed-written `approve`
+ * so the band is truthful on both live and demo data.
+ */
+async function fetchMyRecentApprovalActions(
+  userId: string,
+  projectIds: string[],
+) {
+  if (projectIds.length === 0) return [];
+
+  const actions = await prisma.workflowAction.findMany({
+    where: {
+      actorUserId: userId,
+      action: { in: ['approved', 'approve'] },
+      instance: { projectId: { in: projectIds } },
+    },
+    orderBy: { actedAt: 'desc' },
+    take: 5,
+    select: {
+      id: true,
+      actedAt: true,
+      step: { select: { id: true, name: true } },
+      instance: {
+        select: {
+          id: true,
+          projectId: true,
+          project: { select: { id: true, code: true, name: true } },
+          status: true,
+          currentStepId: true,
+          recordType: true,
+          recordId: true,
+          startedBy: true,
+        },
+      },
+    },
+  });
+
+  return actions;
+}
+
+/**
+ * Batch reference-number lookup grouped by recordType. Keeps the round-trip
+ * count bounded (one findMany per recordType touched, not one per row).
+ * For records without a dedicated reference field (e.g. expenses), falls
+ * back to the human-readable title.
+ */
+async function fetchReferenceNumbers(
+  pairs: Array<{ recordType: string; recordId: string }>,
+): Promise<Map<string, string>> {
+  const key = (t: string, id: string) => `${t}:${id}`;
+  const result = new Map<string, string>();
+
+  const byType = new Map<string, Set<string>>();
+  for (const p of pairs) {
+    if (!byType.has(p.recordType)) byType.set(p.recordType, new Set());
+    byType.get(p.recordType)!.add(p.recordId);
+  }
+
+  await Promise.all(
+    [...byType.entries()].map(async ([recordType, idSet]) => {
+      const ids = [...idSet];
+      switch (recordType) {
+        case 'cost_proposal': {
+          const rows = await prisma.costProposal.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true },
+          });
+          for (const r of rows) if (r.referenceNumber) result.set(key(recordType, r.id), r.referenceNumber);
+          break;
+        }
+        case 'variation': {
+          const rows = await prisma.variation.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true },
+          });
+          for (const r of rows) if (r.referenceNumber) result.set(key(recordType, r.id), r.referenceNumber);
+          break;
+        }
+        case 'ipa': {
+          const rows = await prisma.ipa.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true },
+          });
+          for (const r of rows) if (r.referenceNumber) result.set(key(recordType, r.id), r.referenceNumber);
+          break;
+        }
+        case 'ipc': {
+          const rows = await prisma.ipc.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true },
+          });
+          for (const r of rows) if (r.referenceNumber) result.set(key(recordType, r.id), r.referenceNumber);
+          break;
+        }
+        case 'tax_invoice': {
+          const rows = await prisma.taxInvoice.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, invoiceNumber: true, referenceNumber: true },
+          });
+          for (const r of rows) {
+            const ref = r.invoiceNumber ?? r.referenceNumber;
+            if (ref) result.set(key(recordType, r.id), ref);
+          }
+          break;
+        }
+        case 'correspondence': {
+          const rows = await prisma.correspondence.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true },
+          });
+          for (const r of rows) if (r.referenceNumber) result.set(key(recordType, r.id), r.referenceNumber);
+          break;
+        }
+        case 'engineer_instruction': {
+          const rows = await prisma.engineerInstruction.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true, title: true },
+          });
+          for (const r of rows) {
+            const ref = r.referenceNumber ?? r.title;
+            if (ref) result.set(key(recordType, r.id), ref);
+          }
+          break;
+        }
+        case 'purchase_order': {
+          const rows = await prisma.purchaseOrder.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, poNumber: true },
+          });
+          for (const r of rows) if (r.poNumber) result.set(key(recordType, r.id), r.poNumber);
+          break;
+        }
+        case 'rfq': {
+          const rows = await prisma.rFQ.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, referenceNumber: true, rfqNumber: true },
+          });
+          for (const r of rows) {
+            const ref = r.referenceNumber ?? r.rfqNumber;
+            if (ref) result.set(key(recordType, r.id), ref);
+          }
+          break;
+        }
+        case 'supplier_invoice': {
+          const rows = await prisma.supplierInvoice.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, invoiceNumber: true },
+          });
+          for (const r of rows) if (r.invoiceNumber) result.set(key(recordType, r.id), r.invoiceNumber);
+          break;
+        }
+        case 'credit_note': {
+          const rows = await prisma.creditNote.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, creditNoteNumber: true },
+          });
+          for (const r of rows) if (r.creditNoteNumber) result.set(key(recordType, r.id), r.creditNoteNumber);
+          break;
+        }
+        case 'expense': {
+          const rows = await prisma.expense.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, title: true },
+          });
+          for (const r of rows) if (r.title) result.set(key(recordType, r.id), r.title);
+          break;
+        }
+        default:
+          // Unknown record type — leave referenceNumber null. The UI falls
+          // back to the humanised recordType label + short id.
+          break;
+      }
+    }),
+  );
+
+  return result;
+}
+
+function toRow(
+  inst: ApprovalInstance,
+  refLookup: Map<string, string>,
+): WorkflowBandRow {
+  const refKey = `${inst.recordType}:${inst.recordId}`;
+  return {
+    instanceId: inst.id,
+    projectId: inst.projectId,
+    projectCode: inst.project.code,
+    projectName: inst.project.name,
+    recordType: inst.recordType,
+    recordId: inst.recordId,
+    referenceNumber: refLookup.get(refKey) ?? null,
+    currentStepName: inst.currentStep?.name ?? null,
+    status: inst.status,
+    updatedAt: inst.updatedAt,
+  };
+}
+
+async function buildWorkflowBand({
+  myApprovalInstances,
+  startedByMe,
+  recentApprovals,
+}: {
+  myApprovalInstances: ApprovalInstance[];
+  startedByMe: ApprovalInstance[];
+  recentApprovals: Awaited<ReturnType<typeof fetchMyRecentApprovalActions>>;
+}): Promise<WorkflowBand> {
+  // Split my-approval set into in_progress vs returned, slice to 5 each.
+  const awaiting = myApprovalInstances
+    .filter((i) => i.status === 'in_progress')
+    .slice(0, 5);
+  const returned = myApprovalInstances
+    .filter((i) => i.status === 'returned')
+    .slice(0, 5);
+
+  // Waiting With Others = started by me, excluding anything I'm currently
+  // the approver on (those belong to awaiting/returned).
+  const myApproverInstanceIds = new Set(myApprovalInstances.map((i) => i.id));
+  const waiting = startedByMe
+    .filter((i) => !myApproverInstanceIds.has(i.id))
+    .slice(0, 5);
+
+  // Collect every recordType/recordId we'll display, then batch-fetch refs.
+  const pairs: Array<{ recordType: string; recordId: string }> = [];
+  for (const i of [...awaiting, ...returned, ...waiting]) {
+    pairs.push({ recordType: i.recordType, recordId: i.recordId });
+  }
+  for (const a of recentApprovals) {
+    pairs.push({ recordType: a.instance.recordType, recordId: a.instance.recordId });
+  }
+  const refLookup = await fetchReferenceNumbers(pairs);
+
+  return {
+    awaitingMyAction: awaiting.map((i) => toRow(i, refLookup)),
+    returnedToMe: returned.map((i) => toRow(i, refLookup)),
+    waitingWithOthers: waiting.map((i) => toRow(i, refLookup)),
+    recentlyApprovedByMe: recentApprovals.map((a) => ({
+      instanceId: a.instance.id,
+      projectId: a.instance.projectId,
+      projectCode: a.instance.project.code,
+      projectName: a.instance.project.name,
+      recordType: a.instance.recordType,
+      recordId: a.instance.recordId,
+      referenceNumber:
+        refLookup.get(`${a.instance.recordType}:${a.instance.recordId}`) ?? null,
+      currentStepName: a.step?.name ?? null,
+      status: a.instance.status,
+      updatedAt: a.actedAt,
+    })),
+  };
 }
 
 async function fetchAssignedProjects(projectIds: string[]) {
