@@ -103,7 +103,7 @@ export default function SupplierInvoiceListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.map((si: any) => (
+              {paged.map((si) => (
                 <TableRow
                   key={si.id}
                   className="cursor-pointer hover:bg-muted/50"

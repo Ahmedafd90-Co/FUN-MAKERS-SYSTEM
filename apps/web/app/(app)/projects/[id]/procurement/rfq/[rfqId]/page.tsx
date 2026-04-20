@@ -226,7 +226,7 @@ export default function RfqDetailPage() {
                 >
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium">
-                      {(q as any).vendor?.name ?? 'Unknown Vendor'}
+                      {q.vendor?.name ?? 'Unknown Vendor'}
                     </p>
                     <p className="text-xs text-muted-foreground tabular-nums">
                       {formatMoney(q.totalAmount)} {q.currency}

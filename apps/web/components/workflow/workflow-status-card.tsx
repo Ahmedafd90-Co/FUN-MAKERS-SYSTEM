@@ -86,9 +86,9 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
                   ({(data.template as { code: string }).code})
                 </span>
               </p>
-              {(data as any).resolutionSource && (
+              {data.resolutionSource && (
                 <p className="text-[10px] text-muted-foreground/50">
-                  Resolved via: {resolutionSourceLabel((data as any).resolutionSource)}
+                  Resolved via: {resolutionSourceLabel(data.resolutionSource)}
                 </p>
               )}
             </div>
@@ -99,10 +99,10 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
           <div className="text-right shrink-0 hidden sm:block">
             <p className="text-[11px] text-muted-foreground">Last action</p>
             <p className="text-xs font-medium">
-              {actionLabel((latestEvent as any).action, (latestEvent as any).step?.outcomeType)}
-              {(latestEvent as any).actor?.name && (
+              {actionLabel(latestEvent.action, latestEvent.step?.outcomeType)}
+              {latestEvent.actor?.name && (
                 <span className="font-normal text-muted-foreground">
-                  {' '}by {(latestEvent as any).actor.name}
+                  {' '}by {latestEvent.actor.name}
                 </span>
               )}
             </p>
@@ -120,11 +120,11 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
           return (
             <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 px-3 py-2.5 space-y-1">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Returned by {(lastReturn as any).actor?.name ?? 'an approver'}
+                Returned by {lastReturn.actor?.name ?? 'an approver'}
               </p>
-              {(lastReturn as any).comment && (
+              {lastReturn.comment && (
                 <p className="text-sm text-amber-700 dark:text-amber-300 italic">
-                  &ldquo;{(lastReturn as any).comment}&rdquo;
+                  &ldquo;{lastReturn.comment}&rdquo;
                 </p>
               )}
               <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -143,11 +143,11 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
           return (
             <div className="rounded-md border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950 px-3 py-2.5 space-y-1">
               <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                Rejected by {(lastReject as any).actor?.name ?? 'an approver'}
+                Rejected by {lastReject.actor?.name ?? 'an approver'}
               </p>
-              {(lastReject as any).comment && (
+              {lastReject.comment && (
                 <p className="text-sm text-red-700 dark:text-red-300 italic">
-                  &ldquo;{(lastReject as any).comment}&rdquo;
+                  &ldquo;{lastReject.comment}&rdquo;
                 </p>
               )}
               <p className="text-xs text-red-600 dark:text-red-400">
@@ -250,9 +250,7 @@ export function WorkflowStatusCard({ recordType, recordId }: Props) {
             {data.currentApprovers && data.currentApprovers.length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  {outcomePendingLabel(
-                    (data.currentStep as any)?.outcomeType,
-                  )}
+                  {outcomePendingLabel(data.currentStep?.outcomeType)}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {data.currentApprovers.map(

@@ -35,6 +35,20 @@ beforeAll(async () => {
     create: { code: 'SAR', name: 'Saudi Riyal', symbol: 'SR', decimalPlaces: 2 },
   });
 
+  // seedCommercialDemoData resolves createdBy from the master-admin user (by email).
+  // When db:seed runs before tests that prerequisite is satisfied; when it doesn't,
+  // the seed silently skips. Upsert a minimal user row so this test is self-sufficient.
+  await prisma.user.upsert({
+    where: { email: 'ahmedafd90@gmail.com' },
+    update: {},
+    create: {
+      email: 'ahmedafd90@gmail.com',
+      name: 'Demo Integrity Test Admin',
+      passwordHash: 'test-hash',
+      status: 'active',
+    },
+  });
+
   // If the real FMKSA-2026-001 exists, temporarily rename it
   const existing = await prisma.project.findFirst({ where: { code: 'FMKSA-2026-001' } });
   if (existing) {
@@ -72,6 +86,11 @@ afterAll(async () => {
   await prisma.ipc.deleteMany({ where: { projectId: testProjectId } });
   await prisma.ipa.deleteMany({ where: { projectId: testProjectId } });
   await prisma.variation.deleteMany({ where: { projectId: testProjectId } });
+  // posting_events is append-only via the no-delete-on-immutable middleware,
+  // so cleanup goes through raw SQL (same pattern as clean-test-data.ts).
+  // The seed emits 7 posting_events that reference this project; without
+  // this delete, project.delete() below silently FK-fails and leaks rows.
+  await prisma.$executeRaw`DELETE FROM posting_events WHERE project_id = ${testProjectId}`;
   await prisma.projectSetting.deleteMany({ where: { projectId: testProjectId } }).catch(() => {});
   await prisma.project.delete({ where: { id: testProjectId } }).catch(() => {});
 
@@ -114,8 +133,14 @@ describe('Demo Project Integrity', () => {
   });
 
   it('has at least 2 IPAs', async () => {
+    // Anchor-agnostic: the seed owns this test project exclusively, so any IPA
+    // for it is by definition a demo IPA. The legacy `description: 'DEMO_SEED'`
+    // filter is stale — the seed switched its idempotency anchor to
+    // `referenceNumber: 'IPA-DEMO-001'` and no longer writes DEMO_SEED on
+    // new rows. Match the IPC/tax-invoice/variation assertions in this file
+    // which also filter on projectId alone.
     const count = await prisma.ipa.count({
-      where: { projectId: testProjectId, description: 'DEMO_SEED' },
+      where: { projectId: testProjectId },
     });
     expect(count).toBeGreaterThanOrEqual(2);
   });

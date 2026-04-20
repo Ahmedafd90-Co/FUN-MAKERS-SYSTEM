@@ -90,7 +90,13 @@ export default function EngineerInstructionsListPage() {
     if (!canSubmit) return;
     setFormError(null);
 
-    const input: Record<string, unknown> = {
+    // Engineer-instruction schemas live inline in the router (not yet
+    // extracted to @fmksa/contracts like IPA/IPC/etc.), so we derive the
+    // mutation input type from the tRPC mutation itself. Alternative was
+    // extracting the schema to contracts — deliberately out of CI-cleanup
+    // scope per branch operating rule.
+    type CreateEiInput = Parameters<typeof createMut.mutate>[0];
+    const input: CreateEiInput = {
       projectId,
       title: title.trim(),
       estimatedValue: parseFloat(estimatedValue),
@@ -100,7 +106,7 @@ export default function EngineerInstructionsListPage() {
     if (description.trim()) input.description = description.trim();
     if (notes.trim()) input.notes = notes.trim();
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   const computedReserve = (val: unknown, rate: unknown): string => {
@@ -171,7 +177,7 @@ export default function EngineerInstructionsListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((ei: any) => (
+              {data.map((ei) => (
                 <TableRow
                   key={ei.id}
                   className="cursor-pointer hover:bg-muted/50"

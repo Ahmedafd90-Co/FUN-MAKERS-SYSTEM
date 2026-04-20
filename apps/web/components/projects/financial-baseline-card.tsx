@@ -22,6 +22,7 @@ import {
   SheetFooter,
 } from '@fmksa/ui/components/sheet';
 
+import type { UpdateProjectInput } from '@fmksa/contracts';
 import { trpc } from '@/lib/trpc-client';
 import { formatMoney } from '@/components/commercial/shared';
 
@@ -199,11 +200,17 @@ function EditBaselineSheet({
 
     const cvVal = cv.trim() ? parseFloat(cv) : null;
 
+    // `UpdateProjectSchema` doesn't declare `projectId` but `projectProcedure`
+    // middleware extracts it from raw input — same pattern as the invoice-
+    // collection schemas. Intersection-type cast keeps the contract honest
+    // instead of using a blanket `as any`. The deferred fix (adding
+    // `projectId` to the schema across projectProcedure inputs) is part of
+    // the contracts-consistency follow-up lane.
     mutation.mutate({
       id: projectId,
       projectId,
       contractValue: cvVal,
-    } as any);
+    } as UpdateProjectInput & { projectId: string });
   }
 
   return (

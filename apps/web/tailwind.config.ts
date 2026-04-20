@@ -1,26 +1,26 @@
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import animate from 'tailwindcss-animate';
 
 import type { Config } from 'tailwindcss';
 
 import preset from '@fmksa/config/tailwind/preset';
 
-// Use import.meta.dirname (Node 21+) with fallback for older runtimes.
-const here =
-  typeof __dirname !== 'undefined'
-    ? __dirname
-    : typeof import.meta.dirname !== 'undefined'
-      ? import.meta.dirname
-      : dirname(fileURLToPath(import.meta.url));
-
+// Content globs are deliberately RELATIVE to this file's directory.
+// Tailwind resolves `content` paths against the location of the config
+// file itself, so we do not need to compute `here` via `__dirname` /
+// `import.meta.dirname` / `fileURLToPath(import.meta.url)` — all of
+// which caused `SyntaxError: Cannot use 'import.meta' outside a module`
+// during `next build` because Tailwind's internal config loader
+// evaluates the transpiled file in a CJS vm context.
+//
+// Keeping the globs relative also makes the config portable if the app
+// is ever moved inside the monorepo.
 const config = {
   presets: [preset],
   darkMode: 'class',
   content: [
-    resolve(here, './app/**/*.{ts,tsx}'),
-    resolve(here, './components/**/*.{ts,tsx}'),
-    resolve(here, '../../packages/ui/src/**/*.{ts,tsx}'),
+    './app/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    '../../packages/ui/src/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {},

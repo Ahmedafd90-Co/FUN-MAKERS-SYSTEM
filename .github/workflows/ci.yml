@@ -142,6 +142,14 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      # Prisma reads `DATABASE_URL` from the environment via
+      # `env("DATABASE_URL")` in `schema.prisma`. Previously this job only
+      # set `DATABASE_URL_TEST`, which nothing in runtime code reads, so
+      # vitest global-setup threw `PrismaClientInitializationError` before
+      # any test could run. Set both so existing docs/.env.example
+      # references to `DATABASE_URL_TEST` remain accurate if any shell
+      # still reads them.
+      DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
       DATABASE_URL_TEST: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
     steps:
       - name: Restore workspace
@@ -168,6 +176,25 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # The postgres service container starts with an empty `fmksa_test`
+      # database. Tests assume the Prisma schema is applied AND workflow
+      # templates / base seed rows are present — vitest global-setup runs
+      # `workflowTemplate.updateMany(...)` straight away and several test
+      # files expect seeded entities. Without these two steps CI fails on
+      # "relation does not exist" / "column outcome_type does not exist".
+      #
+      # `prisma db push` (not `migrate deploy`) because this job uses an
+      # ephemeral DB — no migration history to preserve, and `db push` is
+      # faster + tolerant of any drift on feature branches.
+      - name: Sync Prisma schema to test DB
+        run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
+
+      # Note: no explicit `db:seed` step. The `packages/db/tests/seed/*.ts`
+      # suites seed themselves and assert post-seed invariants from a clean
+      # schema — running the full seed beforehand causes double-seed
+      # collisions (IPA reference_number unique constraint, Postgres
+      # deadlocks on shared project codes, doubled project_assignment
+      # counts in idempotency checks). Tests own DB state.
       - name: Run tests
         run: pnpm turbo run test
 

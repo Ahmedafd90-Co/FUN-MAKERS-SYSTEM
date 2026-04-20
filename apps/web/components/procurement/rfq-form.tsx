@@ -165,10 +165,13 @@ export function RfqForm({ projectId, existingRfq }: Props) {
     }
   };
 
-  const vendorOptions = (projectVendors ?? []).map((pv: any) => ({
+  const vendorOptions = (projectVendors ?? []).map((pv) => ({
     id: pv.id,
     vendorId: pv.vendorId ?? pv.vendor?.id ?? pv.id,
-    name: pv.vendor?.name ?? pv.name ?? 'Unknown',
+    // `pv.vendor.name` is the canonical path. A previous `?? pv.name`
+    // fallback was dead — there's no `name` on ProjectVendor itself,
+    // `as any` had been hiding that.
+    name: pv.vendor?.name ?? 'Unknown',
   }));
 
   return (
@@ -217,7 +220,7 @@ export function RfqForm({ projectId, existingRfq }: Props) {
                   <SelectValue placeholder="Select currency" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(currencies ?? []).map((c: any) => (
+                  {(currencies ?? []).map((c) => (
                     <SelectItem key={c.code} value={c.code}>
                       {c.name} ({c.code})
                     </SelectItem>

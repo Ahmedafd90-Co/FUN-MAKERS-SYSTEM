@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateVariationInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Subtype configuration
@@ -91,7 +92,7 @@ export default function CreateVariationPage() {
     if (!canSubmit) return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    const input: CreateVariationInput = {
       projectId,
       subtype,
       title: title.trim(),
@@ -105,7 +106,13 @@ export default function CreateVariationPage() {
 
     // VO-specific fields
     if (subtype === 'vo') {
-      if (initiatedBy) input.initiatedBy = initiatedBy;
+      // Select is constrained to 'contractor' | 'client'; the form state is
+      // typed `string` because Radix's onValueChange emits `string`. Narrow
+      // at the assignment point so `input.initiatedBy` carries the honest
+      // schema type instead of being swallowed by the old `as any` on the
+      // whole input.
+      if (initiatedBy)
+        input.initiatedBy = initiatedBy as 'contractor' | 'client';
       if (contractClause.trim()) input.contractClause = contractClause.trim();
     }
 
@@ -121,7 +128,7 @@ export default function CreateVariationPage() {
         input.timeAdjustmentDays = parseInt(timeAdjustmentDays, 10);
     }
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (

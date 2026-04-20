@@ -117,7 +117,7 @@ export default function ExpenseDetailPage() {
     );
   }
 
-  const d = data as any;
+  const d = data;
   const subtype = d.subtype as string;
 
   return (
@@ -278,7 +278,9 @@ export default function ExpenseDetailPage() {
             <Field label="Vehicle Type" value={d.vehicleType ?? '-'} />
             <Field label="Origin" value={d.transportOrigin ?? '-'} />
             <Field label="Destination" value={d.transportDestination ?? '-'} />
-            <Field label="Distance" value={d.distance ?? '-'} />
+            {/* `distance` is `string | Decimal` on the schema — coerce for
+                React. Previously hidden by the umbrella `d = data as any`. */}
+            <Field label="Distance" value={d.distance != null ? String(d.distance) : '-'} />
             <Field label="Rate Type" value={d.rateType ?? '-'} />
           </CardContent>
         </Card>

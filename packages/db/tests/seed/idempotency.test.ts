@@ -147,15 +147,22 @@ describe('seed idempotency', () => {
     expect(roleCount).toBe(1);
   });
 
-  it('master_admin user has exactly 1 project_assignment (not 2)', async () => {
+  it('master_admin has exactly one assignment per demo project (no duplicates after repeated seed runs)', async () => {
     const admin = await prisma.user.findUnique({
       where: { email: 'ahmedafd90@gmail.com' },
     });
     expect(admin).not.toBeNull();
 
-    const assignmentCount = await prisma.projectAssignment.count({
+    // master-admin.ts fans the admin out across every demo project
+    // (DEMO_PROJECT_CODES). Repeated seed runs must not create more than
+    // one (admin, project) assignment per project, regardless of how
+    // many projects the demo fixture grows to.
+    const assignments = await prisma.projectAssignment.findMany({
       where: { userId: admin!.id },
+      select: { projectId: true },
     });
-    expect(assignmentCount).toBe(1);
+    const uniqueProjectIds = new Set(assignments.map((a) => a.projectId));
+    expect(assignments.length).toBe(uniqueProjectIds.size);
+    expect(assignments.length).toBeGreaterThan(0);
   });
 });

@@ -120,7 +120,9 @@ export function OverrideLogList() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((entry: any) => (
+                {items.map(
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- upstream `(prisma as any)` in packages/core/src/audit/override-list.ts erases the element type; fix that cast to remove this disable
+                  (entry: any) => (
                   <tr
                     key={entry.id}
                     onClick={() => setDetailId(entry.id)}
