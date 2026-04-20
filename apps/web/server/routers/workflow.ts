@@ -513,6 +513,22 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
   });
 
   // 3. For each instance, resolve approvers for the current step and filter
+  type PreviousHandler = {
+    stepId: string;
+    stepName: string;
+    outcomeType: string | null;
+    actorUserId: string;
+    actorName: string;
+    action: string;
+    actedAt: Date;
+  };
+  type ReturnContext = {
+    actorUserId: string;
+    actorName: string;
+    comment: string | null;
+    actedAt: Date;
+  };
+
   const results: Array<{
     instanceId: string;
     projectId: string;
@@ -532,8 +548,12 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
     isBreached: boolean;
     templateId: string;
     templateCode: string;
+    templateName: string;
     previousSteps: Array<{ id: string; name: string; orderIndex: number }>;
     recordReference: string | null;
+    previousHandlers: PreviousHandler[];
+    nextStep: { name: string; outcomeType: string | null } | null;
+    returnContext: ReturnContext | null;
   }> = [];
 
   const now = new Date();
@@ -586,6 +606,71 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
       .filter((s) => s.orderIndex < currentStep.orderIndex)
       .map((s) => ({ id: s.id, name: s.name, orderIndex: s.orderIndex }));
 
+    // Next step preview — first step after the current one by orderIndex.
+    // Null at the last step of the flow.
+    const nextStepRaw = instance.template.steps.find(
+      (s) => s.orderIndex > currentStep.orderIndex,
+    );
+    const nextStep = nextStepRaw
+      ? {
+          name: nextStepRaw.name,
+          outcomeType: (nextStepRaw as any).outcomeType ?? null,
+        }
+      : null;
+
+    // Previous handlers — meaningful human touches on this instance (in the
+    // order they happened), capped at the 5 most recent. Actor names are
+    // resolved in a batched step after the main loop.
+    //
+    // We include `submit`/`started` because the person who set the workflow
+    // in motion is, in operational terms, the first handler — it answers
+    // "who touched it before" even when no one has approved yet.
+    const transitionActions = instance.actions
+      .filter((a) =>
+        [
+          'submit',
+          'started',
+          'approved',
+          'approve',
+          'returned',
+          'return',
+          'resubmitted',
+        ].includes(a.action),
+      )
+      .slice()
+      .reverse()
+      .slice(0, 5)
+      .reverse();
+    const previousHandlers: PreviousHandler[] = transitionActions.map((a) => {
+      const step = instance.template.steps.find((s) => s.id === a.stepId);
+      return {
+        stepId: a.stepId,
+        stepName: step?.name ?? '—',
+        outcomeType: (step as any)?.outcomeType ?? null,
+        actorUserId: a.actorUserId,
+        actorName: '', // populated via batched user lookup below
+        action: a.action,
+        actedAt: a.actedAt,
+      };
+    });
+
+    // Return context — only populated for returned instances. The latest
+    // return/returned action carries the actor + reason.
+    let returnContext: ReturnContext | null = null;
+    if (instance.status === 'returned') {
+      const returnAction = [...instance.actions]
+        .reverse()
+        .find((a) => a.action === 'returned' || a.action === 'return');
+      if (returnAction) {
+        returnContext = {
+          actorUserId: returnAction.actorUserId,
+          actorName: '', // populated via batched user lookup below
+          comment: returnAction.comment ?? null,
+          actedAt: returnAction.actedAt,
+        };
+      }
+    }
+
     results.push({
       instanceId: instance.id,
       projectId: instance.projectId,
@@ -605,9 +690,39 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
       isBreached,
       templateId: instance.templateId,
       templateCode: instance.template.code,
+      templateName: instance.template.name,
       previousSteps,
       recordReference: null, // populated below via batch lookup
+      previousHandlers,
+      nextStep,
+      returnContext,
     });
+  }
+
+  // 4b. Batch-resolve actor names for every handler + returner we surface.
+  //     One user.findMany regardless of how many instances are in scope.
+  {
+    const actorIds = new Set<string>();
+    for (const r of results) {
+      for (const h of r.previousHandlers) actorIds.add(h.actorUserId);
+      if (r.returnContext) actorIds.add(r.returnContext.actorUserId);
+    }
+    if (actorIds.size > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: [...actorIds] } },
+        select: { id: true, name: true },
+      });
+      const nameById = new Map(users.map((u) => [u.id, u.name]));
+      for (const r of results) {
+        for (const h of r.previousHandlers) {
+          h.actorName = nameById.get(h.actorUserId) ?? 'Unknown';
+        }
+        if (r.returnContext) {
+          r.returnContext.actorName =
+            nameById.get(r.returnContext.actorUserId) ?? 'Unknown';
+        }
+      }
+    }
   }
 
   // 5. Batch-resolve human-readable reference numbers (eliminates raw UUIDs in UI)
@@ -615,7 +730,7 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
     const refMap = new Map<string, string>();
     const idsBy = (type: string) => results.filter((r) => r.recordType === type).map((r) => r.recordId);
 
-    const [ipas, ipcs, vars, cps, tis, corrs, rfqs, quots, pos, sis, exps, cns] = await Promise.all([
+    const [ipas, ipcs, vars, cps, tis, corrs, eis, rfqs, quots, pos, sis, exps, cns] = await Promise.all([
       idsBy('ipa').length > 0
         ? prisma.ipa.findMany({ where: { id: { in: idsBy('ipa') } }, select: { id: true, referenceNumber: true } })
         : [],
@@ -633,6 +748,9 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
         : [],
       idsBy('correspondence').length > 0
         ? prisma.correspondence.findMany({ where: { id: { in: idsBy('correspondence') } }, select: { id: true, referenceNumber: true, subject: true } })
+        : [],
+      idsBy('engineer_instruction').length > 0
+        ? prisma.engineerInstruction.findMany({ where: { id: { in: idsBy('engineer_instruction') } }, select: { id: true, referenceNumber: true, title: true } })
         : [],
       idsBy('rfq').length > 0
         ? prisma.rFQ.findMany({ where: { id: { in: idsBy('rfq') } }, select: { id: true, referenceNumber: true, rfqNumber: true } })
@@ -660,6 +778,7 @@ const myApprovalsQuery = protectedProcedure.query(async ({ ctx }) => {
     for (const r of cps) if (r.referenceNumber) refMap.set(r.id, r.referenceNumber);
     for (const r of tis) refMap.set(r.id, r.referenceNumber ?? r.invoiceNumber);
     for (const r of corrs) refMap.set(r.id, r.referenceNumber ?? r.subject);
+    for (const r of eis) refMap.set(r.id, r.referenceNumber ?? r.title);
     for (const r of rfqs) refMap.set(r.id, r.referenceNumber ?? r.rfqNumber);
     for (const r of quots) if (r.quotationRef) refMap.set(r.id, r.quotationRef);
     for (const r of pos) refMap.set(r.id, r.referenceNumber ?? r.poNumber);

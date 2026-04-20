@@ -10,7 +10,16 @@
 
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
-import { CheckCircle2, RotateCcw, XCircle, FileSignature, Send, Eye } from 'lucide-react';
+import {
+  CheckCircle2,
+  RotateCcw,
+  XCircle,
+  FileSignature,
+  Send,
+  Eye,
+  ArrowRight,
+  ClipboardCheck,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -49,7 +58,24 @@ type ApprovalItem = {
   isBreached: boolean;
   templateId: string;
   templateCode: string;
+  templateName: string;
   previousSteps: Array<{ id: string; name: string; orderIndex: number }>;
+  previousHandlers: Array<{
+    stepId: string;
+    stepName: string;
+    outcomeType: string | null;
+    actorUserId: string;
+    actorName: string;
+    action: string;
+    actedAt: string | Date;
+  }>;
+  nextStep: { name: string; outcomeType: string | null } | null;
+  returnContext: {
+    actorUserId: string;
+    actorName: string;
+    comment: string | null;
+    actedAt: string | Date;
+  } | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -118,7 +144,12 @@ const RECORD_TYPE_LABELS: Record<string, string> = {
   cost_proposal: 'Cost Proposal',
   tax_invoice: 'Tax Invoice',
   correspondence: 'Correspondence',
+  engineer_instruction: 'Engineer Instruction',
   quotation: 'Quotation',
+  purchase_order: 'Purchase Order',
+  supplier_invoice: 'Supplier Invoice',
+  expense: 'Expense',
+  credit_note: 'Credit Note',
 };
 
 // ---------------------------------------------------------------------------
@@ -196,6 +227,11 @@ export function ApprovalList() {
                       recordReference={item.recordReference}
                     />
                   </p>
+                  {item.templateName && (
+                    <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                      Workflow: <span className="font-medium text-muted-foreground">{item.templateName}</span>
+                    </p>
+                  )}
                 </div>
                 <SlaStatusBadge
                   slaHours={item.slaHours}
@@ -218,6 +254,21 @@ export function ApprovalList() {
                   </span>
                 )}
               </div>
+
+              {/* Return context — amber callout with returner + reason */}
+              {item.returnContext && (
+                <ReturnCallout context={item.returnContext} />
+              )}
+
+              {/* Previous handlers strip */}
+              {item.previousHandlers.length > 0 && (
+                <HandlersStrip handlers={item.previousHandlers} />
+              )}
+
+              {/* Next-step preview */}
+              {item.nextStep && (
+                <NextStepLine nextStep={item.nextStep} />
+              )}
 
               {/* Action buttons */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -284,6 +335,7 @@ function RecordLink({ recordType, recordId, projectId, recordReference }: { reco
     cost_proposal: 'Cost Proposal',
     tax_invoice: 'Tax Invoice',
     correspondence: 'Correspondence',
+    engineer_instruction: 'Engineer Instruction',
     quotation: 'Quotation',
     purchase_order: 'Purchase Order',
     supplier_invoice: 'Supplier Invoice',
@@ -299,6 +351,7 @@ function RecordLink({ recordType, recordId, projectId, recordReference }: { reco
     cost_proposal: `/projects/${projectId}/commercial/cost-proposals/${recordId}`,
     tax_invoice: `/projects/${projectId}/commercial/invoices/${recordId}`,
     correspondence: `/projects/${projectId}/commercial/correspondence/${recordId}`,
+    engineer_instruction: `/projects/${projectId}/commercial/engineer-instructions/${recordId}`,
     quotation: `/projects/${projectId}/procurement/quotations/${recordId}`,
     purchase_order: `/projects/${projectId}/procurement/purchase-orders/${recordId}`,
     supplier_invoice: `/projects/${projectId}/procurement/supplier-invoices/${recordId}`,
@@ -325,7 +378,7 @@ function RecordLink({ recordType, recordId, projectId, recordReference }: { reco
 // OutcomeIcon — icon matching the step's semantic purpose
 // ---------------------------------------------------------------------------
 
-function OutcomeIcon({ outcomeType, className }: { outcomeType?: string; className?: string }) {
+function OutcomeIcon({ outcomeType, className }: { outcomeType?: string | undefined; className?: string | undefined }) {
   switch (outcomeType) {
     case 'review':
       return <Eye className={className} />;
@@ -333,7 +386,163 @@ function OutcomeIcon({ outcomeType, className }: { outcomeType?: string; classNa
       return <FileSignature className={className} />;
     case 'issue':
       return <Send className={className} />;
+    case 'acknowledge':
+      return <ClipboardCheck className={className} />;
     default:
       return <CheckCircle2 className={className} />;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Return callout — amber block with returner name + full comment
+// ---------------------------------------------------------------------------
+
+function ReturnCallout({
+  context,
+}: {
+  context: {
+    actorName: string;
+    comment: string | null;
+    actedAt: string | Date;
+  };
+}) {
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 px-3 py-2 space-y-1">
+      <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+        Returned by {context.actorName}
+        <span className="font-normal text-amber-700/70 dark:text-amber-300/70">
+          {' '}
+          · {formatActedAt(context.actedAt)}
+        </span>
+      </p>
+      {context.comment && (
+        <p className="text-xs text-amber-700 dark:text-amber-300 italic whitespace-pre-wrap">
+          &ldquo;{context.comment}&rdquo;
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Handlers strip — "Already touched by: ✓ Sara · ↺ Khalid · ✓ Ahmed"
+// ---------------------------------------------------------------------------
+
+type HandlerChip = {
+  stepName: string;
+  outcomeType: string | null;
+  actorName: string;
+  action: string;
+  actedAt: string | Date;
+};
+
+function HandlersStrip({ handlers }: { handlers: HandlerChip[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <span className="shrink-0">Already touched by:</span>
+      {handlers.map((h, i) => (
+        <span key={`${h.actedAt.toString()}-${i}`} className="inline-flex items-center gap-0.5">
+          {i > 0 && <span className="text-muted-foreground/40">·</span>}
+          <HandlerChipIcon handler={h} />
+          <span
+            className={
+              h.action === 'returned' || h.action === 'return'
+                ? 'text-amber-700 dark:text-amber-400 font-medium'
+                : 'text-foreground font-medium'
+            }
+            title={`${handlerLabel(h)} at "${h.stepName}" · ${formatActedAt(h.actedAt)}`}
+          >
+            {firstName(h.actorName)}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function HandlerChipIcon({ handler }: { handler: HandlerChip }) {
+  const cls = 'h-3 w-3 shrink-0';
+  if (handler.action === 'returned' || handler.action === 'return') {
+    return <RotateCcw className={`${cls} text-amber-600 dark:text-amber-400`} />;
+  }
+  if (handler.action === 'resubmitted') {
+    return <ArrowRight className={`${cls} text-blue-600 dark:text-blue-400`} />;
+  }
+  if (handler.action === 'submit' || handler.action === 'started') {
+    return <Send className={`${cls} text-blue-600 dark:text-blue-400`} />;
+  }
+  // approve / approved → the step's outcome icon (approve / review / sign / issue)
+  return (
+    <OutcomeIcon
+      outcomeType={handler.outcomeType ?? undefined}
+      className={`${cls} text-emerald-600 dark:text-emerald-400`}
+    />
+  );
+}
+
+function handlerLabel(h: HandlerChip): string {
+  if (h.action === 'returned' || h.action === 'return') return 'Returned';
+  if (h.action === 'resubmitted') return 'Re-submitted';
+  if (h.action === 'submit' || h.action === 'started') return 'Submitted';
+  if (h.action === 'approved' || h.action === 'approve') {
+    switch (h.outcomeType) {
+      case 'review':
+        return 'Reviewed';
+      case 'sign':
+        return 'Signed';
+      case 'issue':
+        return 'Issued';
+      case 'acknowledge':
+        return 'Acknowledged';
+      default:
+        return 'Approved';
+    }
+  }
+  return h.action;
+}
+
+// ---------------------------------------------------------------------------
+// Next-step preview
+// ---------------------------------------------------------------------------
+
+function NextStepLine({
+  nextStep,
+}: {
+  nextStep: { name: string; outcomeType: string | null };
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <ArrowRight className="h-3 w-3 shrink-0" />
+      <span>
+        Next:{' '}
+        <span className="font-medium text-foreground">{nextStep.name}</span>
+      </span>
+      {nextStep.outcomeType && (
+        <OutcomeIcon
+          outcomeType={nextStep.outcomeType}
+          className="h-3 w-3 shrink-0 text-muted-foreground/70"
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+function firstName(full: string): string {
+  const trimmed = full.trim();
+  if (!trimmed) return 'Unknown';
+  return trimmed.split(/\s+/)[0] ?? trimmed;
+}
+
+function formatActedAt(at: string | Date): string {
+  const d = typeof at === 'string' ? new Date(at) : at;
+  return d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
