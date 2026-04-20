@@ -8,3 +8,4 @@ export * from './tax-invoice';
 export * from './correspondence';
 export * from './invoice-collection';
 export * from './dashboard';
+export * from './forecast';

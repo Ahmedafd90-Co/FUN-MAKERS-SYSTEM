@@ -13,6 +13,7 @@ import { correspondenceRouter } from './correspondence';
 import { commercialDashboardRouter } from './dashboard';
 import { invoiceCollectionRouter } from './invoice-collection';
 import { engineerInstructionRouter } from './engineer-instruction';
+import { forecastRouter } from './forecast';
 
 export const commercialRouter = router({
   ipa: ipaRouter,
@@ -24,4 +25,5 @@ export const commercialRouter = router({
   dashboard: commercialDashboardRouter,
   invoiceCollection: invoiceCollectionRouter,
   engineerInstruction: engineerInstructionRouter,
+  forecast: forecastRouter,
 });

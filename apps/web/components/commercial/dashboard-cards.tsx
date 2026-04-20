@@ -10,7 +10,11 @@ import {
 } from 'lucide-react';
 
 import { trpc } from '@/lib/trpc-client';
-import { DASHBOARD_DISPLAY_IDS, PERCENTAGE_KPI_IDS } from '@fmksa/core/commercial/dashboard/kpi-definitions';
+import {
+  DASHBOARD_DISPLAY_IDS,
+  FORECAST_VS_ACTUAL_DISPLAY_IDS,
+  PERCENTAGE_KPI_IDS,
+} from '@fmksa/core/commercial/dashboard/kpi-definitions';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,6 +39,7 @@ function formatPercent(value: string | number): string {
 const LABEL_OVERRIDES: Record<string, string> = {
   budget: 'Contract Value',
   revised_budget: 'Revised Contract Value',
+  total_claimed: 'Actual IPA Achieved',
 };
 
 // ---------------------------------------------------------------------------
@@ -392,6 +397,33 @@ export function DashboardCards({ projectId }: { projectId: string }) {
           })}
         </div>
       </section>
+
+      {/* --------------------------------------------------------------- */}
+      {/* Forecast vs Actual — commercial plan comparison                 */}
+      {/* --------------------------------------------------------------- */}
+      {FORECAST_VS_ACTUAL_DISPLAY_IDS.some((id) => kpis.data!.kpis[id]?.value != null) && (
+        <section>
+          <div className="flex items-baseline justify-between mb-4 pb-2 border-b">
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Forecast vs Actual</h3>
+              <span className="text-xs text-muted-foreground">{kpis.data.currency}</span>
+            </div>
+            <Link
+              href={`${basePath}/forecast`}
+              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+            >
+              Manage forecast →
+            </Link>
+          </div>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+            {FORECAST_VS_ACTUAL_DISPLAY_IDS.map((kpiId) => {
+              const kpi = kpis.data!.kpis[kpiId];
+              if (!kpi) return null;
+              return <KpiCard key={kpiId} kpi={kpi} projectId={params.id} />;
+            })}
+          </div>
+        </section>
+      )}
 
       {/* --------------------------------------------------------------- */}
       {/* Register Summary — secondary reference section                  */}
