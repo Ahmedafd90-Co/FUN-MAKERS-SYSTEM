@@ -112,13 +112,21 @@ describe('seed idempotency', () => {
       CASCADE
     `;
 
+    // [D1 DIAGNOSTIC — remove after row-counts failure is root-caused]
+    // Baseline after TRUNCATE. If anything here is non-zero, state is leaking
+    // through the CASCADE and the idempotency assertion is comparing dirty runs.
+    const postTruncateCounts = await snapshotCounts();
+    console.log('[D1] post-TRUNCATE:', JSON.stringify(postTruncateCounts));
+
     // --- First seed run ---
     await runFullSeed();
     firstRunCounts = await snapshotCounts();
+    console.log('[D1] post-first-seed:', JSON.stringify(firstRunCounts));
 
     // --- Second seed run (must be identical) ---
     await runFullSeed();
     secondRunCounts = await snapshotCounts();
+    console.log('[D1] post-second-seed:', JSON.stringify(secondRunCounts));
   }, 60_000); // generous timeout for two full seed runs
 
   afterAll(async () => {
