@@ -16,6 +16,14 @@
  *   Revised Contract Value:     27,500,000.00
  *   Submitted Variation Impact:  2,500,000.00
  *   Approved Variation Impact:   1,200,000.00
+ *
+ * Forecast (plan of record):
+ *   Period 1:  4,500,000.00   (actual 4,500,000 — on plan)
+ *   Period 2:  3,000,000.00   (actual 2,700,000 — behind by 300,000)
+ *   Period 3:  3,500,000.00   (no actual yet — current month)
+ *   Total Forecasted IPA:          11,000,000.00
+ *   Actual IPA Achieved:            7,200,000.00
+ *   Variance vs Forecast:          -3,800,000.00 (behind)
  */
 import type { PrismaClient } from '@prisma/client';
 
@@ -424,7 +432,52 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
     },
   });
 
+  // ---------------------------------------------------------------------------
+  // IPA Forecast — per-period plan of record
+  //
+  // Three periods seeded. Pairs with the two existing IPAs to demonstrate
+  // variance in both directions plus a forward-looking period with no actual.
+  //   Period 1 (Feb): forecast 4.5M   actual 4.5M  → on plan
+  //   Period 2 (Mar): forecast 3.0M   actual 2.7M  → behind plan (-0.3M)
+  //   Period 3 (Apr): forecast 3.5M   actual  —    → planned, not yet claimed
+  //
+  // Forecast is plan data — no PostingEvent emitted.
+  // ---------------------------------------------------------------------------
+  await prisma.ipaForecast.create({
+    data: {
+      projectId: project.id,
+      periodNumber: 1,
+      periodStart: new Date('2026-02-01'),
+      forecastAmount: 4500000,
+      currency,
+      notes: 'Baseline plan — Period 1.',
+      createdBy: actor,
+    },
+  });
+  await prisma.ipaForecast.create({
+    data: {
+      projectId: project.id,
+      periodNumber: 2,
+      periodStart: new Date('2026-03-01'),
+      forecastAmount: 3000000,
+      currency,
+      notes: 'Baseline plan — Period 2.',
+      createdBy: actor,
+    },
+  });
+  await prisma.ipaForecast.create({
+    data: {
+      projectId: project.id,
+      periodNumber: 3,
+      periodStart: new Date('2026-04-01'),
+      forecastAmount: 3500000,
+      currency,
+      notes: 'Baseline plan — Period 3 (current).',
+      createdBy: actor,
+    },
+  });
+
   console.log(
-    '  ✓ Commercial demo data seeded (2 IPAs, 2 IPCs, 2 Invoices, 1 Collection, 2 Variations, 7 posting events)',
+    '  ✓ Commercial demo data seeded (2 IPAs, 2 IPCs, 2 Invoices, 1 Collection, 2 Variations, 3 IpaForecasts, 7 posting events)',
   );
 }

@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { ForecastThisPeriodStrip } from '@/components/commercial/forecast-this-period-strip';
 
 type FilterState = {
   statusFilter: string[];
@@ -107,6 +108,8 @@ export default function IpaListPage() {
           </Link>
         }
       />
+
+      <ForecastThisPeriodStrip projectId={projectId} />
 
       <RegisterFilterBar
         statuses={IPA_STATUSES}
