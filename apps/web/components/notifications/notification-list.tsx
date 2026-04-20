@@ -50,6 +50,7 @@ type NotificationItem = {
   templateCode: string;
   subject: string;
   body: string;
+  payloadJson: unknown;
   channel: string;
   status: string;
   sentAt: Date | null;
@@ -63,35 +64,69 @@ type NotificationListProps = {
 
 // ---------------------------------------------------------------------------
 // Navigation helper: derive resource URL from notification metadata
+//
+// Payload-driven first. Any notification whose payloadJson carries the
+// triple (recordTypeCode, recordId, projectId) deep-links straight to the
+// record's detail page — no matter which templateCode produced it. This
+// is what makes workflow notifications actually useful: clicking opens
+// the record rather than a generic queue.
 // ---------------------------------------------------------------------------
 
+const RECORD_TYPE_ROUTES: Record<
+  string,
+  (projectId: string, recordId: string) => string
+> = {
+  cost_proposal: (p, id) => `/projects/${p}/commercial/cost-proposals/${id}`,
+  variation: (p, id) => `/projects/${p}/commercial/variations/${id}`,
+  ipa: (p, id) => `/projects/${p}/commercial/ipa/${id}`,
+  ipc: (p, id) => `/projects/${p}/commercial/ipc/${id}`,
+  tax_invoice: (p, id) => `/projects/${p}/commercial/invoices/${id}`,
+  correspondence: (p, id) => `/projects/${p}/commercial/correspondence/${id}`,
+  engineer_instruction: (p, id) =>
+    `/projects/${p}/commercial/engineer-instructions/${id}`,
+  purchase_order: (p, id) => `/projects/${p}/procurement/purchase-orders/${id}`,
+  rfq: (p, id) => `/projects/${p}/procurement/rfq/${id}`,
+  quotation: (p, id) => `/projects/${p}/procurement/quotations/${id}`,
+  supplier_invoice: (p, id) =>
+    `/projects/${p}/procurement/supplier-invoices/${id}`,
+  credit_note: (p, id) => `/projects/${p}/procurement/credit-notes/${id}`,
+  expense: (p, id) => `/projects/${p}/procurement/expenses/${id}`,
+};
+
+function readString(payload: unknown, key: string): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const v = (payload as Record<string, unknown>)[key];
+  return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
 function getResourceUrl(notification: NotificationItem): string | null {
+  const payload = notification.payloadJson;
+
+  // 1. Payload-driven deep link — works for any notification that carries
+  //    the required context, regardless of templateCode. `recordTypeCode`
+  //    is the routing-safe raw recordType; we also accept `recordType` as
+  //    a fallback when older seed rows stashed it in snake_case.
+  const recordTypeCode =
+    readString(payload, 'recordTypeCode') ?? readString(payload, 'recordType');
+  const recordId = readString(payload, 'recordId');
+  const projectId = readString(payload, 'projectId');
+  if (recordTypeCode && recordId && projectId) {
+    const builder = RECORD_TYPE_ROUTES[recordTypeCode];
+    if (builder) return builder(projectId, recordId);
+  }
+
+  // 2. Template-code-driven fallbacks for notifications that don't carry
+  //    record context.
   const code = notification.templateCode;
+  if (code === 'document_signed') return '/documents';
+  if (code === 'posting_exception') return '/admin/posting-exceptions';
+  if (code === 'user_created' || code === 'user_deactivated') return '/admin/users';
 
-  // Workflow notifications — step assigned goes to approvals queue,
-  // outcome notifications (approved/rejected/returned) also go there
-  // since the user may have multiple pending items.
-  if (code.startsWith('workflow_')) {
-    return '/approvals';
-  }
+  // 3. Workflow templates without payload context land on the queue so
+  //    clicking still does something useful.
+  if (code.startsWith('workflow_')) return '/approvals';
 
-  // Document notifications link to the documents view
-  if (code === 'document_signed') {
-    return '/documents';
-  }
-
-  // Posting exception → admin posting exceptions
-  if (code === 'posting_exception') {
-    return '/admin/posting-exceptions';
-  }
-
-  // System / admin notifications
-  if (code === 'user_created' || code === 'user_deactivated') {
-    return '/admin/users';
-  }
-
-  // Fallback: link to notifications page itself so clicking always does
-  // something (mark-as-read at minimum) instead of a dead end.
+  // 4. Last-resort fallback — still interactive (mark-as-read works).
   return '/notifications';
 }
 

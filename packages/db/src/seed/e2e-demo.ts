@@ -888,7 +888,9 @@ export async function seedE2eDemo(prisma: PrismaClient) {
       body: 'A new Cost Proposal (CP-E2E-001) is pending your review on FMKSA-2026-001.',
       payloadJson: {
         recordType: 'cost_proposal',
+        recordTypeCode: 'cost_proposal',
         recordId: costProposal.id,
+        projectId: project.id,
         action: 'review',
       },
       channel: 'in_app',
@@ -923,7 +925,9 @@ export async function seedE2eDemo(prisma: PrismaClient) {
       body: 'Engineer Instruction EI-E2E-001 was returned for clarification.',
       payloadJson: {
         recordType: 'engineer_instruction',
+        recordTypeCode: 'engineer_instruction',
         recordId: engineerInstruction.id,
+        projectId: project.id,
         action: 'clarify',
       },
       channel: 'in_app',
