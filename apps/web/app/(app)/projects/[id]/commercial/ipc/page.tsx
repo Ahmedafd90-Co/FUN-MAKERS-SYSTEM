@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 type FilterState = {
   statusFilter: string[];
@@ -93,6 +94,13 @@ export default function IpcListPage() {
       : {}),
   } as Parameters<typeof trpc.commercial.ipc.list.useQuery>[0]);
 
+  const recordIds = (data?.items ?? []).map((ipc) => ipc.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'ipc', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -145,6 +153,7 @@ export default function IpcListPage() {
                 <TableHead variant="compact" className="text-right">Certified Amount</TableHead>
                 <TableHead variant="compact" className="text-right">Net Certified</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -182,6 +191,13 @@ export default function IpcListPage() {
                   </TableCell>
                   <TableCell>
                     <CommercialStatusBadge status={ipc.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[ipc.id]}
+                      recordStatus={ipc.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(ipc.createdAt).toLocaleDateString()}

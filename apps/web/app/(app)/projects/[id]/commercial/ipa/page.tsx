@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { RegisterFilterBar } from '@/components/commercial/register-filter-bar';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 type FilterState = {
   statusFilter: string[];
@@ -93,6 +94,13 @@ export default function IpaListPage() {
       : {}),
   } as Parameters<typeof trpc.commercial.ipa.list.useQuery>[0]);
 
+  const recordIds = (data?.items ?? []).map((ipa) => ipa.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'ipa', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -145,6 +153,7 @@ export default function IpaListPage() {
                 <TableHead variant="compact" className="text-right">Gross Amount</TableHead>
                 <TableHead variant="compact" className="text-right">Net Claimed</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -177,6 +186,13 @@ export default function IpaListPage() {
                   </TableCell>
                   <TableCell>
                     <CommercialStatusBadge status={ipa.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[ipa.id]}
+                      recordStatus={ipa.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(ipa.createdAt).toLocaleDateString()}

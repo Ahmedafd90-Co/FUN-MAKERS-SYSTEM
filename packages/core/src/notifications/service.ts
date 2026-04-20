@@ -301,6 +301,7 @@ export async function listForUser(
     templateCode: string;
     subject: string;
     body: string;
+    payloadJson: unknown;
     channel: string;
     status: string;
     sentAt: Date | null;
@@ -347,6 +348,7 @@ export async function listForUser(
       templateCode: true,
       subject: true,
       body: true,
+      payloadJson: true,
       channel: true,
       status: true,
       sentAt: true,

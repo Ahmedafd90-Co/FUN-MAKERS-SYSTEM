@@ -57,3 +57,21 @@ export function outcomeProgressLabel(outcomeType?: string | null): string {
   };
   return labels[outcomeType ?? 'approve'] ?? 'Approving...';
 }
+
+/**
+ * Short noun form — one word for compact cells.
+ *
+ * Used by the detail-page summary strip where we need "Review · PM Review"
+ * as a tight one-liner. `outcomeActionLabel` returns "Complete Review" which
+ * is too long for the summary cell.
+ */
+export function outcomeShortLabel(outcomeType?: string | null): string {
+  const labels: Record<string, string> = {
+    review: 'Review',
+    approve: 'Approve',
+    sign: 'Sign',
+    issue: 'Issue',
+    acknowledge: 'Acknowledge',
+  };
+  return labels[outcomeType ?? 'approve'] ?? 'Approve';
+}

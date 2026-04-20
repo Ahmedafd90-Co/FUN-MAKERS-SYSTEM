@@ -17,6 +17,7 @@ import { trpc } from '@/lib/trpc-client';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProcurementStatusBadge } from '@/components/procurement/procurement-status-badge';
+import { WorkflowRegisterCell } from '@/components/workflow/workflow-register-cell';
 
 function formatMoney(val: unknown): string {
   const num =
@@ -48,6 +49,13 @@ export default function PurchaseOrderListPage() {
   const items = data ?? [];
   const total = items.length;
   const paged = items.slice(page * pageSize, (page + 1) * pageSize);
+
+  const recordIds = paged.map((po: any) => po.id);
+  const { data: workflowMap, isLoading: workflowLoading } =
+    trpc.workflow.instances.listByRecords.useQuery(
+      { recordType: 'purchase_order', recordIds },
+      { enabled: recordIds.length > 0 },
+    );
 
   return (
     <div className="space-y-4">
@@ -98,6 +106,7 @@ export default function PurchaseOrderListPage() {
                 <TableHead variant="compact">Vendor</TableHead>
                 <TableHead variant="compact" className="text-right">Total</TableHead>
                 <TableHead variant="compact">Status</TableHead>
+                <TableHead variant="compact">Workflow</TableHead>
                 <TableHead variant="compact">Delivery</TableHead>
                 <TableHead variant="compact">Created</TableHead>
               </TableRow>
@@ -131,6 +140,13 @@ export default function PurchaseOrderListPage() {
                   </TableCell>
                   <TableCell>
                     <ProcurementStatusBadge status={po.status} />
+                  </TableCell>
+                  <TableCell>
+                    <WorkflowRegisterCell
+                      instance={workflowMap?.[po.id]}
+                      recordStatus={po.status}
+                      isLoading={workflowLoading}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {po.deliveryDate

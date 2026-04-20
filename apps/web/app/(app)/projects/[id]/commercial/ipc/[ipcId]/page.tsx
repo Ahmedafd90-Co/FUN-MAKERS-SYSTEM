@@ -15,6 +15,10 @@ import { CommercialStatusBadge } from '@/components/commercial/status-badge';
 import { TransitionActions } from '@/components/commercial/transition-actions';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
+import {
+  deriveWorkflowSummary,
+  WorkflowSummaryValue,
+} from '@/lib/workflow-summary';
 import { formatMoney, Field, SummaryItem, SummaryStrip } from '@/components/commercial/shared';
 
 export default function IpcDetailPage() {
@@ -62,17 +66,7 @@ export default function IpcDetailPage() {
     );
   }
 
-  const workflowLabel = workflowData
-    ? workflowData.status === 'approved'
-      ? 'Approved'
-      : workflowData.status === 'rejected'
-        ? 'Rejected'
-        : workflowData.status === 'returned'
-          ? 'Returned'
-          : 'In Progress'
-    : data.status === 'draft'
-      ? 'Not started'
-      : '—';
+  const workflowSummary = deriveWorkflowSummary(workflowData, data.status);
 
   // IPA label — prefer referenceNumber, fall back to period-based label so
   // the link never reads "Linked IPA" in the UI.
@@ -155,7 +149,10 @@ export default function IpcDetailPage() {
           value={`${formatMoney(data.retentionAmount)} ${data.currency}`}
         />
         <SummaryItem label="Status" value={<CommercialStatusBadge status={data.status} />} />
-        <SummaryItem label="Workflow" value={workflowLabel} />
+        <SummaryItem
+          label="Workflow"
+          value={<WorkflowSummaryValue summary={workflowSummary} />}
+        />
         <SummaryItem
           label="Certification Date"
           value={new Date(data.certificationDate).toLocaleDateString()}

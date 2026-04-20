@@ -27,7 +27,9 @@ import { registerConvergenceHandlers } from '../workflow/convergence-handlers';
 // ---------------------------------------------------------------------------
 
 /**
- * Load a workflow instance with its template, steps, and actions.
+ * Load a workflow instance with its template, steps, actions, and project.
+ * Project is included so notification payloads can carry the real project
+ * name/code rather than the project UUID.
  */
 async function loadInstance(instanceId: string) {
   return (prisma as any).workflowInstance.findUnique({
@@ -40,6 +42,9 @@ async function loadInstance(instanceId: string) {
       },
       actions: {
         orderBy: { actedAt: 'asc' },
+      },
+      project: {
+        select: { id: true, code: true, name: true },
       },
     },
   });
@@ -57,6 +62,155 @@ async function buildRecipients(
     select: { id: true, name: true },
   });
   return users as Array<{ id: string; name: string }>;
+}
+
+/**
+ * Fetch the human name for an actor user ID. Returns null if the user
+ * cannot be found (deleted / orphaned action).
+ */
+async function resolveActorName(userId: string): Promise<string | null> {
+  const user = await (prisma as any).user.findUnique({
+    where: { id: userId },
+    select: { name: true },
+  });
+  return (user?.name as string | null) ?? null;
+}
+
+/**
+ * Map a workflow recordType to a human-readable label used in notification
+ * subjects/bodies. Kept in sync with the same label table in
+ * apps/web/components/approvals/approval-list.tsx.
+ */
+const RECORD_TYPE_LABELS: Record<string, string> = {
+  cost_proposal: 'Cost Proposal',
+  variation: 'Variation',
+  ipa: 'IPA',
+  ipc: 'IPC',
+  tax_invoice: 'Tax Invoice',
+  correspondence: 'Correspondence',
+  engineer_instruction: 'Engineer Instruction',
+  rfq: 'RFQ',
+  quotation: 'Quotation',
+  purchase_order: 'Purchase Order',
+  supplier_invoice: 'Supplier Invoice',
+  expense: 'Expense',
+  credit_note: 'Credit Note',
+  vendor_contract: 'Vendor Contract',
+  framework_agreement: 'Framework Agreement',
+};
+
+function humanizeRecordType(recordType: string): string {
+  return RECORD_TYPE_LABELS[recordType] ?? recordType;
+}
+
+/**
+ * Resolve the human-readable reference number for a record by type.
+ * Returns null when the record has no reference field populated (e.g.
+ * still in draft) so callers can fall back to a short ID.
+ */
+async function resolveRecordRef(
+  recordType: string,
+  recordId: string,
+): Promise<string | null> {
+  try {
+    switch (recordType) {
+      case 'cost_proposal': {
+        const r = await (prisma as any).costProposal.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true },
+        });
+        return r?.referenceNumber ?? null;
+      }
+      case 'variation': {
+        const r = await (prisma as any).variation.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, title: true },
+        });
+        return r?.referenceNumber ?? r?.title ?? null;
+      }
+      case 'ipa': {
+        const r = await (prisma as any).ipa.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true },
+        });
+        return r?.referenceNumber ?? null;
+      }
+      case 'ipc': {
+        const r = await (prisma as any).ipc.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true },
+        });
+        return r?.referenceNumber ?? null;
+      }
+      case 'tax_invoice': {
+        const r = await (prisma as any).taxInvoice.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, invoiceNumber: true },
+        });
+        return r?.referenceNumber ?? r?.invoiceNumber ?? null;
+      }
+      case 'correspondence': {
+        const r = await (prisma as any).correspondence.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, subject: true },
+        });
+        return r?.referenceNumber ?? r?.subject ?? null;
+      }
+      case 'engineer_instruction': {
+        const r = await (prisma as any).engineerInstruction.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, title: true },
+        });
+        return r?.referenceNumber ?? r?.title ?? null;
+      }
+      case 'rfq': {
+        const r = await (prisma as any).rFQ.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, rfqNumber: true },
+        });
+        return r?.referenceNumber ?? r?.rfqNumber ?? null;
+      }
+      case 'quotation': {
+        const r = await (prisma as any).quotation.findUnique({
+          where: { id: recordId },
+          select: { quotationRef: true },
+        });
+        return r?.quotationRef ?? null;
+      }
+      case 'purchase_order': {
+        const r = await (prisma as any).purchaseOrder.findUnique({
+          where: { id: recordId },
+          select: { referenceNumber: true, poNumber: true },
+        });
+        return r?.referenceNumber ?? r?.poNumber ?? null;
+      }
+      case 'supplier_invoice': {
+        const r = await (prisma as any).supplierInvoice.findUnique({
+          where: { id: recordId },
+          select: { invoiceNumber: true },
+        });
+        return r?.invoiceNumber ?? null;
+      }
+      case 'expense': {
+        const r = await (prisma as any).expense.findUnique({
+          where: { id: recordId },
+          select: { title: true },
+        });
+        return r?.title ?? null;
+      }
+      case 'credit_note': {
+        const r = await (prisma as any).creditNote.findUnique({
+          where: { id: recordId },
+          select: { creditNoteNumber: true },
+        });
+        return r?.creditNoteNumber ?? null;
+      }
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,14 +251,24 @@ async function handleStepApproved(payload: WorkflowEventPayload): Promise<void> 
   const recipients = await buildRecipients(approverIds);
   if (recipients.length === 0) return;
 
+  const recordRef = (await resolveRecordRef(recordType, recordId)) ?? recordId.slice(0, 8);
+  const project = instance.project as { id: string; code: string; name: string };
+
   await notify({
     templateCode: 'workflow_step_assigned',
     recipients,
     payload: {
+      // Template vars — human-readable so rendered subject/body read cleanly
       stepName: currentStep.name,
-      recordType,
-      recordRef: recordId,
-      projectName: projectId, // real name resolved in later phase
+      recordType: humanizeRecordType(recordType),
+      recordRef,
+      projectName: project.name,
+      // Routing context — raw IDs consumed by the notifications UI to deep-link
+      recordTypeCode: recordType,
+      recordId,
+      projectId: project.id,
+      projectCode: project.code,
+      instanceId,
     },
     idempotencyKey: `workflow.stepApproved:${instanceId}:${currentStepId}`,
     channels: ['in_app', 'email'],
@@ -125,14 +289,26 @@ async function handleWorkflowApproved(payload: WorkflowEventPayload): Promise<vo
   const recipients = await buildRecipients([startedBy]);
   if (recipients.length === 0) return;
 
+  const [recordRef, actorName] = await Promise.all([
+    resolveRecordRef(recordType, recordId),
+    resolveActorName(payload.actorUserId),
+  ]);
+  const project = instance.project as { id: string; code: string; name: string };
+
   await notify({
     templateCode: 'workflow_approved',
     recipients,
     payload: {
-      recordType,
-      recordRef: recordId,
-      actorName: payload.actorUserId,
-      projectName: payload.projectId,
+      recordType: humanizeRecordType(recordType),
+      recordRef: recordRef ?? recordId.slice(0, 8),
+      actorName: actorName ?? 'an approver',
+      projectName: project.name,
+      recordTypeCode: recordType,
+      recordId,
+      projectId: project.id,
+      projectCode: project.code,
+      actorUserId: payload.actorUserId,
+      instanceId,
     },
     idempotencyKey: `workflow.approved:${instanceId}:final`,
     channels: ['in_app', 'email'],
@@ -153,15 +329,27 @@ async function handleWorkflowRejected(payload: WorkflowEventPayload): Promise<vo
   const recipients = await buildRecipients([startedBy]);
   if (recipients.length === 0) return;
 
+  const [recordRef, actorName] = await Promise.all([
+    resolveRecordRef(recordType, recordId),
+    resolveActorName(payload.actorUserId),
+  ]);
+  const project = instance.project as { id: string; code: string; name: string };
+
   await notify({
     templateCode: 'workflow_rejected',
     recipients,
     payload: {
-      recordType,
-      recordRef: recordId,
-      actorName: payload.actorUserId,
-      projectName: payload.projectId,
+      recordType: humanizeRecordType(recordType),
+      recordRef: recordRef ?? recordId.slice(0, 8),
+      actorName: actorName ?? 'an approver',
+      projectName: project.name,
       comment: comment ?? '',
+      recordTypeCode: recordType,
+      recordId,
+      projectId: project.id,
+      projectCode: project.code,
+      actorUserId: payload.actorUserId,
+      instanceId,
     },
     idempotencyKey: `workflow.rejected:${instanceId}:final`,
     channels: ['in_app', 'email'],
@@ -185,15 +373,27 @@ async function handleWorkflowReturned(payload: WorkflowEventPayload): Promise<vo
   const recipients = await buildRecipients(recipientIds);
   if (recipients.length === 0) return;
 
+  const [recordRef, actorName] = await Promise.all([
+    resolveRecordRef(recordType, recordId),
+    resolveActorName(actorUserId),
+  ]);
+  const project = instance.project as { id: string; code: string; name: string };
+
   await notify({
     templateCode: 'workflow_returned',
     recipients,
     payload: {
-      recordType,
-      recordRef: recordId,
-      actorName: actorUserId,
-      projectName: payload.projectId,
+      recordType: humanizeRecordType(recordType),
+      recordRef: recordRef ?? recordId.slice(0, 8),
+      actorName: actorName ?? 'an approver',
+      projectName: project.name,
       comment: comment ?? '',
+      recordTypeCode: recordType,
+      recordId,
+      projectId: project.id,
+      projectCode: project.code,
+      actorUserId,
+      instanceId,
     },
     idempotencyKey: `workflow.returned:${instanceId}:final`,
     channels: ['in_app', 'email'],
@@ -246,13 +446,27 @@ export async function notifyPostingException(
 
   if (recipients.length === 0) return;
 
+  // Resolve the human project name if we have a projectId; fall back to
+  // "Unknown" otherwise. The raw id stays on the payload for any client that
+  // wants to link to the project.
+  let projectName = 'Unknown';
+  if (projectId) {
+    const project = await (prisma as any).project.findUnique({
+      where: { id: projectId },
+      select: { name: true },
+    });
+    if (project?.name) projectName = project.name as string;
+  }
+
   await notify({
     templateCode: 'posting_exception',
     recipients,
     payload: {
       eventType,
-      projectName: projectId ?? 'Unknown',
+      projectName,
       reason: reason ?? 'See posting exceptions queue',
+      projectId: projectId ?? null,
+      postingEventId: eventId,
     },
     idempotencyKey: `posting.exception:${eventId}`,
     channels: ['in_app', 'email'],

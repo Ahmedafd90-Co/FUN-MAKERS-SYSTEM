@@ -38,6 +38,7 @@ import { SummaryModule } from './summary-module';
 import { SignalRow } from './signal-row';
 import { PortfolioList } from './portfolio-list';
 import { ActivityStream } from './activity-stream';
+import { WorkflowBand } from './workflow-band';
 
 type DashboardCardsProps = {
   /** First name / display name from server-side session. Avoids a client
@@ -108,6 +109,7 @@ export function DashboardCards({ userName }: DashboardCardsProps) {
     commercialSignals,
     procurementSignals,
     adminSignals,
+    workflowBand,
   } = data;
 
   // Feature-block context — surfaces the single most important thing.
@@ -191,6 +193,9 @@ export function DashboardCards({ userName }: DashboardCardsProps) {
           <FeatureBlock {...featureBlock} />
         </div>
       </div>
+
+      {/* Workflow band — operational workflow visibility (W4) */}
+      <WorkflowBand data={workflowBand} />
 
       {/* Portfolio + Activity row */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-12">
