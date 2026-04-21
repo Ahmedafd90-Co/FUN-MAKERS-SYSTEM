@@ -92,7 +92,20 @@ function buildKpiValue(def: KpiDefinition, computedValue: Prisma.Decimal | null)
 // Main KPI computation
 // ---------------------------------------------------------------------------
 
-export async function getFinancialKpis(projectId: string): Promise<FinancialKpisResult> {
+/**
+ * @param projectId
+ * @param now injectable "now" — defaults to new Date(). Tests supply a fixed
+ *            instant so forecast "this month" and to-date calculations are
+ *            deterministic.
+ */
+export async function getFinancialKpis(
+  projectId: string,
+  now: Date = new Date(),
+): Promise<FinancialKpisResult> {
+  // Calendar-month bounds for "forecast_this_month" KPI
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
   // -----------------------------------------------------------------------
   // Parallel database queries — one round-trip via Promise.all
   // -----------------------------------------------------------------------
@@ -112,6 +125,9 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
     poCommitted,
     siApproved,
     expApproved,
+    forecastTotalAgg,
+    forecastToDateAgg,
+    forecastThisMonth,
   ] = await Promise.all([
     // Project metadata (currency + financial fields)
     prisma.project.findUniqueOrThrow({
@@ -241,6 +257,28 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
       },
       _sum: { amount: true },
     }),
+
+    // KPI: forecast_total — all forecast rows for the project
+    prisma.ipaForecast.aggregate({
+      where: { projectId },
+      _sum: { forecastAmount: true },
+    }),
+
+    // KPI: ipa_forecast_variance / ipa_forecast_attainment
+    // To-date forecast = forecasts whose periodStart has already begun.
+    prisma.ipaForecast.aggregate({
+      where: { projectId, periodStart: { lte: now } },
+      _sum: { forecastAmount: true },
+    }),
+
+    // KPI: forecast_this_month — forecast whose periodStart falls in current month
+    prisma.ipaForecast.findFirst({
+      where: {
+        projectId,
+        periodStart: { gte: monthStart, lt: monthEnd },
+      },
+      select: { forecastAmount: true },
+    }),
   ]);
 
   // -----------------------------------------------------------------------
@@ -299,6 +337,21 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
     ? revisedBudget.minus(committedCost)
     : null;
 
+  // Forecast KPIs
+  const forecastTotal = toDecimal(forecastTotalAgg._sum.forecastAmount);
+  const forecastToDate = toDecimal(forecastToDateAgg._sum.forecastAmount);
+  const forecastThisMonthValue = forecastThisMonth
+    ? toDecimal(forecastThisMonth.forecastAmount)
+    : null;
+  // Variance: actual (total_claimed) - to-date forecast. Honest interpretation:
+  // signals timing gaps (current period not yet claimed) as well as real gaps.
+  const forecastVariance = claimed.minus(forecastToDate);
+  // Attainment: explicit null-on-zero-forecast policy — no NaN/Infinity.
+  // UI renders null as "Not set".
+  const forecastAttainment: Prisma.Decimal | null = forecastToDate.isZero()
+    ? null
+    : claimed.dividedBy(forecastToDate).times(100);
+
   // -----------------------------------------------------------------------
   // Build response — consume KPI definitions as single source of truth
   // -----------------------------------------------------------------------
@@ -353,6 +406,18 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
         break;
       case 'remaining_budget':
         computedValue = remainingBudget;
+        break;
+      case 'forecast_total':
+        computedValue = forecastTotal;
+        break;
+      case 'forecast_this_month':
+        computedValue = forecastThisMonthValue;
+        break;
+      case 'ipa_forecast_variance':
+        computedValue = forecastVariance;
+        break;
+      case 'ipa_forecast_attainment':
+        computedValue = forecastAttainment;
         break;
       default:
         computedValue = null;

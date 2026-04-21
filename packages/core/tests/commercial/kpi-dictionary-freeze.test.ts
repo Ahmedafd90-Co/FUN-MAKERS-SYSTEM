@@ -110,9 +110,11 @@ describe('KPI Dictionary Freeze', () => {
       }
     });
 
-    it('collection_rate is the only percentage KPI', () => {
+    it('PERCENTAGE_KPI_IDS contains the expected percentage KPIs', () => {
+      // collection_rate (M2) and ipa_forecast_attainment (commercial forecast lane)
       expect(PERCENTAGE_KPI_IDS.has('collection_rate')).toBe(true);
-      expect(PERCENTAGE_KPI_IDS.size).toBe(1);
+      expect(PERCENTAGE_KPI_IDS.has('ipa_forecast_attainment')).toBe(true);
+      expect(PERCENTAGE_KPI_IDS.size).toBe(2);
     });
 
     it('no currency KPI is marked as percentage', () => {
@@ -226,9 +228,11 @@ describe('KPI Dictionary Freeze', () => {
       }
     });
 
-    it('dictionary contains exactly 15 KPIs (all supported)', () => {
-      expect(KPI_DEFINITIONS).toHaveLength(15);
-      expect(getSupportedKpis()).toHaveLength(15);
+    it('dictionary contains exactly 19 KPIs (all supported)', () => {
+      // 15 baseline + 4 added in commercial forecast lane
+      // (forecast_total, forecast_this_month, ipa_forecast_variance, ipa_forecast_attainment)
+      expect(KPI_DEFINITIONS).toHaveLength(19);
+      expect(getSupportedKpis()).toHaveLength(19);
       expect(getBlockedKpis()).toHaveLength(0);
     });
 

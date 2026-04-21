@@ -407,8 +407,9 @@ describe('Financial KPI Service', () => {
       expect(submittedVarDef.statusFilter).toEqual([...VAR_SUBMITTED_PLUS]);
     });
 
-    it('getSupportedKpis returns all 15 KPIs as supported', () => {
-      expect(getSupportedKpis()).toHaveLength(15);
+    it('getSupportedKpis returns all 19 KPIs as supported', () => {
+      // 15 baseline + 4 added in commercial forecast lane
+      expect(getSupportedKpis()).toHaveLength(19);
     });
 
     it('getBlockedKpis returns 0 blocked KPIs', () => {
