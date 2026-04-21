@@ -329,8 +329,19 @@ export async function getBudgetSummary(projectId: string) {
       budgetAmount,
       committedAmount,
       actualAmount,
-      remainingAmount: budgetAmount - committedAmount,
-      varianceAmount: budgetAmount - actualAmount,
+      // Truth-first definitions (Path A, 2026-04-21):
+      //   consumed       = committed + actual
+      //   remainingAmount = budget − consumed
+      //   varianceAmount  = consumed − budget
+      //                     (negative = under budget, positive = over)
+      //
+      // These hold because absorbSupplierInvoiceActual now releases the PO
+      // commitment progressively as invoices land, so committed + actual no
+      // longer double-count a PO that has been invoiced. Before that fix
+      // these formulas would have over-consumed and this comment would be
+      // lying.
+      remainingAmount: budgetAmount - committedAmount - actualAmount,
+      varianceAmount: committedAmount + actualAmount - budgetAmount,
       notes: line.notes,
       // Import provenance — non-null when this line was written by an import commit.
       // lastImportedAmount is the frozen "what the sheet said" value and is NOT
@@ -343,9 +354,17 @@ export async function getBudgetSummary(projectId: string) {
     };
   });
 
-  // remainingBudget = internalRevised - totalCommitted
-  // (committed = obligations placed: POs, subcontracts — conservative metric)
-  const remainingBudget = internalRevised - totalCommitted;
+  // Summary Remaining must reconcile with the rows above it. The row formula
+  // is budget − committed − actual, so the summary is the same equation
+  // applied to line totals: totalBudgeted − totalCommitted − totalActual.
+  //
+  // The previous implementation (internalRevised − totalCommitted) mixed the
+  // header envelope with line-level commitments and ignored actuals, which
+  // meant the summary Remaining and the sum of row Remainings could not
+  // agree. `internalRevised` is still exposed as its own KPI for operators
+  // who care about the envelope versus allocated deltas.
+  const remainingBudget = totalBudgeted - totalCommitted - totalActual;
+  const totalVariance = totalCommitted + totalActual - totalBudgeted;
 
   return {
     projectId: budget.projectId,
@@ -358,6 +377,7 @@ export async function getBudgetSummary(projectId: string) {
     totalCommitted,
     totalActual,
     remainingBudget,
+    totalVariance,
     lines,
   };
 }

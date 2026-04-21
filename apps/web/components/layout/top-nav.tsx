@@ -63,9 +63,15 @@ function getNavItems(
 // Future module nav items — rendered as subtle placeholders.
 // Commercial and Procurement are project-scoped modules accessed via project workspace,
 // so they do NOT appear here.
+//
+// "Budget Dashboard" (not plain "Budget") — per-project Budget is already
+// shipped and accessed from the project workspace. What's still pending is a
+// cross-project budget dashboard surface. Labeling the placeholder "Budget"
+// made users believe budget functionality was unshipped; the disambiguated
+// label tells the truth.
 const futureModuleItems: Array<{ label: string; module: string }> = [
   { label: 'Materials', module: 'Module 4' },
-  { label: 'Budget', module: 'Module 5' },
+  { label: 'Budget Dashboard', module: 'Module 5' },
   { label: 'Cashflow', module: 'Module 6' },
   { label: 'Reports', module: 'Module 7' },
 ];

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Wallet, ShieldOff } from 'lucide-react';
+import { ArrowLeft, Wallet, ShieldOff, AlertTriangle, ExternalLink } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -180,23 +180,95 @@ export default function ProjectBudgetPage() {
             </CardContent>
           </Card>
 
-          {/* Open exceptions banner */}
-          {exceptions && exceptions.length > 0 && (
-            <Card className="border-destructive/40 bg-destructive/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-destructive">
-                  {exceptions.length} open absorption exception
-                  {exceptions.length > 1 ? 's' : ''}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  One or more budget absorptions failed and are pending manual
-                  resolution. Totals above may not reflect those amounts.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Open exceptions banner — truthful version:
+              Shows count, total unresolved amount, affected categories, and
+              an explicit statement that these amounts are EXCLUDED from the
+              totals above (not just "may not reflect"). Absorption failures
+              mean the BudgetLine was never updated, so totals are definitively
+              missing this money. The CTA routes to the admin review surface. */}
+          {exceptions && exceptions.length > 0 && (() => {
+            // Sum unresolved amounts (string-safe; some may be null if the
+            // source record was since deleted — we fall back silently rather
+            // than throwing).
+            const unresolvedTotal = exceptions.reduce((acc, ex) => {
+              const n = ex.sourceAmount ? parseFloat(ex.sourceAmount) : 0;
+              return Number.isFinite(n) ? acc + n : acc;
+            }, 0);
+            const missingAmounts = exceptions.some((ex) => ex.sourceAmount == null);
+            const categoryNames = Array.from(
+              new Set(
+                exceptions
+                  .map((ex) => ex.categoryName)
+                  .filter((n): n is string => !!n),
+              ),
+            );
+            const unknownCategoryCount = exceptions.filter(
+              (ex) => !ex.categoryName,
+            ).length;
+            return (
+              <Card className="border-destructive/40 bg-destructive/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-destructive flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    {exceptions.length} open absorption exception
+                    {exceptions.length > 1 ? 's' : ''}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
+                        Unresolved amount
+                      </p>
+                      <p className="font-mono tabular-nums font-semibold">
+                        {formatMoney(unresolvedTotal)}
+                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                          {currency}
+                        </span>
+                      </p>
+                      {missingAmounts && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Some source records could not be read; actual total
+                          may be higher.
+                        </p>
+                      )}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
+                        Affected categor{categoryNames.length === 1 ? 'y' : 'ies'}
+                      </p>
+                      <p>
+                        {categoryNames.length > 0
+                          ? categoryNames.join(', ')
+                          : 'No category could be resolved — see exception detail.'}
+                        {unknownCategoryCount > 0 && categoryNames.length > 0 && (
+                          <span className="text-muted-foreground">
+                            {' '}
+                            (+{unknownCategoryCount} with no resolved category)
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground border-t pt-3">
+                    These amounts are{' '}
+                    <span className="font-semibold">excluded</span> from the
+                    Committed / Actual / Remaining / Variance totals above.
+                    Absorption failed at posting time, so the budget lines
+                    were never updated. Resolve each exception to correct the
+                    totals.
+                  </p>
+                  <Link
+                    href="/admin/absorption-exceptions"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
+                  >
+                    Review in Admin → Absorption Exceptions
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Budget lines */}
           <Card>
@@ -227,6 +299,17 @@ export default function ProjectBudgetPage() {
                       {summary.lines.map((line) => {
                         const remaining = line.remainingAmount;
                         const variance = line.varianceAmount;
+                        // Variance sign convention (Path A):
+                        //   variance = committed + actual − budget
+                        //   positive = over budget  → destructive
+                        //   zero     = on budget    → neutral
+                        //   negative = under budget → muted
+                        // A leading "+" on over-budget lines makes the sign
+                        // legible without relying on color alone.
+                        const varianceLabel =
+                          variance > 0
+                            ? `+${formatMoney(variance)}`
+                            : formatMoney(variance);
                         return (
                           <TableRow key={line.id}>
                             <TableCell className="text-sm">
@@ -253,10 +336,14 @@ export default function ProjectBudgetPage() {
                             </TableCell>
                             <TableCell
                               className={`text-right font-mono tabular-nums text-sm ${
-                                variance < 0 ? 'text-destructive' : ''
+                                variance > 0
+                                  ? 'text-destructive font-semibold'
+                                  : variance < 0
+                                    ? 'text-muted-foreground'
+                                    : ''
                               }`}
                             >
-                              {formatMoney(variance)}
+                              {varianceLabel}
                             </TableCell>
                           </TableRow>
                         );

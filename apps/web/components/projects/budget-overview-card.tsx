@@ -212,7 +212,12 @@ export function BudgetOverviewCard({
                         </TableHeader>
                         <TableBody>
                           {lines.map((line) => {
-                            const lineRemaining = line.budgetAmount - line.committedAmount;
+                            // Use the service-computed remainingAmount
+                            // (budget − committed − actual) so this card
+                            // reconciles with the Budget page and the summary
+                            // Remaining KPI. Recomputing inline drifts the
+                            // moment the service definition evolves.
+                            const lineRemaining = line.remainingAmount;
                             const isImported = line.importBatchId != null;
                             const hasDrift =
                               line.lastImportedAmount != null &&
