@@ -110,18 +110,25 @@ function StatusBadge({ status }: { status: string }) {
 
 type AbsorptionExceptionListProps = {
   onSelectException: (id: string) => void;
+  /** Pre-filter to a single project (driven by ?project=<uuid> URL param from the Budget-page banner CTA). */
+  initialProjectId?: string | undefined;
+  /** Pre-select the status filter (driven by ?status= URL param). */
+  initialStatus?: 'open' | 'resolved' | 'all' | undefined;
 };
 
 export function AbsorptionExceptionList({
   onSelectException,
+  initialProjectId,
+  initialStatus,
 }: AbsorptionExceptionListProps) {
-  const [statusFilter, setStatusFilter] = useState<string>('open');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus ?? 'open');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [moduleFilter, setModuleFilter] = useState<string>('all');
   const [page, setPage] = useState(0);
   const take = 25;
 
   const queryInput = {
+    projectId: initialProjectId,
     status:
       statusFilter === 'open'
         ? ('open' as const)
@@ -146,6 +153,19 @@ export function AbsorptionExceptionList({
         title="Absorption Exceptions"
         description="Budget absorption failures across all projects. Open exceptions mean budget lines are not tracking committed or actual costs."
       />
+
+      {/* Project-filter indicator — shown when arrived via Budget-page CTA. */}
+      {initialProjectId && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">Filtered to one project.</span>
+          <Link
+            href="/admin/absorption-exceptions"
+            className="text-primary hover:underline"
+          >
+            Show all projects
+          </Link>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">

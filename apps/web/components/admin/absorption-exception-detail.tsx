@@ -205,20 +205,65 @@ export function AbsorptionExceptionDetail({
                     exception.sourceRecordType,
                     exception.sourceRecordId,
                   );
-                  return href ? (
-                    <Link
-                      href={href}
-                      className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
-                    >
-                      {exception.sourceRecordType}/{exception.sourceRecordId.slice(0, 8)}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  ) : (
-                    <span className="font-mono text-xs">
-                      {exception.sourceRecordType}/{exception.sourceRecordId}
-                    </span>
+                  // Only render a clickable link when the source record
+                  // actually exists. Demo placeholders and deleted records
+                  // must not offer a link that 404s — we show the reference
+                  // as muted text and add a note below.
+                  const canLink = href && exception.sourceRecordExists;
+                  return (
+                    <div className="flex flex-col gap-0.5">
+                      {canLink ? (
+                        <Link
+                          href={href}
+                          className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline w-fit"
+                        >
+                          {exception.sourceRecordType}/{exception.sourceRecordId.slice(0, 8)}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {exception.sourceRecordType}/{exception.sourceRecordId.slice(0, 8)}
+                        </span>
+                      )}
+                      {!exception.sourceRecordExists && (
+                        <span className="text-[11px] text-muted-foreground italic">
+                          Source record no longer available
+                        </span>
+                      )}
+                    </div>
                   );
                 })()}
+
+                {/* Source amount + category — stamped at absorption time
+                    (Path β). Null when the absorber failed before these were
+                    readable. Showing "Unknown" is the honest fallback. */}
+                <span className="text-muted-foreground">Source Amount</span>
+                {exception.sourceAmount != null ? (
+                  <span className="font-mono tabular-nums">
+                    {Number(exception.sourceAmount).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground italic">Unknown</span>
+                )}
+
+                <span className="text-muted-foreground">Category</span>
+                {exception.categoryName || exception.categoryCode ? (
+                  <span>
+                    {exception.categoryName ?? exception.categoryCode}
+                    {exception.categoryName && exception.categoryCode && (
+                      <span className="text-xs font-mono text-muted-foreground ml-1.5">
+                        ({exception.categoryCode})
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    Not determined
+                  </span>
+                )}
 
                 <span className="text-muted-foreground">Created At</span>
                 <span>{formatDateTime(exception.createdAt)}</span>

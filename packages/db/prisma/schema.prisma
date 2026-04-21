@@ -683,6 +683,26 @@ model BudgetAbsorptionException {
   resolvedBy       String?   @map("resolved_by")
   createdAt        DateTime  @default(now()) @map("created_at")
 
+  // Truth-snapshot columns (Path β, 2026-04-21) — populated by absorbers at
+  // exception-creation time. These let the Budget-page banner and Admin
+  // detail view tell a coherent story even when the source record has been
+  // deleted, renumbered, or (for demo seeds) never existed. Without them the
+  // UI had to re-derive amount/category by chasing the source record by id,
+  // which silently degraded to "Unknown amount / No category" on any lookup
+  // failure.
+  //
+  //   sourceAmount = amount of the source record at failure time
+  //                  (PO.totalAmount, SI.totalAmount, Expense.amount,
+  //                  CreditNote.amount). Nullable for exceptions that
+  //                  failed before an amount could be read.
+  //
+  //   categoryCode = ProcurementCategory.code the absorber knew when it
+  //                  recorded the exception. Nullable for no_category /
+  //                  no_procurement_category cases where no category was
+  //                  ever resolvable.
+  sourceAmount     Decimal?  @map("source_amount") @db.Decimal(18, 2)
+  categoryCode     String?   @map("category_code")
+
   project Project @relation(fields: [projectId], references: [id])
 
   @@index([projectId, status])

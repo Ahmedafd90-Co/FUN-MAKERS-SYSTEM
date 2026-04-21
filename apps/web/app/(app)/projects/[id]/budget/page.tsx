@@ -21,6 +21,19 @@ import { trpc } from '@/lib/trpc-client';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 
+// Reason-code labels for the Budget-page banner. Short phrasing that fits
+// inside a per-cohort line like "1× Budget line missing (Travel)". Keep in
+// sync with the longer admin-detail phrasing in
+// apps/web/components/admin/absorption-exception-detail.tsx.
+const REASON_BANNER_LABELS: Record<string, string> = {
+  no_category: 'Source record had no procurement category',
+  no_procurement_category: 'Procurement category not found',
+  no_budget_category: 'Budget category missing for this procurement code',
+  no_budget_line: 'Budget line missing',
+  no_budget: 'Project has no budget configured',
+  internal_error: 'Absorption crashed — manual review required',
+};
+
 function formatMoney(val: unknown): string {
   const num =
     typeof val === 'string'
@@ -180,31 +193,65 @@ export default function ProjectBudgetPage() {
             </CardContent>
           </Card>
 
-          {/* Open exceptions banner — truthful version:
-              Shows count, total unresolved amount, affected categories, and
-              an explicit statement that these amounts are EXCLUDED from the
-              totals above (not just "may not reflect"). Absorption failures
-              mean the BudgetLine was never updated, so totals are definitively
-              missing this money. The CTA routes to the admin review surface. */}
+          {/* Open exceptions banner (Path β, 2026-04-21):
+              Reads sourceAmount + categoryCode directly from the exception
+              row — no fragile late-binding lookup. Groups by reasonCode so
+              the label matches the actual failure mode (we no longer collapse
+              every failure into "No category could be resolved"). Unknown
+              amounts are called out separately rather than summed as 0. The
+              CTA deep-links: one exception → direct to that exception; many
+              → project-filtered admin list. */}
           {exceptions && exceptions.length > 0 && (() => {
-            // Sum unresolved amounts (string-safe; some may be null if the
-            // source record was since deleted — we fall back silently rather
-            // than throwing).
-            const unresolvedTotal = exceptions.reduce((acc, ex) => {
-              const n = ex.sourceAmount ? parseFloat(ex.sourceAmount) : 0;
-              return Number.isFinite(n) ? acc + n : acc;
-            }, 0);
-            const missingAmounts = exceptions.some((ex) => ex.sourceAmount == null);
-            const categoryNames = Array.from(
-              new Set(
-                exceptions
-                  .map((ex) => ex.categoryName)
-                  .filter((n): n is string => !!n),
-              ),
+            // Known/unknown amount split — we never pretend null is 0.
+            let knownTotal = 0;
+            let unknownAmountCount = 0;
+            for (const ex of exceptions) {
+              if (ex.sourceAmount != null) {
+                const n = parseFloat(ex.sourceAmount);
+                if (Number.isFinite(n)) knownTotal += n;
+                else unknownAmountCount += 1;
+              } else {
+                unknownAmountCount += 1;
+              }
+            }
+
+            // Group by reasonCode for the per-cohort description.
+            type Cohort = {
+              reasonCode: string;
+              count: number;
+              categories: Set<string>;
+              unknownCategory: number;
+            };
+            const cohorts = new Map<string, Cohort>();
+            for (const ex of exceptions) {
+              let c = cohorts.get(ex.reasonCode);
+              if (!c) {
+                c = {
+                  reasonCode: ex.reasonCode,
+                  count: 0,
+                  categories: new Set(),
+                  unknownCategory: 0,
+                };
+                cohorts.set(ex.reasonCode, c);
+              }
+              c.count += 1;
+              if (ex.categoryName) c.categories.add(ex.categoryName);
+              else if (ex.categoryCode) c.categories.add(ex.categoryCode);
+              else c.unknownCategory += 1;
+            }
+
+            const cohortList = Array.from(cohorts.values()).sort(
+              (a, b) => b.count - a.count,
             );
-            const unknownCategoryCount = exceptions.filter(
-              (ex) => !ex.categoryName,
-            ).length;
+
+            const single = exceptions.length === 1 ? exceptions[0]! : null;
+            const ctaHref = single
+              ? `/admin/absorption-exceptions?exception=${single.id}`
+              : `/admin/absorption-exceptions?project=${projectId}`;
+            const ctaLabel = single
+              ? 'Review this exception'
+              : 'Review in Admin → Absorption Exceptions';
+
             return (
               <Card className="border-destructive/40 bg-destructive/5">
                 <CardHeader className="pb-3">
@@ -220,34 +267,53 @@ export default function ProjectBudgetPage() {
                       <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
                         Unresolved amount
                       </p>
-                      <p className="font-mono tabular-nums font-semibold">
-                        {formatMoney(unresolvedTotal)}
-                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
-                          {currency}
-                        </span>
-                      </p>
-                      {missingAmounts && (
+                      {knownTotal > 0 || unknownAmountCount === 0 ? (
+                        <p className="font-mono tabular-nums font-semibold">
+                          {formatMoney(knownTotal)}
+                          <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                            {currency}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="font-semibold text-muted-foreground">Unknown</p>
+                      )}
+                      {unknownAmountCount > 0 && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          Some source records could not be read; actual total
-                          may be higher.
+                          {knownTotal > 0 ? '+' : ''}
+                          {unknownAmountCount} with unknown amount
                         </p>
                       )}
                     </div>
                     <div className="sm:col-span-2">
                       <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
-                        Affected categor{categoryNames.length === 1 ? 'y' : 'ies'}
+                        Failure breakdown
                       </p>
-                      <p>
-                        {categoryNames.length > 0
-                          ? categoryNames.join(', ')
-                          : 'No category could be resolved — see exception detail.'}
-                        {unknownCategoryCount > 0 && categoryNames.length > 0 && (
-                          <span className="text-muted-foreground">
-                            {' '}
-                            (+{unknownCategoryCount} with no resolved category)
-                          </span>
-                        )}
-                      </p>
+                      <ul className="space-y-1">
+                        {cohortList.map((c) => {
+                          const catList = Array.from(c.categories);
+                          const catSuffix =
+                            catList.length > 0
+                              ? ` (${catList.join(', ')}${
+                                  c.unknownCategory > 0
+                                    ? `, +${c.unknownCategory} unknown`
+                                    : ''
+                                })`
+                              : c.unknownCategory > 0
+                                ? ` (category not determined)`
+                                : '';
+                          return (
+                            <li key={c.reasonCode} className="leading-snug">
+                              <span className="font-mono tabular-nums text-muted-foreground mr-1.5">
+                                {c.count}×
+                              </span>
+                              <span className="font-medium">
+                                {REASON_BANNER_LABELS[c.reasonCode] ?? c.reasonCode}
+                              </span>
+                              <span className="text-muted-foreground">{catSuffix}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground border-t pt-3">
@@ -259,10 +325,10 @@ export default function ProjectBudgetPage() {
                     totals.
                   </p>
                   <Link
-                    href="/admin/absorption-exceptions"
+                    href={ctaHref}
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
                   >
-                    Review in Admin → Absorption Exceptions
+                    {ctaLabel}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Link>
                 </CardContent>

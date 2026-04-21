@@ -141,17 +141,17 @@ export const budgetRouter = router({
     }),
 
   /**
-   * Query all open exceptions for a project, enriched with the source
-   * record's amount and the resolved budget-category code/name when available.
+   * Query all open exceptions for a project.
    *
-   * The Budget page banner uses these fields to show:
-   *   - total unresolved amount currently NOT reflected in the summary totals
-   *   - which categories are affected
+   * Path β (2026-04-21): amount + category are stored directly on the
+   * exception row (`sourceAmount`, `categoryCode`) by the absorbers at
+   * failure time — no fragile late-binding source-record lookup. We only
+   * enrich with `categoryName` for display, resolved from the `travel`/
+   * `materials`/etc. code via BudgetCategory.
    *
-   * Source amount resolution walks sourceRecordType → fetches the record →
-   * reads its total. Category resolution falls back through SI → SI.PO → PO
-   * when a direct categoryId isn't present, matching the absorption
-   * fallback chain in packages/core/src/budget/absorption.ts.
+   * `sourceAmount` is stringified so Decimal round-trips cleanly through
+   * tRPC (which serializes to JSON). The banner parses it back and treats
+   * null as "unknown — do not sum into the totals".
    */
   openExceptions: projectProcedure
     .input(z.object({ projectId: z.string().uuid() }))
@@ -169,152 +169,29 @@ export const budgetRouter = router({
 
       if (exceptions.length === 0) return [];
 
-      // Collect IDs by source type for batched lookups.
-      const poIds = new Set<string>();
-      const siIds = new Set<string>();
-      const expIds = new Set<string>();
-      const cnIds = new Set<string>();
-      for (const ex of exceptions) {
-        if (ex.sourceRecordType === 'purchase_order') poIds.add(ex.sourceRecordId);
-        else if (ex.sourceRecordType === 'supplier_invoice') siIds.add(ex.sourceRecordId);
-        else if (ex.sourceRecordType === 'expense') expIds.add(ex.sourceRecordId);
-        else if (ex.sourceRecordType === 'credit_note') cnIds.add(ex.sourceRecordId);
-      }
-
-      const [pos, sis, expenses, cns] = await Promise.all([
-        poIds.size
-          ? prisma.purchaseOrder.findMany({
-              where: { id: { in: Array.from(poIds) } },
-              select: { id: true, totalAmount: true, categoryId: true },
+      // Batch-resolve BudgetCategory names for the codes we have.
+      const codes = Array.from(
+        new Set(
+          exceptions
+            .map((e) => e.categoryCode)
+            .filter((c): c is string => !!c),
+        ),
+      );
+      const budgetCats =
+        codes.length > 0
+          ? await prisma.budgetCategory.findMany({
+              where: { code: { in: codes } },
+              select: { code: true, name: true },
             })
-          : Promise.resolve([]),
-        siIds.size
-          ? prisma.supplierInvoice.findMany({
-              where: { id: { in: Array.from(siIds) } },
-              select: {
-                id: true,
-                totalAmount: true,
-                categoryId: true,
-                purchaseOrder: { select: { categoryId: true } },
-              },
-            })
-          : Promise.resolve([]),
-        expIds.size
-          ? prisma.expense.findMany({
-              where: { id: { in: Array.from(expIds) } },
-              select: { id: true, amount: true, categoryId: true },
-            })
-          : Promise.resolve([]),
-        cnIds.size
-          ? prisma.creditNote.findMany({
-              where: { id: { in: Array.from(cnIds) } },
-              select: {
-                id: true,
-                amount: true,
-                supplierInvoice: {
-                  select: {
-                    categoryId: true,
-                    purchaseOrder: { select: { categoryId: true } },
-                  },
-                },
-                purchaseOrder: { select: { categoryId: true } },
-              },
-            })
-          : Promise.resolve([]),
-      ]);
+          : [];
+      const nameByCode = new Map(budgetCats.map((c) => [c.code, c.name]));
 
-      const poMap = new Map(pos.map((p) => [p.id, p]));
-      const siMap = new Map(sis.map((s) => [s.id, s]));
-      const expMap = new Map(expenses.map((e) => [e.id, e]));
-      const cnMap = new Map(cns.map((c) => [c.id, c]));
-
-      // Resolve unique procurement category IDs → budget category code/name via
-      // the procurement-category.code == budget-category.code contract.
-      const procCatIds = new Set<string>();
-      const pushProcCat = (id: string | null | undefined) => {
-        if (id) procCatIds.add(id);
-      };
-      for (const ex of exceptions) {
-        if (ex.sourceRecordType === 'purchase_order') {
-          pushProcCat(poMap.get(ex.sourceRecordId)?.categoryId);
-        } else if (ex.sourceRecordType === 'supplier_invoice') {
-          const si = siMap.get(ex.sourceRecordId);
-          pushProcCat(si?.categoryId ?? si?.purchaseOrder?.categoryId ?? null);
-        } else if (ex.sourceRecordType === 'expense') {
-          pushProcCat(expMap.get(ex.sourceRecordId)?.categoryId);
-        } else if (ex.sourceRecordType === 'credit_note') {
-          const cn = cnMap.get(ex.sourceRecordId);
-          pushProcCat(
-            cn?.supplierInvoice?.categoryId ??
-              cn?.supplierInvoice?.purchaseOrder?.categoryId ??
-              cn?.purchaseOrder?.categoryId ??
-              null,
-          );
-        }
-      }
-
-      let procCatByIdToCode = new Map<string, string>();
-      let budgetCatByCode = new Map<string, { code: string; name: string }>();
-      if (procCatIds.size > 0) {
-        const procCats = await prisma.procurementCategory.findMany({
-          where: { id: { in: Array.from(procCatIds) } },
-          select: { id: true, code: true },
-        });
-        procCatByIdToCode = new Map(procCats.map((c) => [c.id, c.code]));
-        if (procCats.length > 0) {
-          const codes = Array.from(new Set(procCats.map((c) => c.code)));
-          const budgetCats = await prisma.budgetCategory.findMany({
-            where: { code: { in: codes } },
-            select: { code: true, name: true },
-          });
-          budgetCatByCode = new Map(budgetCats.map((c) => [c.code, c]));
-        }
-      }
-
-      return exceptions.map((ex) => {
-        let amount: string | null = null;
-        let procCategoryId: string | null = null;
-
-        if (ex.sourceRecordType === 'purchase_order') {
-          const po = poMap.get(ex.sourceRecordId);
-          if (po) {
-            amount = po.totalAmount.toString();
-            procCategoryId = po.categoryId ?? null;
-          }
-        } else if (ex.sourceRecordType === 'supplier_invoice') {
-          const si = siMap.get(ex.sourceRecordId);
-          if (si) {
-            amount = si.totalAmount.toString();
-            procCategoryId = si.categoryId ?? si.purchaseOrder?.categoryId ?? null;
-          }
-        } else if (ex.sourceRecordType === 'expense') {
-          const e = expMap.get(ex.sourceRecordId);
-          if (e) {
-            amount = e.amount.toString();
-            procCategoryId = e.categoryId ?? null;
-          }
-        } else if (ex.sourceRecordType === 'credit_note') {
-          const cn = cnMap.get(ex.sourceRecordId);
-          if (cn) {
-            amount = cn.amount.toString();
-            procCategoryId =
-              cn.supplierInvoice?.categoryId ??
-              cn.supplierInvoice?.purchaseOrder?.categoryId ??
-              cn.purchaseOrder?.categoryId ??
-              null;
-          }
-        }
-
-        const code = procCategoryId ? procCatByIdToCode.get(procCategoryId) ?? null : null;
-        const budgetCat = code ? budgetCatByCode.get(code) ?? null : null;
-
-        return {
-          ...ex,
-          sourceAmount: amount,
-          categoryCode: code,
-          categoryName: budgetCat?.name ?? null,
-        };
-      });
+      return exceptions.map((ex) => ({
+        ...ex,
+        sourceAmount: ex.sourceAmount?.toString() ?? null,
+        // categoryCode stays as-is from the column
+        categoryName: ex.categoryCode ? nameByCode.get(ex.categoryCode) ?? null : null,
+      }));
     }),
 
   /**
@@ -358,7 +235,19 @@ export const budgetRouter = router({
       return { exceptions, total };
     }),
 
-  /** Get a single absorption exception by ID. */
+  /**
+   * Get a single absorption exception by ID, enriched for the admin detail
+   * sheet. Adds:
+   *   - `categoryName`       — resolved from the stored categoryCode via
+   *                            BudgetCategory (null when no code is stamped
+   *                            or the code has no matching BudgetCategory).
+   *   - `sourceRecordExists` — whether the source record (PO / SI / Expense /
+   *                            CN) still exists by id. The detail sheet uses
+   *                            this to avoid showing a clickable link that
+   *                            404s (demo placeholder ids, deleted records).
+   *
+   * `sourceAmount` is stringified so Decimal round-trips cleanly through tRPC.
+   */
   exceptionDetail: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -373,7 +262,60 @@ export const budgetRouter = router({
       });
 
       if (!exception) throw new TRPCError({ code: 'NOT_FOUND', message: 'Exception not found.' });
-      return exception;
+
+      // Category name — cheap single lookup.
+      let categoryName: string | null = null;
+      if (exception.categoryCode) {
+        const cat = await prisma.budgetCategory.findUnique({
+          where: { code: exception.categoryCode },
+          select: { name: true },
+        });
+        categoryName = cat?.name ?? null;
+      }
+
+      // Source-record existence — one lookup keyed on the source type.
+      let sourceRecordExists = false;
+      try {
+        switch (exception.sourceRecordType) {
+          case 'purchase_order':
+            sourceRecordExists = !!(await prisma.purchaseOrder.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'supplier_invoice':
+            sourceRecordExists = !!(await prisma.supplierInvoice.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'expense':
+            sourceRecordExists = !!(await prisma.expense.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'credit_note':
+            sourceRecordExists = !!(await prisma.creditNote.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          default:
+            sourceRecordExists = false;
+        }
+      } catch {
+        // Unknown source type or malformed id — treat as non-existent; UI
+        // renders the record reference as plain text with a note.
+        sourceRecordExists = false;
+      }
+
+      return {
+        ...exception,
+        sourceAmount: exception.sourceAmount?.toString() ?? null,
+        categoryName,
+        sourceRecordExists,
+      };
     }),
 
   /** Resolve an absorption exception manually. */

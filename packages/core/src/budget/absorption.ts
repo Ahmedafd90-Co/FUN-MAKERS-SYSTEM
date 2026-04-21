@@ -29,6 +29,21 @@ export type AbsorptionResult =
 // Exception helper — replaces silent returns, returns the exception id
 // ---------------------------------------------------------------------------
 
+/**
+ * Record a BudgetAbsorptionException and return its id.
+ *
+ * Truth snapshot (Path β): when the absorber knows the source amount and/or
+ * the procurement category at failure time, it passes them here and we stamp
+ * them onto the row. That way the Budget-page banner and Admin detail don't
+ * have to re-derive them via a late-binding source-record lookup that can
+ * silently fail (demo seeds, deleted records, renumbered ids).
+ *
+ *   sourceAmount         — raw amount of the source record. Accepts Decimal,
+ *                          string, number or null.
+ *   procurementCategoryId — when provided, we resolve it to ProcurementCategory.code
+ *                          and stamp that on the row. If the category isn't
+ *                          findable (orphaned FK), categoryCode stays null.
+ */
 async function recordAbsorptionException(params: {
   projectId: string;
   sourceModule: string;
@@ -38,7 +53,28 @@ async function recordAbsorptionException(params: {
   reasonCode: string;
   message: string;
   severity?: string;
+  sourceAmount?: Prisma.Decimal | string | number | null;
+  procurementCategoryId?: string | null;
 }): Promise<string> {
+  let categoryCode: string | null = null;
+  if (params.procurementCategoryId) {
+    const pc = await prisma.procurementCategory.findUnique({
+      where: { id: params.procurementCategoryId },
+      select: { code: true },
+    });
+    categoryCode = pc?.code ?? null;
+  }
+
+  const sourceAmount =
+    params.sourceAmount == null
+      ? null
+      : new Prisma.Decimal(
+          typeof params.sourceAmount === 'string' ||
+            typeof params.sourceAmount === 'number'
+            ? params.sourceAmount
+            : params.sourceAmount.toString(),
+        );
+
   const ex = await prisma.budgetAbsorptionException.create({
     data: {
       projectId: params.projectId,
@@ -50,6 +86,8 @@ async function recordAbsorptionException(params: {
       message: params.message,
       severity: params.severity ?? 'warning',
       status: 'open',
+      sourceAmount,
+      categoryCode,
     },
   });
   return ex.id;
@@ -175,6 +213,8 @@ export async function absorbPoCommitment(
         absorptionType: 'po_commitment',
         reasonCode: 'no_category',
         message: 'PO has no categoryId — commitment cannot be absorbed into budget.',
+        sourceAmount: po.totalAmount,
+        // no categoryId to stamp — this IS the no-category case
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'PO has no categoryId.' };
     }
@@ -189,6 +229,8 @@ export async function absorbPoCommitment(
         absorptionType: 'po_commitment',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: po.totalAmount,
+        procurementCategoryId: po.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -264,6 +306,7 @@ export async function reversePoCommitment(
         absorptionType: 'po_reversal',
         reasonCode: 'no_category',
         message: 'PO has no categoryId — commitment reversal cannot be applied.',
+        sourceAmount: po.totalAmount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'PO has no categoryId.' };
     }
@@ -278,6 +321,8 @@ export async function reversePoCommitment(
         absorptionType: 'po_reversal',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: po.totalAmount,
+        procurementCategoryId: po.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -359,6 +404,7 @@ export async function absorbSupplierInvoiceActual(
         absorptionType: 'si_actual',
         reasonCode: 'no_category',
         message: 'Supplier invoice has no categoryId and linked PO has no categoryId — actual cost cannot be absorbed.',
+        sourceAmount: si.totalAmount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'SI has no resolvable categoryId.' };
     }
@@ -373,6 +419,8 @@ export async function absorbSupplierInvoiceActual(
         absorptionType: 'si_actual',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: si.totalAmount,
+        procurementCategoryId: categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -470,6 +518,7 @@ export async function absorbExpenseActual(
         absorptionType: 'expense_actual',
         reasonCode: 'no_category',
         message: 'Expense has no categoryId — actual cost cannot be absorbed into budget.',
+        sourceAmount: expense.amount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'Expense has no categoryId.' };
     }
@@ -484,6 +533,8 @@ export async function absorbExpenseActual(
         absorptionType: 'expense_actual',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: expense.amount,
+        procurementCategoryId: expense.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -580,6 +631,7 @@ export async function absorbCreditNoteReversal(
         absorptionType: 'cn_reversal',
         reasonCode: 'no_category',
         message: 'Credit note has no resolvable categoryId — actual cost reversal cannot be applied.',
+        sourceAmount: cn.amount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'CN has no resolvable categoryId.' };
     }
@@ -594,6 +646,8 @@ export async function absorbCreditNoteReversal(
         absorptionType: 'cn_reversal',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: cn.amount,
+        procurementCategoryId: categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }

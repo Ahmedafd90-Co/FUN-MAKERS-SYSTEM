@@ -86,6 +86,7 @@ vi.mock('../../src/audit/service', () => ({
 
 import { getBudgetSummary } from '../../src/budget/service';
 import {
+  absorbPoCommitment,
   absorbSupplierInvoiceActual,
   reversePoCommitment,
 } from '../../src/budget/absorption';
@@ -303,6 +304,69 @@ describe('absorbSupplierInvoiceActual — commitment relief', () => {
 // ---------------------------------------------------------------------------
 // reversePoCommitment — bounded at zero
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Path β — exception row truth snapshot
+// ---------------------------------------------------------------------------
+
+describe('recordAbsorptionException — stamps sourceAmount + categoryCode (Path β)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('absorbPoCommitment with unresolvable budget line stamps amount + categoryCode on the exception row', async () => {
+    // PO exists with a categoryId; budget line resolution will fail, forcing
+    // the recordAbsorptionException path. We expect the new columns on the
+    // created exception row.
+    mockPrisma.purchaseOrder.findUniqueOrThrow.mockResolvedValue({
+      id: 'po-1',
+      categoryId: 'proc-cat-id',
+      totalAmount: new mockPrismaNamespace.Decimal('100000'),
+    });
+    // resolveBudgetLine chain — fail at the budget-line step so the absorber
+    // records an exception with reasonCode='no_budget_line'.
+    mockPrisma.projectBudget.findUnique.mockResolvedValue({ id: 'budget-id' });
+    mockPrisma.procurementCategory.findUnique.mockResolvedValue({ code: 'TRV' });
+    mockPrisma.budgetCategory.findUnique.mockResolvedValue({ id: 'cat-id' });
+    mockPrisma.budgetLine.findUnique.mockResolvedValue(null); // no line for this budget+cat
+
+    // The exception-recording helper looks up ProcurementCategory to resolve
+    // the code — reuse the earlier mock response.
+    mockPrisma.budgetAbsorptionException.create.mockResolvedValue({ id: 'ex-1' });
+
+    const result = await absorbPoCommitment('proj-id', 'po-1', 'actor');
+
+    expect(result.absorbed).toBe(false);
+    if (!result.absorbed) {
+      expect(result.reasonCode).toBe('no_budget_line');
+    }
+
+    const createCall = mockPrisma.budgetAbsorptionException.create.mock.calls[0];
+    expect(createCall).toBeDefined();
+    const data = createCall![0].data;
+    expect(data.sourceAmount.toString()).toBe('100000');
+    expect(data.categoryCode).toBe('TRV');
+    expect(data.reasonCode).toBe('no_budget_line');
+  });
+
+  it('absorber with no categoryId stamps sourceAmount but leaves categoryCode null', async () => {
+    mockPrisma.purchaseOrder.findUniqueOrThrow.mockResolvedValue({
+      id: 'po-2',
+      categoryId: null, // no category at all on the PO
+      totalAmount: new mockPrismaNamespace.Decimal('50000'),
+    });
+    mockPrisma.budgetAbsorptionException.create.mockResolvedValue({ id: 'ex-2' });
+
+    const result = await absorbPoCommitment('proj-id', 'po-2', 'actor');
+
+    expect(result.absorbed).toBe(false);
+    const createCall = mockPrisma.budgetAbsorptionException.create.mock.calls[0];
+    const data = createCall![0].data;
+    expect(data.sourceAmount.toString()).toBe('50000');
+    expect(data.categoryCode).toBeNull();
+    expect(data.reasonCode).toBe('no_category');
+  });
+});
 
 describe('reversePoCommitment — bounded relief', () => {
   beforeEach(() => {
