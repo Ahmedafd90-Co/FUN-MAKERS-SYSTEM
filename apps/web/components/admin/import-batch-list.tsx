@@ -228,6 +228,22 @@ export function ImportBatchList() {
         >
           (.csv)
         </a>
+        <span className="text-muted-foreground/40">|</span>
+        <a
+          href="/api/templates/ipa-forecast?format=xlsx"
+          download
+          className="text-primary hover:underline"
+        >
+          IPA forecast (.xlsx)
+        </a>
+        <span className="text-muted-foreground/40">·</span>
+        <a
+          href="/api/templates/ipa-forecast?format=csv"
+          download
+          className="text-primary hover:underline"
+        >
+          (.csv)
+        </a>
       </div>
 
       <ImportUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />

@@ -462,15 +462,19 @@ export default function ProjectBudgetPage() {
                             : formatMoney(variance);
                         return (
                           <TableRow key={line.id}>
-                            {/* Category: human label first, raw code muted-
-                                small after. Standardized with the Project
-                                Overview budget card so operators see
-                                the same formatting across surfaces. */}
-                            <TableCell className="text-sm">
+                            {/* Category: human label only. Matches the
+                                Project Overview budget card. The raw code
+                                is near-identical to the label for most
+                                categories (e.g. "materials" / "Materials"),
+                                so rendering both read as duplication. The
+                                code stays available in exports and in
+                                admin surfaces; surface-level cells stay
+                                human. */}
+                            <TableCell
+                              className="text-sm"
+                              title={`Code: ${line.categoryCode}`}
+                            >
                               {line.categoryName}
-                              <span className="font-mono text-[11px] text-muted-foreground ml-2">
-                                {line.categoryCode}
-                              </span>
                             </TableCell>
                             <TableCell className="text-right font-mono tabular-nums text-sm">
                               {formatMoney(line.budgetAmount)}

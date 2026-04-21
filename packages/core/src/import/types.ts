@@ -27,6 +27,11 @@ export type ImportConflict =
   | {
       type: 'budget_category_missing';
       categoryCodeFromSheet: string;
+    }
+  | {
+      type: 'ipa_forecast_period_number';
+      existingForecastId: string;
+      existingPeriodNumber: number;
     };
 
 export interface ValidatedRow<TParsed = unknown> {
@@ -58,6 +63,13 @@ export interface ParsedBudgetBaselineRow {
   categoryName?: string;
   budgetAmount: string;
   notes?: string;
+}
+
+export interface ParsedIpaForecastRow {
+  periodNumber: number;
+  periodStart: string; // ISO yyyy-mm-dd
+  forecastAmount: string;
+  notes: string | null;
 }
 
 export interface ParsedIpaHistoryRow {

@@ -17,9 +17,11 @@ import type { ImportType } from '@fmksa/db';
 export const PARSER_VERSIONS: Record<ImportType, string> = {
   budget_baseline: '2026.04.15.01',
   ipa_history: '2026.04.15.01',
+  ipa_forecast: '2026.04.22.01',
 };
 
 export const VALIDATOR_SCHEMA_VERSIONS: Record<ImportType, string> = {
   budget_baseline: '2026.04.15.01',
   ipa_history: '2026.04.15.01',
+  ipa_forecast: '2026.04.22.01',
 };

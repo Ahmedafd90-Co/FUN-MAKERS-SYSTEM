@@ -323,12 +323,24 @@ export const projectsService = {
   /**
    * List projects the user can see. Returns only projects the user is
    * assigned to, or all projects if the user has cross_project.read.
+   *
+   * Test-fixture defense (2026-04-21): the vitest suite writes projects
+   * with stable code prefixes (PROJ-*, PRJ-*, AC-*, TEST-*) that leak
+   * into the shared dev DB — ~140+ rows vs ~4 real projects on
+   * FMKSA-*. Operator-facing UI (admin import dropdown, etc.) was
+   * defaulting to a test project. By default we filter these out; the
+   * `includeTestProjects` flag opts back in for debugging.
    */
   async listProjects(opts: {
     userId: string;
     includeArchived?: boolean | undefined;
+    includeTestProjects?: boolean | undefined;
   }) {
-    const { userId, includeArchived = false } = opts;
+    const {
+      userId,
+      includeArchived = false,
+      includeTestProjects = false,
+    } = opts;
 
     // Check cross-project read
     const crossProject =
@@ -346,13 +358,25 @@ export const projectsService = {
       where.status = { not: 'archived' };
     }
 
+    // Default-exclude test fixtures. Prisma has no regex operator that
+    // works across all adapters, so we use a startsWith-free OR of NOT
+    // filters that Prisma translates to NOT (code LIKE 'PROJ-%') etc.
+    if (!includeTestProjects) {
+      where.NOT = [
+        { code: { startsWith: 'PROJ-' } },
+        { code: { startsWith: 'PRJ-' } },
+        { code: { startsWith: 'AC-' } },
+        { code: { startsWith: 'TEST-' } },
+      ];
+    }
+
     return prisma.project.findMany({
       where,
       include: {
         entity: true,
         currency: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { code: 'asc' },
     });
   },
 };

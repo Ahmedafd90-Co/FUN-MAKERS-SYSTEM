@@ -2201,6 +2201,7 @@ model EngineerInstruction {
 enum ImportType {
   budget_baseline @map("budget_baseline")
   ipa_history     @map("ipa_history")
+  ipa_forecast    @map("ipa_forecast")
 
   @@map("import_type")
 }
