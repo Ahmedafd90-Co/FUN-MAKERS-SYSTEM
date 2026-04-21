@@ -13,7 +13,6 @@ import {
   Menu,
   Users,
   Shield,
-  FolderKanban,
   Building2,
   Database,
   GitBranch,
@@ -31,7 +30,7 @@ import { useState } from 'react';
 const adminNavItems = [
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
-  { label: 'Project Assignments', href: '/admin/assignments', icon: FolderKanban },
+  // Project Assignments hidden — see comment in apps/web/app/(app)/admin/layout.tsx
   { label: 'Entities', href: '/admin/entities', icon: Building2 },
   { label: 'Reference Data', href: '/admin/reference-data', icon: Database },
   { label: 'Workflow Templates', href: '/admin/workflow-templates', icon: GitBranch },

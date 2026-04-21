@@ -63,11 +63,42 @@ function getNavItems(
 // Future module nav items — rendered as subtle placeholders.
 // Commercial and Procurement are project-scoped modules accessed via project workspace,
 // so they do NOT appear here.
-const futureModuleItems: Array<{ label: string; module: string }> = [
-  { label: 'Materials', module: 'Module 4' },
-  { label: 'Budget', module: 'Module 5' },
-  { label: 'Cashflow', module: 'Module 6' },
-  { label: 'Reports', module: 'Module 7' },
+//
+// "Portfolio Budget" (not "Budget" or even "Budget Dashboard") — per-project
+// Budget is already shipped and reached from any project workspace. What's
+// still pending is a cross-project rollup. The old "Budget Dashboard" label
+// still read contradictorily to a user standing on a working per-project
+// Budget page; the explicit "Portfolio" framing + an unambiguous tooltip
+// removes the confusion.
+type FutureModuleItem = {
+  label: string;
+  module: string;
+  /** Explicit scope text shown on hover — explains what the placeholder is actually for. */
+  tooltip: string;
+};
+
+const futureModuleItems: FutureModuleItem[] = [
+  {
+    label: 'Materials',
+    module: 'Module 4',
+    tooltip: 'Materials — coming in Module 4.',
+  },
+  {
+    label: 'Portfolio Budget',
+    module: 'Module 5',
+    tooltip:
+      'Cross-project budget rollup — coming in Module 5. The per-project Budget is already available from any project workspace.',
+  },
+  {
+    label: 'Cashflow',
+    module: 'Module 6',
+    tooltip: 'Cashflow — coming in Module 6.',
+  },
+  {
+    label: 'Reports',
+    module: 'Module 7',
+    tooltip: 'Reports — coming in Module 7.',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -131,13 +162,16 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
             ),
           )}
 
-          {/* Future module placeholders — very subtle */}
+          {/* Future module placeholders — very subtle. The tooltip carries
+              the scope explanation so hovering a placeholder never reads as
+              contradicting a shipped page (e.g. "Portfolio Budget" next to
+              a working per-project Budget). */}
           <div className="hidden lg:flex items-center gap-1 ml-2 border-l border-border pl-2">
             {futureModuleItems.map((item) => (
               <span
                 key={item.label}
                 className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground/40 cursor-default"
-                title={`Coming in ${item.module}`}
+                title={item.tooltip}
               >
                 {item.label}
                 <span className="text-[10px] text-muted-foreground/30">Soon</span>

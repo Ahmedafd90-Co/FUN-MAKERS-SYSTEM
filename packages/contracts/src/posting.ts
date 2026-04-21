@@ -49,6 +49,13 @@ export const ListPostingExceptionsInputSchema = z.object({
   eventType: z.string().optional(),
   skip: z.number().int().nonnegative().default(0),
   take: z.number().int().positive().max(100).default(50),
+  /**
+   * When false (default), exclude fixtures that leak from the vitest suite
+   * (eventType='TEST_EVENT_M1' or sourceRecordType='test_record') so
+   * operators don't see test pollution in the admin view. Set true to opt
+   * back in when debugging the test pipeline itself.
+   */
+  includeTestFixtures: z.boolean().optional().default(false),
 });
 export type ListPostingExceptionsInput = z.infer<
   typeof ListPostingExceptionsInputSchema

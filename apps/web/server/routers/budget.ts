@@ -140,19 +140,58 @@ export const budgetRouter = router({
       });
     }),
 
-  /** Query all open exceptions for a project (admin view). */
+  /**
+   * Query all open exceptions for a project.
+   *
+   * Path β (2026-04-21): amount + category are stored directly on the
+   * exception row (`sourceAmount`, `categoryCode`) by the absorbers at
+   * failure time — no fragile late-binding source-record lookup. We only
+   * enrich with `categoryName` for display, resolved from the `travel`/
+   * `materials`/etc. code via BudgetCategory.
+   *
+   * `sourceAmount` is stringified so Decimal round-trips cleanly through
+   * tRPC (which serializes to JSON). The banner parses it back and treats
+   * null as "unknown — do not sum into the totals".
+   */
   openExceptions: projectProcedure
     .input(z.object({ projectId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       if (!ctx.user.permissions.includes('project.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
-      return prisma.budgetAbsorptionException.findMany({
+
+      const exceptions = await prisma.budgetAbsorptionException.findMany({
         where: {
           projectId: input.projectId,
           status: 'open',
         },
         orderBy: { createdAt: 'desc' },
       });
+
+      if (exceptions.length === 0) return [];
+
+      // Batch-resolve BudgetCategory names for the codes we have.
+      const codes = Array.from(
+        new Set(
+          exceptions
+            .map((e) => e.categoryCode)
+            .filter((c): c is string => !!c),
+        ),
+      );
+      const budgetCats =
+        codes.length > 0
+          ? await prisma.budgetCategory.findMany({
+              where: { code: { in: codes } },
+              select: { code: true, name: true },
+            })
+          : [];
+      const nameByCode = new Map(budgetCats.map((c) => [c.code, c.name]));
+
+      return exceptions.map((ex) => ({
+        ...ex,
+        sourceAmount: ex.sourceAmount?.toString() ?? null,
+        // categoryCode stays as-is from the column
+        categoryName: ex.categoryCode ? nameByCode.get(ex.categoryCode) ?? null : null,
+      }));
     }),
 
   /**
@@ -196,7 +235,19 @@ export const budgetRouter = router({
       return { exceptions, total };
     }),
 
-  /** Get a single absorption exception by ID. */
+  /**
+   * Get a single absorption exception by ID, enriched for the admin detail
+   * sheet. Adds:
+   *   - `categoryName`       — resolved from the stored categoryCode via
+   *                            BudgetCategory (null when no code is stamped
+   *                            or the code has no matching BudgetCategory).
+   *   - `sourceRecordExists` — whether the source record (PO / SI / Expense /
+   *                            CN) still exists by id. The detail sheet uses
+   *                            this to avoid showing a clickable link that
+   *                            404s (demo placeholder ids, deleted records).
+   *
+   * `sourceAmount` is stringified so Decimal round-trips cleanly through tRPC.
+   */
   exceptionDetail: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
@@ -211,7 +262,60 @@ export const budgetRouter = router({
       });
 
       if (!exception) throw new TRPCError({ code: 'NOT_FOUND', message: 'Exception not found.' });
-      return exception;
+
+      // Category name — cheap single lookup.
+      let categoryName: string | null = null;
+      if (exception.categoryCode) {
+        const cat = await prisma.budgetCategory.findUnique({
+          where: { code: exception.categoryCode },
+          select: { name: true },
+        });
+        categoryName = cat?.name ?? null;
+      }
+
+      // Source-record existence — one lookup keyed on the source type.
+      let sourceRecordExists = false;
+      try {
+        switch (exception.sourceRecordType) {
+          case 'purchase_order':
+            sourceRecordExists = !!(await prisma.purchaseOrder.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'supplier_invoice':
+            sourceRecordExists = !!(await prisma.supplierInvoice.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'expense':
+            sourceRecordExists = !!(await prisma.expense.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          case 'credit_note':
+            sourceRecordExists = !!(await prisma.creditNote.findUnique({
+              where: { id: exception.sourceRecordId },
+              select: { id: true },
+            }));
+            break;
+          default:
+            sourceRecordExists = false;
+        }
+      } catch {
+        // Unknown source type or malformed id — treat as non-existent; UI
+        // renders the record reference as plain text with a note.
+        sourceRecordExists = false;
+      }
+
+      return {
+        ...exception,
+        sourceAmount: exception.sourceAmount?.toString() ?? null,
+        categoryName,
+        sourceRecordExists,
+      };
     }),
 
   /** Resolve an absorption exception manually. */

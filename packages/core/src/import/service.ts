@@ -34,11 +34,14 @@ import {
   type ReferenceSnapshot,
   type BudgetReferenceSnapshot,
   type IpaReferenceSnapshot,
+  type IpaForecastReferenceSnapshot,
 } from './reference-snapshot';
 import { validateBudgetBaselineRow } from './validators/budget-baseline';
 import { validateIpaHistoryRow } from './validators/ipa-history';
+import { validateIpaForecastRow } from './validators/ipa-forecast';
 import { commitBudgetBaselineRow } from './committers/budget-baseline';
 import { commitIpaHistoryRow } from './committers/ipa-history';
+import { commitIpaForecastRow } from './committers/ipa-forecast';
 import type { ImportBatchSummary } from './types';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +209,12 @@ export async function validateBatch(batchId: string, actorUserId: string) {
           row.rowNumber,
           raw,
           snapshot as BudgetReferenceSnapshot,
+        );
+      } else if (batch.importType === 'ipa_forecast') {
+        result = validateIpaForecastRow(
+          row.rowNumber,
+          raw,
+          snapshot as IpaForecastReferenceSnapshot,
         );
       } else {
         result = validateIpaHistoryRow(
@@ -400,6 +409,18 @@ export async function commitBatch(batchId: string, actorUserId: string) {
       const result = await prisma.$transaction(async (tx) => {
         if (batch.importType === 'budget_baseline') {
           return await commitBudgetBaselineRow(
+            tx as unknown as Prisma.TransactionClient,
+            {
+              projectId: batch.projectId,
+              batchId: batch.id,
+              importRowId: row.id,
+              rowNumber: row.rowNumber,
+              actorUserId,
+            },
+            row.parsedJson as any,
+          );
+        } else if (batch.importType === 'ipa_forecast') {
+          return await commitIpaForecastRow(
             tx as unknown as Prisma.TransactionClient,
             {
               projectId: batch.projectId,

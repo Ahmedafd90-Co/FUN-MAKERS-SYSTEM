@@ -313,6 +313,8 @@ model Project {
   budget                     ProjectBudget?
   engineerInstructions       EngineerInstruction[]
   budgetAbsorptionExceptions BudgetAbsorptionException[]
+  // Commercial forecast (per-period IPA plan)
+  ipaForecasts               IpaForecast[]
   // Import layer relations
   importBatches              ImportBatch[]
 
@@ -682,6 +684,26 @@ model BudgetAbsorptionException {
   resolvedAt       DateTime? @map("resolved_at")
   resolvedBy       String?   @map("resolved_by")
   createdAt        DateTime  @default(now()) @map("created_at")
+
+  // Truth-snapshot columns (Path β, 2026-04-21) — populated by absorbers at
+  // exception-creation time. These let the Budget-page banner and Admin
+  // detail view tell a coherent story even when the source record has been
+  // deleted, renumbered, or (for demo seeds) never existed. Without them the
+  // UI had to re-derive amount/category by chasing the source record by id,
+  // which silently degraded to "Unknown amount / No category" on any lookup
+  // failure.
+  //
+  //   sourceAmount = amount of the source record at failure time
+  //                  (PO.totalAmount, SI.totalAmount, Expense.amount,
+  //                  CreditNote.amount). Nullable for exceptions that
+  //                  failed before an amount could be read.
+  //
+  //   categoryCode = ProcurementCategory.code the absorber knew when it
+  //                  recorded the exception. Nullable for no_category /
+  //                  no_procurement_category cases where no category was
+  //                  ever resolvable.
+  sourceAmount     Decimal?  @map("source_amount") @db.Decimal(18, 2)
+  categoryCode     String?   @map("category_code")
 
   project Project @relation(fields: [projectId], references: [id])
 
@@ -1109,6 +1131,31 @@ model Ipa {
   @@index([projectId, origin])
   @@index([projectId, periodFrom, periodTo])
   @@map("ipas")
+}
+
+/// Per-period IPA forecast (plan of record).
+/// Anchored to the same periodNumber grain as Ipa — one planned amount
+/// per (projectId, periodNumber). Can exist before the corresponding IPA
+/// is created. Pairs 1:1 with Ipa at query time.
+/// Not a posting-ledger participant — forecast is planning data, not truth.
+model IpaForecast {
+  id             String   @id @default(uuid()) @map("id")
+  projectId      String   @map("project_id")
+  periodNumber   Int      @map("period_number")
+  periodStart    DateTime @map("period_start")
+  forecastAmount Decimal  @map("forecast_amount") @db.Decimal(18, 2)
+  currency       String   @map("currency")
+  notes          String?  @map("notes")
+  createdBy      String   @map("created_by")
+  updatedBy      String?  @map("updated_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, periodNumber])
+  @@index([projectId, periodStart])
+  @@map("ipa_forecasts")
 }
 
 model Ipc {
@@ -2154,6 +2201,7 @@ model EngineerInstruction {
 enum ImportType {
   budget_baseline @map("budget_baseline")
   ipa_history     @map("ipa_history")
+  ipa_forecast    @map("ipa_forecast")
 
   @@map("import_type")
 }

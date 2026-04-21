@@ -29,6 +29,21 @@ export type AbsorptionResult =
 // Exception helper — replaces silent returns, returns the exception id
 // ---------------------------------------------------------------------------
 
+/**
+ * Record a BudgetAbsorptionException and return its id.
+ *
+ * Truth snapshot (Path β): when the absorber knows the source amount and/or
+ * the procurement category at failure time, it passes them here and we stamp
+ * them onto the row. That way the Budget-page banner and Admin detail don't
+ * have to re-derive them via a late-binding source-record lookup that can
+ * silently fail (demo seeds, deleted records, renumbered ids).
+ *
+ *   sourceAmount         — raw amount of the source record. Accepts Decimal,
+ *                          string, number or null.
+ *   procurementCategoryId — when provided, we resolve it to ProcurementCategory.code
+ *                          and stamp that on the row. If the category isn't
+ *                          findable (orphaned FK), categoryCode stays null.
+ */
 async function recordAbsorptionException(params: {
   projectId: string;
   sourceModule: string;
@@ -38,7 +53,28 @@ async function recordAbsorptionException(params: {
   reasonCode: string;
   message: string;
   severity?: string;
+  sourceAmount?: Prisma.Decimal | string | number | null;
+  procurementCategoryId?: string | null;
 }): Promise<string> {
+  let categoryCode: string | null = null;
+  if (params.procurementCategoryId) {
+    const pc = await prisma.procurementCategory.findUnique({
+      where: { id: params.procurementCategoryId },
+      select: { code: true },
+    });
+    categoryCode = pc?.code ?? null;
+  }
+
+  const sourceAmount =
+    params.sourceAmount == null
+      ? null
+      : new Prisma.Decimal(
+          typeof params.sourceAmount === 'string' ||
+            typeof params.sourceAmount === 'number'
+            ? params.sourceAmount
+            : params.sourceAmount.toString(),
+        );
+
   const ex = await prisma.budgetAbsorptionException.create({
     data: {
       projectId: params.projectId,
@@ -50,6 +86,8 @@ async function recordAbsorptionException(params: {
       message: params.message,
       severity: params.severity ?? 'warning',
       status: 'open',
+      sourceAmount,
+      categoryCode,
     },
   });
   return ex.id;
@@ -58,6 +96,42 @@ async function recordAbsorptionException(params: {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Decrement a BudgetLine's committedAmount by `amount`, bounded at 0.
+ *
+ * Returns the actual amount released (≤ amount). Bounded relief means:
+ *   - Never drives committedAmount negative.
+ *   - The returned Decimal lets the caller record exactly what was released
+ *     so audit logs stay honest.
+ *
+ * Used by:
+ *   - reversePoCommitment  (full PO rollback)
+ *   - absorbSupplierInvoiceActual (per-invoice progressive relief, so
+ *     committed + actual stops double-counting as invoices land)
+ *   - absorbCreditNoteReversal (per-CN relief when CN points to a PO and no SI)
+ */
+async function releaseCommitmentBounded(
+  budgetLineId: string,
+  amount: Prisma.Decimal,
+): Promise<Prisma.Decimal> {
+  return prisma.$transaction(async (tx) => {
+    const line = await (tx as any).budgetLine.findUniqueOrThrow({
+      where: { id: budgetLineId },
+      select: { committedAmount: true },
+    });
+    const current = new Prisma.Decimal(line.committedAmount.toString());
+    const released = current.lessThan(amount) ? current : amount;
+    if (released.isZero() || released.isNegative()) {
+      return new Prisma.Decimal(0);
+    }
+    await (tx as any).budgetLine.update({
+      where: { id: budgetLineId },
+      data: { committedAmount: { decrement: released } },
+    });
+    return released;
+  });
+}
 
 /**
  * Resolve a ProcurementCategory id to the matching BudgetLine within a
@@ -139,6 +213,8 @@ export async function absorbPoCommitment(
         absorptionType: 'po_commitment',
         reasonCode: 'no_category',
         message: 'PO has no categoryId — commitment cannot be absorbed into budget.',
+        sourceAmount: po.totalAmount,
+        // no categoryId to stamp — this IS the no-category case
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'PO has no categoryId.' };
     }
@@ -153,6 +229,8 @@ export async function absorbPoCommitment(
         absorptionType: 'po_commitment',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: po.totalAmount,
+        procurementCategoryId: po.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -228,6 +306,7 @@ export async function reversePoCommitment(
         absorptionType: 'po_reversal',
         reasonCode: 'no_category',
         message: 'PO has no categoryId — commitment reversal cannot be applied.',
+        sourceAmount: po.totalAmount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'PO has no categoryId.' };
     }
@@ -242,18 +321,19 @@ export async function reversePoCommitment(
         absorptionType: 'po_reversal',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: po.totalAmount,
+        procurementCategoryId: po.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
 
     const amount = new Prisma.Decimal(po.totalAmount.toString());
 
-    await prisma.budgetLine.update({
-      where: { id: resolved.budgetLine.id },
-      data: {
-        committedAmount: { decrement: amount },
-      },
-    });
+    // Bounded relief: if SIs against this PO have already progressively
+    // released commitment, the residual on the line is < amount and we only
+    // release what remains. Without the bound we'd drive committedAmount
+    // negative when a partially-invoiced PO is cancelled.
+    const released = await releaseCommitmentBounded(resolved.budgetLine.id, amount);
 
     await auditService.log({
       actorUserId,
@@ -266,12 +346,13 @@ export async function reversePoCommitment(
         committedAmount: resolved.budgetLine.committedAmount.toString(),
       },
       afterJson: {
-        committedAmount: resolved.budgetLine.committedAmount.minus(amount).toString(),
+        committedAmount: resolved.budgetLine.committedAmount.minus(released).toString(),
         purchaseOrderId,
-        decrementedBy: amount.toString(),
+        decrementedBy: released.toString(),
+        requestedDecrement: amount.toString(),
       },
     });
-    return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: amount.toString() };
+    return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: released.toString() };
   } catch (err) {
     try {
       const exId = await recordAbsorptionException({
@@ -323,6 +404,7 @@ export async function absorbSupplierInvoiceActual(
         absorptionType: 'si_actual',
         reasonCode: 'no_category',
         message: 'Supplier invoice has no categoryId and linked PO has no categoryId — actual cost cannot be absorbed.',
+        sourceAmount: si.totalAmount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'SI has no resolvable categoryId.' };
     }
@@ -337,6 +419,8 @@ export async function absorbSupplierInvoiceActual(
         absorptionType: 'si_actual',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: si.totalAmount,
+        procurementCategoryId: categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -349,6 +433,28 @@ export async function absorbSupplierInvoiceActual(
         actualAmount: { increment: amount },
       },
     });
+
+    // ---- Commitment relief (truth fix) --------------------------------------
+    // When the SI is linked to a PO, the obligation placed at PO-approval time
+    // is now being realized. Without relief, committedAmount stays up and
+    // actualAmount also goes up, which double-counts consumption (e.g. a
+    // Remaining column computed as budget − committed − actual would
+    // overstate spend). Release on the PO's category line, bounded at 0.
+    let releasedOnLineId: string | null = null;
+    let releasedAmountStr = '0';
+    if (si.purchaseOrder?.categoryId) {
+      const poResolved = await resolveBudgetLine(projectId, si.purchaseOrder.categoryId);
+      if (poResolved.ok) {
+        const released = await releaseCommitmentBounded(poResolved.budgetLine.id, amount);
+        releasedOnLineId = poResolved.budgetLine.id;
+        releasedAmountStr = released.toString();
+      }
+      // If the PO's category can't be resolved, we skip relief silently — the
+      // actual absorption still succeeded and the exception is already
+      // recorded at PO-approval time if the PO couldn't be absorbed in the
+      // first place. Committed stays at whatever it was; no double-count is
+      // introduced because no commitment existed to begin with.
+    }
 
     await auditService.log({
       actorUserId,
@@ -364,6 +470,8 @@ export async function absorbSupplierInvoiceActual(
         actualAmount: resolved.budgetLine.actualAmount.plus(amount).toString(),
         supplierInvoiceId,
         incrementedBy: amount.toString(),
+        commitmentReleased: releasedAmountStr,
+        commitmentReleasedOnLine: releasedOnLineId,
       },
     });
     return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: amount.toString() };
@@ -410,6 +518,7 @@ export async function absorbExpenseActual(
         absorptionType: 'expense_actual',
         reasonCode: 'no_category',
         message: 'Expense has no categoryId — actual cost cannot be absorbed into budget.',
+        sourceAmount: expense.amount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'Expense has no categoryId.' };
     }
@@ -424,6 +533,8 @@ export async function absorbExpenseActual(
         absorptionType: 'expense_actual',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: expense.amount,
+        procurementCategoryId: expense.categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }
@@ -520,6 +631,7 @@ export async function absorbCreditNoteReversal(
         absorptionType: 'cn_reversal',
         reasonCode: 'no_category',
         message: 'Credit note has no resolvable categoryId — actual cost reversal cannot be applied.',
+        sourceAmount: cn.amount,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: 'no_category', message: 'CN has no resolvable categoryId.' };
     }
@@ -534,6 +646,8 @@ export async function absorbCreditNoteReversal(
         absorptionType: 'cn_reversal',
         reasonCode: resolved.reasonCode,
         message: resolved.message,
+        sourceAmount: cn.amount,
+        procurementCategoryId: categoryId,
       });
       return { absorbed: false, exceptionId: exId, reasonCode: resolved.reasonCode, message: resolved.message };
     }

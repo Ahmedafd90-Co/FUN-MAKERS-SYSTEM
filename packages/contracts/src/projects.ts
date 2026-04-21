@@ -49,6 +49,12 @@ export const GetProjectSchema = z.object({
 
 export const ListProjectsSchema = z.object({
   includeArchived: z.boolean().optional().default(false),
+  /**
+   * When false (default), exclude projects whose code matches vitest
+   * fixture patterns (PROJ-*, PRJ-*, AC-*, TEST-*). Opt in when
+   * debugging test projects from the admin surface.
+   */
+  includeTestProjects: z.boolean().optional().default(false),
 });
 
 export type ListProjectsInput = z.infer<typeof ListProjectsSchema>;

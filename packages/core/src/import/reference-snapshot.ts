@@ -32,7 +32,19 @@ export interface IpaReferenceSnapshot {
   }>;
 }
 
-export type ReferenceSnapshot = BudgetReferenceSnapshot | IpaReferenceSnapshot;
+export interface IpaForecastReferenceSnapshot {
+  kind: 'ipa_forecast';
+  existingForecasts: Array<{
+    id: string;
+    periodNumber: number;
+    periodStart: string;
+  }>;
+}
+
+export type ReferenceSnapshot =
+  | BudgetReferenceSnapshot
+  | IpaReferenceSnapshot
+  | IpaForecastReferenceSnapshot;
 
 export async function buildReferenceSnapshot(
   importType: ImportType,
@@ -46,6 +58,23 @@ export async function buildReferenceSnapshot(
     return {
       kind: 'budget_baseline',
       categories: cats.map((c) => ({ code: c.code, name: c.name })),
+    };
+  }
+
+  if (importType === 'ipa_forecast') {
+    const existingForecasts = await (prisma as any).ipaForecast.findMany({
+      where: { projectId },
+      select: { id: true, periodNumber: true, periodStart: true },
+    });
+    return {
+      kind: 'ipa_forecast',
+      existingForecasts: existingForecasts.map(
+        (f: { id: string; periodNumber: number; periodStart: Date }) => ({
+          id: f.id,
+          periodNumber: f.periodNumber,
+          periodStart: f.periodStart.toISOString(),
+        }),
+      ),
     };
   }
 
@@ -96,6 +125,14 @@ export function describeSnapshotDrift(
     const jb = JSON.stringify(b.existingIpas);
     if (ja !== jb) {
       return 'Project IPA set changed since validation (new/removed/edited IPA). Re-validate this batch.';
+    }
+    return null;
+  }
+  if (a.kind === 'ipa_forecast' && b.kind === 'ipa_forecast') {
+    const ja = JSON.stringify(a.existingForecasts);
+    const jb = JSON.stringify(b.existingForecasts);
+    if (ja !== jb) {
+      return 'Project IPA forecast set changed since validation. Re-validate this batch.';
     }
     return null;
   }

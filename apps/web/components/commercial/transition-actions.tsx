@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import {
   Dialog,
@@ -10,7 +11,7 @@ import {
   DialogTitle,
 } from '@fmksa/ui/components/dialog';
 import { Label } from '@fmksa/ui/components/label';
-import { Info } from 'lucide-react';
+import { FileSpreadsheet, Info, Lock } from 'lucide-react';
 import { useState } from 'react';
 
 // Maps status -> allowed actions for display
@@ -65,12 +66,42 @@ type Props = {
   extraActions?: Array<{ action: string; label: string; variant?: 'default' | 'destructive' | 'outline' | 'secondary' }> | undefined;
   /** When true, approval-phase actions (review/approve/reject/return) are hidden — the workflow drives those. */
   hasActiveWorkflow?: boolean | undefined;
+  /**
+   * Record origin. When `imported_historical`, we suppress the full live
+   * transition set — the backend throws on any transition call for these
+   * records (see packages/core/src/commercial/ipa/service.ts and parallel
+   * services), so offering clickable buttons is guaranteed UX failure.
+   * Instead, we render a small locked badge so operators can see WHY no
+   * actions are available.
+   *
+   * Defaults to `live` for safety — any caller that forgets to pass it
+   * keeps the current behavior unchanged.
+   */
+  origin?: 'live' | 'imported_historical' | string | null | undefined;
 };
 
-export function TransitionActions({ currentStatus, recordFamily, permissions, onTransition, isLoading, extraActions, hasActiveWorkflow }: Props) {
+export function TransitionActions({ currentStatus, recordFamily, permissions, onTransition, isLoading, extraActions, hasActiveWorkflow, origin }: Props) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ action: string; label: string } | null>(null);
   const [comment, setComment] = useState('');
+
+  // Imported-historical records are append-only at the business layer.
+  // Suppress every transition (including extraActions) and render a locked
+  // badge so operators understand the record is frozen by provenance, not
+  // missing a permission.
+  if (origin === 'imported_historical') {
+    return (
+      <Badge
+        variant="outline"
+        className="inline-flex items-center gap-1.5 text-[11px] font-normal text-muted-foreground border-dashed"
+        title="This record was imported from a historical sheet. Live lifecycle actions (Submit, Approve, Sign, Issue, Close) are not available because the record is append-only — use the 'Adjust imported' path when a correction is needed."
+      >
+        <FileSpreadsheet className="h-3 w-3" />
+        <Lock className="h-3 w-3" />
+        Frozen — imported historical
+      </Badge>
+    );
+  }
 
   const baseActions = STATUS_ACTIONS[currentStatus] ?? [];
   // When a workflow controls the approval phase, filter out managed actions.

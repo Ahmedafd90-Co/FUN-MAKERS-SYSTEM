@@ -9,7 +9,7 @@
  *
  * Required form fields:
  *   - projectId   (uuid)
- *   - importType  ('budget_baseline' | 'ipa_history')
+ *   - importType  ('budget_baseline' | 'ipa_history' | 'ipa_forecast')
  *   - file        (xlsx/xlsm/xls binary)
  *
  * Permissions:
@@ -37,7 +37,11 @@ import type { NextRequest } from 'next/server';
 /** 25 MB — sheets rarely exceed this and we want to reject absurd uploads. */
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
-const ALLOWED_IMPORT_TYPES = new Set(['budget_baseline', 'ipa_history']);
+const ALLOWED_IMPORT_TYPES = new Set([
+  'budget_baseline',
+  'ipa_history',
+  'ipa_forecast',
+]);
 
 const ALLOWED_EXTENSIONS = /\.(xlsx|xlsm|xls)$/i;
 
@@ -144,7 +148,10 @@ export async function POST(request: NextRequest) {
     try {
       const result = await stageBatch({
         projectId,
-        importType: importType as 'budget_baseline' | 'ipa_history',
+        importType: importType as
+          | 'budget_baseline'
+          | 'ipa_history'
+          | 'ipa_forecast',
         sourceFileName: file.name,
         fileBytes,
         actorUserId: userId,

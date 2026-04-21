@@ -297,7 +297,14 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
   },
   {
     id: 'approved_variation_impact',
-    name: 'Approved Variation Impact',
+    // Label clarifies that this KPI's "approved" is the *internal* gate —
+    // it fires at `approved_internal` and survives through subsequent
+    // statuses, whether or not the client has ratified. The contract
+    // envelope (`revised_budget`) uses a stricter rule — VOs there need
+    // client approval — so the two tiles can legitimately disagree. The
+    // rename prevents the "two approveds collide" confusion on the
+    // Commercial Dashboard.
+    name: 'Internally-Approved Variation Impact',
     sourceRecords: ['Variation'],
     formula: 'SUM(variation.approvedCostImpact) where approvedCostImpact IS NOT NULL',
     statusFilter: [...VAR_APPROVED_PLUS],
@@ -445,6 +452,83 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
     sourceQueryBasis: 'Derived: revised_budget minus committed_cost',
     postingCoverage: null, // Derived from two other KPIs
   },
+
+  // =========================================================================
+  // IPA Forecast KPIs — per-period commercial plan of record
+  //
+  // Forecast is planning data — not a posting-ledger participant.
+  // "Actual IPA" reuses the existing total_claimed definition
+  // (SUM(netClaimed) where status IN IPA_APPROVED_PLUS). No competing
+  // definition of actual is introduced.
+  // =========================================================================
+  {
+    id: 'forecast_total',
+    name: 'Total Forecasted IPA',
+    sourceRecords: ['IpaForecast'],
+    formula: 'SUM(ipaForecast.forecastAmount)',
+    statusFilter: [],
+    scope: 'project',
+    nature: 'expected',
+    temporality: 'cumulative',
+    supportStatus: 'supported',
+    drilldown: {
+      page: '/projects/[id]/commercial/forecast',
+      statusFilter: [],
+    },
+    sourceQueryBasis: 'SUM(ipaForecast.forecastAmount) across all periods',
+    postingCoverage: null, // Forecast is plan data, not ledger truth
+  },
+  {
+    id: 'forecast_this_month',
+    name: 'Forecasted IPA This Month',
+    sourceRecords: ['IpaForecast'],
+    formula: 'ipaForecast.forecastAmount WHERE periodStart is in the current calendar month',
+    statusFilter: [],
+    scope: 'project',
+    nature: 'expected',
+    temporality: 'point_in_time',
+    supportStatus: 'supported',
+    drilldown: {
+      page: '/projects/[id]/commercial/forecast',
+      statusFilter: [],
+    },
+    sourceQueryBasis: 'IpaForecast.forecastAmount for the period whose periodStart is in current month',
+    postingCoverage: null,
+  },
+  {
+    id: 'ipa_forecast_variance',
+    name: 'Variance vs Forecast',
+    sourceRecords: ['Ipa', 'IpaForecast'],
+    formula: 'total_claimed - SUM(ipaForecast.forecastAmount WHERE periodStart <= now)',
+    statusFilter: [],
+    scope: 'project',
+    nature: 'projected',
+    temporality: 'point_in_time',
+    supportStatus: 'supported',
+    drilldown: {
+      page: '/projects/[id]/commercial/forecast',
+      statusFilter: [],
+    },
+    sourceQueryBasis: 'Derived: total_claimed minus to-date forecast (forecasts with periodStart <= now)',
+    postingCoverage: null, // Derived, not a ledger event
+  },
+  {
+    id: 'ipa_forecast_attainment',
+    name: 'Forecast Attainment',
+    sourceRecords: ['Ipa', 'IpaForecast'],
+    formula: '(total_claimed / SUM(to-date forecastAmount)) * 100. Policy: returns null when to-date forecast is 0.',
+    statusFilter: [],
+    scope: 'project',
+    nature: 'projected',
+    temporality: 'point_in_time',
+    supportStatus: 'supported',
+    drilldown: {
+      page: '/projects/[id]/commercial/forecast',
+      statusFilter: [],
+    },
+    sourceQueryBasis: 'Derived: (total_claimed / to-date forecast) * 100',
+    postingCoverage: null,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -475,10 +559,26 @@ export const DASHBOARD_DISPLAY_IDS = [
 ] as const;
 
 /**
+ * Ordered list of forecast-vs-actual KPI ids rendered in the dedicated
+ * "Forecast vs Actual" dashboard section. Kept separate from the
+ * Financial Summary grid so the two sections render independently.
+ */
+export const FORECAST_VS_ACTUAL_DISPLAY_IDS = [
+  'forecast_total',
+  'forecast_this_month',
+  'total_claimed',        // reused as "Actual IPA Achieved"
+  'ipa_forecast_variance',
+  'ipa_forecast_attainment',
+] as const;
+
+/**
  * KPI ids that render as percentage instead of currency.
  * The dashboard component imports this for formatting decisions.
  */
-export const PERCENTAGE_KPI_IDS = new Set<string>(['collection_rate']);
+export const PERCENTAGE_KPI_IDS = new Set<string>([
+  'collection_rate',
+  'ipa_forecast_attainment',
+]);
 
 // ---------------------------------------------------------------------------
 // Lookup helpers

@@ -200,12 +200,23 @@ export function PostingExceptionList({
                         {exc.event.eventType}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {exc.event.projectId.slice(0, 8)}...
+                    <td className="px-4 py-3">
+                      {exc.event.project ? (
+                        <div className="flex flex-col leading-tight">
+                          <span className="text-sm">{exc.event.project.name}</span>
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            {exc.event.project.code}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {exc.event.projectId.slice(0, 8)}…
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       <span className="font-mono text-xs">
-                        {exc.event.sourceRecordType}/{exc.event.sourceRecordId.slice(0, 8)}
+                        {exc.event.sourceRecordType}/{exc.event.sourceRecordId.slice(0, 8)}…
                       </span>
                     </td>
                     <td className="px-4 py-3">

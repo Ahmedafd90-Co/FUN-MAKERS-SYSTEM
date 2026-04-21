@@ -29,7 +29,12 @@ type ProjectData = {
   entity: { id: string; name: string; code: string } | null;
   currency: { code: string; name: string; symbol: string } | null;
   contractValue: string | number | null;
-  revisedContractValue: string | number | null;
+  /**
+   * Live-derived revised contract value from projects.get. Replaces the
+   * stored `revisedContractValue` column which was stale on older projects.
+   * Shares the formula with the Commercial Dashboard's revised_budget KPI.
+   */
+  revisedContractValueDerived: string | number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -93,7 +98,7 @@ function OverviewTab({ project, canEditProject }: { project: ProjectData; canEdi
       <FinancialBaselineCard
         projectId={project.id}
         contractValue={project.contractValue}
-        revisedContractValue={project.revisedContractValue}
+        revisedContractValueDerived={project.revisedContractValueDerived}
         currency={project.currency?.code ?? project.currencyCode}
         currencySymbol={project.currency?.symbol ?? project.currencyCode}
         canEdit={canEditProject}

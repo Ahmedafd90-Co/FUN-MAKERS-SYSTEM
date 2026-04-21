@@ -39,11 +39,12 @@ import { toast } from 'sonner';
 
 import { trpc } from '@/lib/trpc-client';
 
-type ImportType = 'budget_baseline' | 'ipa_history';
+type ImportType = 'budget_baseline' | 'ipa_history' | 'ipa_forecast';
 
 const IMPORT_TYPE_LABELS: Record<ImportType, string> = {
   budget_baseline: 'Budget baseline (BOQ)',
   ipa_history: 'IPA history',
+  ipa_forecast: 'IPA forecast',
 };
 
 type ImportUploadDialogProps = {

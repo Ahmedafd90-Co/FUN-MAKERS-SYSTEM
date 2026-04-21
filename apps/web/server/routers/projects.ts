@@ -111,6 +111,7 @@ export const projectsRouter = router({
       return projectsService.listProjects({
         userId: ctx.user.id,
         includeArchived: input.includeArchived,
+        includeTestProjects: input.includeTestProjects,
       });
     }),
 

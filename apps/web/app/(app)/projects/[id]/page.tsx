@@ -93,7 +93,11 @@ export default function ProjectWorkspacePage() {
             ? { code: project.currency.code, name: project.currency.name, symbol: project.currency.symbol }
             : null,
           contractValue: toStringOrNull((project as any).contractValue),
-          revisedContractValue: toStringOrNull((project as any).revisedContractValue),
+          // Live-derived — see packages/core/src/commercial/revised-contract-value.ts.
+          // The stored column `revisedContractValue` is legacy and no longer read.
+          revisedContractValueDerived: toStringOrNull(
+            (project as any).revisedContractValueDerived,
+          ),
         }}
       />
     </>

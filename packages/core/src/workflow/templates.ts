@@ -468,11 +468,26 @@ export const worfklowTemplateService = {
    * List templates, optionally filtered by recordType and isActive.
    * Returns the most recent version per code.
    */
-  async listTemplates(filters?: { recordType?: string; isActive?: boolean }) {
+  async listTemplates(filters?: {
+    recordType?: string;
+    isActive?: boolean;
+    /**
+     * When false/undefined (default), exclude templates with
+     * recordType='test_record' — these are fixtures written by the vitest
+     * suite (audit/coverage.test.ts, workflow/*.test.ts) that leak into the
+     * shared dev DB. Set true to opt back in when debugging the test
+     * pipeline itself.
+     */
+    includeTestFixtures?: boolean;
+  }) {
     const where: any = {};
 
     if (filters?.recordType) {
+      // Explicit recordType filter wins — caller asked for this specific
+      // type, don't also apply the test-fixture exclusion.
       where.recordType = filters.recordType;
+    } else if (!filters?.includeTestFixtures) {
+      where.recordType = { not: 'test_record' };
     }
 
     if (filters?.isActive !== undefined) {

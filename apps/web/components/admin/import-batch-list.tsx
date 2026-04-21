@@ -191,6 +191,61 @@ export function ImportBatchList() {
         }
       />
 
+      {/* Upload templates — download-ready XLSX/CSV with sample rows +
+          instructions sheet. The schemas match the validators at
+          packages/core/src/import/validators/*. Operators should edit
+          these templates and upload via the button above. */}
+      <div className="rounded-md border bg-muted/20 px-3 py-2.5 text-xs flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <span className="font-medium">Download template:</span>
+        <a
+          href="/api/templates/budget-baseline?format=xlsx"
+          download
+          className="text-primary hover:underline"
+        >
+          Budget baseline (.xlsx)
+        </a>
+        <span className="text-muted-foreground/40">·</span>
+        <a
+          href="/api/templates/budget-baseline?format=csv"
+          download
+          className="text-primary hover:underline"
+        >
+          (.csv)
+        </a>
+        <span className="text-muted-foreground/40">|</span>
+        <a
+          href="/api/templates/ipa-history?format=xlsx"
+          download
+          className="text-primary hover:underline"
+        >
+          IPA history (.xlsx)
+        </a>
+        <span className="text-muted-foreground/40">·</span>
+        <a
+          href="/api/templates/ipa-history?format=csv"
+          download
+          className="text-primary hover:underline"
+        >
+          (.csv)
+        </a>
+        <span className="text-muted-foreground/40">|</span>
+        <a
+          href="/api/templates/ipa-forecast?format=xlsx"
+          download
+          className="text-primary hover:underline"
+        >
+          IPA forecast (.xlsx)
+        </a>
+        <span className="text-muted-foreground/40">·</span>
+        <a
+          href="/api/templates/ipa-forecast?format=csv"
+          download
+          className="text-primary hover:underline"
+        >
+          (.csv)
+        </a>
+      </div>
+
       <ImportUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
 
       {/* Filters */}

@@ -365,7 +365,18 @@ export async function seedE2eDemo(prisma: PrismaClient) {
     });
   }
 
-  // Absorption exception
+  // Absorption exception — truth-snapshot fields populated so the Budget-page
+  // banner and Admin detail tell a coherent story even though the demo's
+  // sourceRecordId is a placeholder that doesn't resolve to a real PO.
+  //
+  // categoryCode='travel' is deliberate: Travel is a BudgetCategory that
+  // genuinely has NO line on FMKSA-2026-001's budget (the project's 5 lines
+  // are materials / subcontractors / manpower / supplies / equipment_and_plant),
+  // so reasonCode='no_budget_line' stays truthful. Using 'materials' here
+  // would contradict itself — Materials has a line, so "no budget line for
+  // this category" would be false.
+  //
+  // sourceAmount=100000 is a representative demo value (100k SAR).
   await prisma.budgetAbsorptionException.create({
     data: {
       projectId: project.id,
@@ -378,6 +389,8 @@ export async function seedE2eDemo(prisma: PrismaClient) {
         'PO committed under a category that has no corresponding budget line on this project.',
       severity: 'warning',
       status: 'open',
+      sourceAmount: '100000',
+      categoryCode: 'travel',
     },
   });
 

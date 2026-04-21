@@ -32,7 +32,17 @@ import { formatMoney } from '@/components/commercial/shared';
 type FinancialBaselineCardProps = {
   projectId: string;
   contractValue: string | number | null;
-  revisedContractValue: string | number | null;
+  /**
+   * System-derived Revised Contract Value from `projects.get` response
+   * (field `revisedContractValueDerived`). This is the SAME formula the
+   * Commercial Dashboard uses via `getFinancialKpis`, so both surfaces
+   * agree on the number.
+   *
+   * The legacy stored column `project.revisedContractValue` is no longer
+   * read — it was stale on projects seeded before the derivation refactor.
+   * Keep the column dormant (no UI surface) per the Phase 2 scope lock.
+   */
+  revisedContractValueDerived: string | number | null;
   currency: string;
   currencySymbol: string;
   /** Whether the current user can edit (project.edit). */
@@ -46,7 +56,7 @@ type FinancialBaselineCardProps = {
 export function FinancialBaselineCard({
   projectId,
   contractValue,
-  revisedContractValue,
+  revisedContractValueDerived,
   currency,
   currencySymbol,
   canEdit,
@@ -54,7 +64,10 @@ export function FinancialBaselineCard({
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const cvNum = contractValue !== null ? parseFloat(String(contractValue)) : null;
-  const rcvNum = revisedContractValue !== null ? parseFloat(String(revisedContractValue)) : null;
+  const rcvNum =
+    revisedContractValueDerived !== null
+      ? parseFloat(String(revisedContractValueDerived))
+      : null;
 
   const hasBaseline = cvNum !== null;
 

@@ -57,6 +57,18 @@ COMMERCIAL_PERMISSIONS.push(
     resource: 'client_submission_history',
     action: 'view',
   },
+  {
+    code: 'ipa_forecast.view',
+    description: 'View the per-period IPA forecast (plan of record) on the commercial dashboard and forecast admin page',
+    resource: 'ipa_forecast',
+    action: 'view',
+  },
+  {
+    code: 'ipa_forecast.edit',
+    description: 'Create, update, and delete per-period IPA forecast entries',
+    resource: 'ipa_forecast',
+    action: 'edit',
+  },
 );
 
 export async function seedCommercialPermissions(prisma: PrismaClient) {
