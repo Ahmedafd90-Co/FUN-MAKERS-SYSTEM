@@ -114,7 +114,7 @@ export default function ProjectBudgetPage() {
 
       <PageHeader
         title="Project Budget"
-        description="Read-only view of the internal delivery budget and line-level breakdown."
+        description="Read-only. Budget lines are edited from the project workspace. Absorption exceptions are resolved in Admin → Absorption Exceptions."
       />
 
       {error?.data?.code === 'FORBIDDEN' ? (
@@ -215,6 +215,59 @@ export default function ProjectBudgetPage() {
               }
             }
 
+            // Corrected-impact preview (2026-04-21 polish): work out where
+            // each unresolved amount WOULD have landed if absorption had
+            // succeeded, then show the corrected totals the operator can
+            // expect after resolving. Mapping matches the absorbers in
+            // packages/core/src/budget/absorption.ts:
+            //   po_commitment  → +Committed
+            //   po_reversal    → −Committed
+            //   si_actual      → +Actual
+            //   expense_actual → +Actual
+            //   cn_reversal    → −Actual
+            // Other / unknown types don't contribute — we can't guess.
+            let committedDelta = 0;
+            let actualDelta = 0;
+            for (const ex of exceptions) {
+              if (ex.sourceAmount == null) continue;
+              const n = parseFloat(ex.sourceAmount);
+              if (!Number.isFinite(n)) continue;
+              switch (ex.absorptionType) {
+                case 'po_commitment':
+                  committedDelta += n;
+                  break;
+                case 'po_reversal':
+                  committedDelta -= n;
+                  break;
+                case 'si_actual':
+                case 'expense_actual':
+                  actualDelta += n;
+                  break;
+                case 'cn_reversal':
+                  actualDelta -= n;
+                  break;
+                default:
+                  break;
+              }
+            }
+            const projectedRemaining =
+              summary.remainingBudget - committedDelta - actualDelta;
+            const impactParts: string[] = [];
+            if (committedDelta !== 0) {
+              impactParts.push(
+                `${committedDelta > 0 ? 'raise' : 'reduce'} Committed by ${formatMoney(Math.abs(committedDelta))}`,
+              );
+            }
+            if (actualDelta !== 0) {
+              impactParts.push(
+                `${actualDelta > 0 ? 'raise' : 'reduce'} Actual by ${formatMoney(Math.abs(actualDelta))}`,
+              );
+            }
+            const impactSentence =
+              impactParts.length > 0
+                ? `Resolving these exceptions would ${impactParts.join(' and ')}, bringing Remaining to ${formatMoney(projectedRemaining)} ${currency}.`
+                : null;
+
             // Group by reasonCode for the per-cohort description.
             type Cohort = {
               reasonCode: string;
@@ -244,13 +297,26 @@ export default function ProjectBudgetPage() {
               (a, b) => b.count - a.count,
             );
 
+            // Smart CTA copy — prefer verbs that describe the actual fix.
             const single = exceptions.length === 1 ? exceptions[0]! : null;
-            const ctaHref = single
-              ? `/admin/absorption-exceptions?exception=${single.id}`
-              : `/admin/absorption-exceptions?project=${projectId}`;
-            const ctaLabel = single
-              ? 'Review this exception'
-              : 'Review in Admin → Absorption Exceptions';
+            let ctaHref: string;
+            let ctaLabel: string;
+            if (single) {
+              ctaHref = `/admin/absorption-exceptions?exception=${single.id}`;
+              const singleCategoryName =
+                single.categoryName ?? single.categoryCode ?? null;
+              if (
+                single.reasonCode === 'no_budget_line' &&
+                singleCategoryName
+              ) {
+                ctaLabel = `Fix missing ${singleCategoryName} line`;
+              } else {
+                ctaLabel = 'Open exception detail';
+              }
+            } else {
+              ctaHref = `/admin/absorption-exceptions?project=${projectId}`;
+              ctaLabel = `Review ${exceptions.length} exceptions in Admin`;
+            }
 
             return (
               <Card className="border-destructive/40 bg-destructive/5">
@@ -316,14 +382,20 @@ export default function ProjectBudgetPage() {
                       </ul>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground border-t pt-3">
-                    These amounts are{' '}
-                    <span className="font-semibold">excluded</span> from the
-                    Committed / Actual / Remaining / Variance totals above.
-                    Absorption failed at posting time, so the budget lines
-                    were never updated. Resolve each exception to correct the
-                    totals.
-                  </p>
+                  <div className="border-t pt-3 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">
+                      These amounts are{' '}
+                      <span className="font-semibold">excluded</span> from the
+                      Committed / Actual / Remaining / Variance totals above.
+                      Absorption failed at posting time, so the budget lines
+                      were never updated.
+                    </p>
+                    {impactSentence && (
+                      <p className="text-xs text-foreground/80 font-medium">
+                        {impactSentence}
+                      </p>
+                    )}
+                  </div>
                   <Link
                     href={ctaHref}
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
@@ -405,7 +477,7 @@ export default function ProjectBudgetPage() {
                                 variance > 0
                                   ? 'text-destructive font-semibold'
                                   : variance < 0
-                                    ? 'text-muted-foreground'
+                                    ? 'text-emerald-700 dark:text-emerald-400'
                                     : ''
                               }`}
                             >
@@ -420,6 +492,106 @@ export default function ProjectBudgetPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── Missing budget lines ──
+              Surfaces the gap between the banner ("Budget line missing —
+              Travel") and the budget structure (the table above does not
+              show Travel because it has no line here). We don't use a
+              ghost row inside the main table because a ghost implies a
+              line exists; this separate section keeps the structural
+              truth honest while making the gap visible and actionable. */}
+          {(() => {
+            if (!exceptions || exceptions.length === 0) return null;
+            type MissingCat = {
+              categoryName: string;
+              categoryCode: string;
+              count: number;
+              amount: number;
+              exceptionId: string | null; // for single-exception deep link
+            };
+            const byCat = new Map<string, MissingCat>();
+            for (const ex of exceptions) {
+              if (ex.reasonCode !== 'no_budget_line') continue;
+              const key = ex.categoryCode ?? ex.categoryName ?? null;
+              if (!key) continue;
+              let m = byCat.get(key);
+              if (!m) {
+                m = {
+                  categoryName: ex.categoryName ?? ex.categoryCode ?? '—',
+                  categoryCode: ex.categoryCode ?? '—',
+                  count: 0,
+                  amount: 0,
+                  exceptionId: ex.id,
+                };
+                byCat.set(key, m);
+              } else {
+                m.exceptionId = null; // more than one; clear single-deep-link
+              }
+              m.count += 1;
+              if (ex.sourceAmount != null) {
+                const n = parseFloat(ex.sourceAmount);
+                if (Number.isFinite(n)) m.amount += n;
+              }
+            }
+            const missing = Array.from(byCat.values());
+            if (missing.length === 0) return null;
+            return (
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold">
+                    Missing budget lines ({missing.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Categories referenced by an open absorption exception but
+                    not configured as a budget line on this project. Add the
+                    line from the project workspace, then resolve the
+                    exception in Admin.
+                  </p>
+                  <ul className="space-y-1.5">
+                    {missing.map((m) => {
+                      const ctaHref = m.exceptionId
+                        ? `/admin/absorption-exceptions?exception=${m.exceptionId}`
+                        : `/admin/absorption-exceptions?project=${projectId}`;
+                      return (
+                        <li
+                          key={m.categoryCode}
+                          className="flex items-center justify-between gap-3 text-sm rounded-md border border-dashed bg-muted/20 px-3 py-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium">{m.categoryName}</span>
+                            <span className="font-mono text-[11px] text-muted-foreground ml-2">
+                              {m.categoryCode}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0 text-xs">
+                            <span className="text-muted-foreground">
+                              {m.count} open exception
+                              {m.count > 1 ? 's' : ''}
+                            </span>
+                            <span className="font-mono tabular-nums">
+                              {formatMoney(m.amount)}
+                              <span className="text-[10px] text-muted-foreground ml-1">
+                                {currency}
+                              </span>
+                            </span>
+                            <Link
+                              href={ctaHref}
+                              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                            >
+                              Review
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           <p className="text-[11px] text-muted-foreground">
             To edit the budget baseline, revised amount, or line allocations,
