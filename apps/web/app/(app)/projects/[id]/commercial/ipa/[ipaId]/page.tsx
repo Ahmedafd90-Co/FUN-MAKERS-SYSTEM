@@ -62,17 +62,23 @@ export default function IpaDetailPage() {
     );
   }
 
-  const workflowLabel = workflowData
-    ? workflowData.status === 'approved'
-      ? 'Approved'
-      : workflowData.status === 'rejected'
-        ? 'Rejected'
-        : workflowData.status === 'returned'
-          ? 'Returned'
-          : 'In Progress'
-    : data.status === 'draft'
-      ? 'Not started'
-      : '—';
+  // Imported-historical records never ran through a live workflow; the
+  // summary slot should say exactly that instead of rendering a vague "—"
+  // that reads as "we don't know."
+  const isImported = data.origin === 'imported_historical';
+  const workflowLabel = isImported
+    ? 'Not applicable (imported)'
+    : workflowData
+      ? workflowData.status === 'approved'
+        ? 'Approved'
+        : workflowData.status === 'rejected'
+          ? 'Rejected'
+          : workflowData.status === 'returned'
+            ? 'Returned'
+            : 'In Progress'
+      : data.status === 'draft'
+        ? 'Not started'
+        : '—';
 
   return (
     <div className="space-y-4">
@@ -85,7 +91,10 @@ export default function IpaDetailPage() {
         Back to IPAs
       </Link>
 
-      {/* ── Imported-historical banner ── */}
+      {/* ── Imported-historical banner ──
+          Provenance + who/when. Live lifecycle actions are suppressed by
+          TransitionActions when origin='imported_historical' — this banner
+          explains why no action buttons appear. */}
       {data.origin === 'imported_historical' && (
         <div className="flex items-start gap-3 rounded-md border border-blue-300 bg-blue-50 p-3 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200">
           <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0" />
@@ -96,9 +105,15 @@ export default function IpaDetailPage() {
               {data.importedAt && (
                 <> on {new Date(data.importedAt).toLocaleDateString()}</>
               )}
+              {data.importedByUser?.name && (
+                <> by <span className="font-medium">{data.importedByUser.name}</span></>
+              )}
               . Its ledger event uses <code className="font-mono">imported_historical</code>{' '}
               origin — so it is visible as historical truth but does not count
-              alongside live activity in reconciliation.
+              alongside live activity in reconciliation. Live lifecycle actions
+              (Submit, Sign, Issue, Close) are not available on this record —
+              corrections must go through the &ldquo;Adjust imported IPA&rdquo;
+              path.
             </div>
             {data.importBatchId && (
               <Link
@@ -141,6 +156,11 @@ export default function IpaDetailPage() {
           permissions={me?.permissions ?? []}
           isLoading={transitionMut.isPending}
           hasActiveWorkflow={hasActiveWorkflow}
+          // Gate on provenance — imported-historical IPAs are append-only
+          // at the service layer (see packages/core/src/commercial/ipa/service.ts).
+          // TransitionActions renders a locked badge instead of buttons that
+          // would reject on click.
+          origin={data.origin}
           onTransition={async (action, comment) => {
             await transitionMut.mutateAsync({
               projectId: params.id,

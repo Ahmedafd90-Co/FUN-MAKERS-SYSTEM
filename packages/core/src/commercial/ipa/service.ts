@@ -299,7 +299,21 @@ export async function getIpa(id: string, projectId: string) {
     include: { project: true },
   });
   assertProjectScope(record, projectId, 'IPA', id);
-  return record;
+
+  // Imported-historical banner enrichment — resolve the human name of the
+  // operator who committed the import. `importedByUserId` is a soft FK on
+  // Ipa with no declared relation, so we do a small parallel lookup.
+  // Keeps the banner honest on provenance without adding a schema relation.
+  let importedByUser: { id: string; name: string; email: string } | null = null;
+  if (record.importedByUserId) {
+    const u = await prisma.user.findUnique({
+      where: { id: record.importedByUserId },
+      select: { id: true, name: true, email: true },
+    });
+    importedByUser = u ?? null;
+  }
+
+  return { ...record, importedByUser };
 }
 
 // ---------------------------------------------------------------------------

@@ -297,7 +297,14 @@ export const KPI_DEFINITIONS: readonly KpiDefinition[] = [
   },
   {
     id: 'approved_variation_impact',
-    name: 'Approved Variation Impact',
+    // Label clarifies that this KPI's "approved" is the *internal* gate —
+    // it fires at `approved_internal` and survives through subsequent
+    // statuses, whether or not the client has ratified. The contract
+    // envelope (`revised_budget`) uses a stricter rule — VOs there need
+    // client approval — so the two tiles can legitimately disagree. The
+    // rename prevents the "two approveds collide" confusion on the
+    // Commercial Dashboard.
+    name: 'Internally-Approved Variation Impact',
     sourceRecords: ['Variation'],
     formula: 'SUM(variation.approvedCostImpact) where approvedCostImpact IS NOT NULL',
     statusFilter: [...VAR_APPROVED_PLUS],

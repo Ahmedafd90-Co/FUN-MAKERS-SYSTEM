@@ -207,11 +207,16 @@ export default function ForecastAdminPage() {
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
           <SummaryStat label="Total Forecast" value={`${formatMoney(rollup.data.totalForecast)} ${currency}`} />
           <SummaryStat label="To-Date Forecast" value={`${formatMoney(rollup.data.toDateForecast)} ${currency}`} />
-          <SummaryStat label="Actual IPA" value={`${formatMoney(rollup.data.totalActual)} ${currency}`} />
+          <SummaryStat
+            label="Actual IPA"
+            value={`${formatMoney(rollup.data.totalActual)} ${currency}`}
+            caption="Includes imported historical IPAs."
+          />
           <SummaryStat
             label="Variance"
             value={`${formatMoney(rollup.data.toDateVariance)} ${currency}`}
             valueClass={varianceClass(rollup.data.toDateVariance)}
+            caption="Variance compares actual IPA achieved to forecast to date. It can reflect timing delay as well as true underperformance."
           />
           <SummaryStat label="Attainment" value={formatPercent(rollup.data.toDateAttainmentPercent)} />
         </div>
@@ -366,15 +371,27 @@ function SummaryStat({
   label,
   value,
   valueClass,
+  caption,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  /**
+   * Short truth-caption under the value, e.g. "Includes imported historical
+   * IPAs." Added 2026-04-21 so cross-origin aggregates explain what they
+   * include, and variance explains what it signals.
+   */
+  caption?: string;
 }) {
   return (
     <div className="rounded-md border bg-card p-3">
       <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
       <p className={`mt-1 text-sm font-mono tabular-nums ${valueClass ?? ''}`}>{value}</p>
+      {caption && (
+        <p className="mt-1 text-[10px] leading-snug text-muted-foreground/70">
+          {caption}
+        </p>
+      )}
     </div>
   );
 }

@@ -42,6 +42,21 @@ const LABEL_OVERRIDES: Record<string, string> = {
   total_claimed: 'Actual IPA Achieved',
 };
 
+// Short truth-captions rendered under the KPI value. Added 2026-04-21 to
+// close the "two approveds" confusion on the Commercial Dashboard where
+// `Internally-Approved Variation Impact` and `Revised Contract Value` use
+// different "approved" definitions, and to make origin-aware aggregation
+// explicit on KPIs that span both live and imported-historical records.
+const KPI_CAPTIONS: Record<string, string> = {
+  revised_budget:
+    'Contract value + client-approved VOs + internally-approved COs.',
+  approved_variation_impact:
+    'Internally approved. Contract value only changes after client approval.',
+  total_claimed: 'Includes imported historical IPAs.',
+  ipa_forecast_variance:
+    'Variance compares actual IPA achieved to forecast to date. It can reflect timing delay as well as true underperformance.',
+};
+
 // ---------------------------------------------------------------------------
 // KPI tier classification — drives visual hierarchy
 // ---------------------------------------------------------------------------
@@ -162,6 +177,7 @@ function KpiCard({
   if (kpi.supportStatus !== 'supported') return null;
 
   const label = LABEL_OVERRIDES[kpi.id] ?? kpi.name;
+  const caption = KPI_CAPTIONS[kpi.id] ?? null;
   const tier = getKpiTier(kpi.id);
 
   // Not-set state
@@ -217,6 +233,11 @@ function KpiCard({
         </CardHeader>
         <CardContent>
           <p className={valueClasses}>{formattedValue}</p>
+          {caption && (
+            <p className="mt-1 text-[10px] leading-snug text-muted-foreground/70">
+              {caption}
+            </p>
+          )}
           <div className="mt-2.5 flex items-center gap-3">
             {targets.map((target, i) => (
               <Link
@@ -252,6 +273,11 @@ function KpiCard({
       </CardHeader>
       <CardContent>
         <p className={valueClasses}>{formattedValue}</p>
+        {caption && (
+          <p className="mt-1 text-[10px] leading-snug text-muted-foreground/70">
+            {caption}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -272,6 +298,8 @@ function VarianceCard({
   approved,
   reduction,
   percent,
+  statusCaption,
+  pendingHint,
 }: {
   title: string;
   submittedLabel: string;
@@ -281,10 +309,25 @@ function VarianceCard({
   approved: string;
   reduction: string;
   percent: number;
+  /**
+   * Short caption explaining the scope of the aggregate — e.g. "Includes
+   * approved cost proposals only." Added 2026-04-21 so an all-zero state
+   * reads as "nothing approved yet" instead of "something is broken".
+   */
+  statusCaption?: string | undefined;
+  /**
+   * Optional "N pending approval" hint shown when the approved side is
+   * zero but there are records sitting in pre-approved statuses on the
+   * register. Keeps the analytics honest without expanding scope into
+   * pipeline analytics.
+   */
+  pendingHint?: string | undefined;
 }) {
   const reductionNum = parseFloat(reduction);
   const isPositive = reductionNum > 0;
   const isNegative = reductionNum < 0;
+  const isEmpty =
+    parseFloat(submitted) === 0 && parseFloat(approved) === 0;
 
   return (
     <Card>
@@ -307,6 +350,20 @@ function VarianceCard({
           </span>
           <span className="font-mono tabular-nums">{formatCurrency(reduction)} ({percent.toFixed(1)}%)</span>
         </div>
+        {(statusCaption || (isEmpty && pendingHint)) && (
+          <div className="pt-1 border-t border-muted/40 space-y-0.5">
+            {statusCaption && (
+              <p className="text-[10px] leading-snug text-muted-foreground/70">
+                {statusCaption}
+              </p>
+            )}
+            {isEmpty && pendingHint && (
+              <p className="text-[10px] leading-snug text-muted-foreground italic">
+                {pendingHint}
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -470,16 +527,57 @@ export function DashboardCards({ projectId }: { projectId: string }) {
           Cost Proposal Analytics
         </h3>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-          <VarianceCard
-            title="Cost Proposal"
-            submittedLabel="Estimated Cost"
-            approvedLabel="Approved Cost"
-            reductionLabel="Cost Reduction"
-            submitted={summary.data.varianceAnalytics.costProposalVariance.totalEstimated}
-            approved={summary.data.varianceAnalytics.costProposalVariance.totalApproved}
-            reduction={summary.data.varianceAnalytics.costProposalVariance.reductionAmount}
-            percent={summary.data.varianceAnalytics.costProposalVariance.reductionPercent}
-          />
+          {(() => {
+            // Pre-approved CP count — drives the "N pending approval" hint
+            // when the analytics aggregate is all zeros. Reads from the
+            // register summary we already fetched. The set here must stay
+            // in sync with CP_APPROVED_PLUS in the backend.
+            const cpReg = summary.data.registerSummary.costProposal as
+              | { total: number; byStatus: Record<string, number> }
+              | undefined;
+            const preApprovedStatuses = [
+              'draft',
+              'submitted',
+              'under_review',
+              'returned',
+            ];
+            const pendingCount = cpReg
+              ? preApprovedStatuses.reduce(
+                  (n, s) => n + (cpReg.byStatus[s] ?? 0),
+                  0,
+                )
+              : 0;
+            const pendingHint =
+              pendingCount > 0
+                ? `${pendingCount} cost proposal${pendingCount === 1 ? '' : 's'} pending approval — values will appear here once approved.`
+                : undefined;
+            return (
+              <VarianceCard
+                title="Cost Proposal"
+                submittedLabel="Estimated Cost"
+                approvedLabel="Approved Cost"
+                reductionLabel="Cost Reduction"
+                submitted={
+                  summary.data.varianceAnalytics.costProposalVariance
+                    .totalEstimated
+                }
+                approved={
+                  summary.data.varianceAnalytics.costProposalVariance
+                    .totalApproved
+                }
+                reduction={
+                  summary.data.varianceAnalytics.costProposalVariance
+                    .reductionAmount
+                }
+                percent={
+                  summary.data.varianceAnalytics.costProposalVariance
+                    .reductionPercent
+                }
+                statusCaption="Includes approved cost proposals only."
+                pendingHint={pendingHint}
+              />
+            );
+          })()}
         </div>
       </section>
 
