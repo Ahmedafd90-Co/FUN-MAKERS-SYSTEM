@@ -15,6 +15,7 @@ import {
 } from '@fmksa/ui/components/table';
 import { trpc } from '@/lib/trpc-client';
 import { parseDrilldownStatuses } from '@/lib/parse-drilldown-params';
+import { ExportMenu } from '@/components/common/export-menu';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CommercialStatusBadge } from '@/components/commercial/status-badge';
@@ -100,12 +101,19 @@ export default function IpaListPage() {
         title="Interim Payment Applications"
         description="Manage IPA records for this project"
         actions={
-          <Link href={`/projects/${projectId}/commercial/ipa/create`}>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              Create IPA
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ExportMenu
+              endpoint="/api/exports/ipa"
+              query={{ projectId }}
+              label="Export"
+            />
+            <Link href={`/projects/${projectId}/commercial/ipa/create`}>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Create IPA
+              </Button>
+            </Link>
+          </div>
         }
       />
 

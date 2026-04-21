@@ -8,6 +8,7 @@
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { accessControlService } from '../access-control/service';
+import { getDerivedRevisedContractValue } from '../commercial/revised-contract-value';
 import { PROJECT_SETTINGS_DEFAULTS } from './project-settings-defaults';
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,13 @@ export const projectsService = {
   /**
    * Get a single project. Checks project-scope isolation: the requesting
    * user must be assigned to the project or hold cross_project.read.
+   *
+   * Returns `revisedContractValueDerived` alongside the stored column so
+   * the Project Overview's Financial Baseline card reads the same live
+   * derivation as the Commercial Dashboard (Phase 2 fix, 2026-04-21).
+   * The stored column `project.revisedContractValue` is kept for
+   * backward compatibility but is legacy — all surfaces should read the
+   * derived value.
    */
   async getProject(id: string, requestingUserId: string) {
     // Check scope
@@ -169,7 +177,13 @@ export const projectsService = {
       throw new Error(`Project "${id}" not found.`);
     }
 
-    return project;
+    // Live-derived revised contract value — uses the shared helper so this
+    // always matches the Commercial Dashboard KPI. Null when the project
+    // has no contractValue.
+    const revisedContractValueDerived =
+      await getDerivedRevisedContractValue(id);
+
+    return { ...project, revisedContractValueDerived };
   },
 
   /**

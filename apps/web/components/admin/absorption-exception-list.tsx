@@ -22,6 +22,7 @@ import { useState } from 'react';
 
 import { trpc } from '@/lib/trpc-client';
 import { statusBadgeStyle } from '@/lib/badge-variants';
+import { ExportMenu } from '@/components/common/export-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/layout/page-header';
 
@@ -149,10 +150,31 @@ export function AbsorptionExceptionList({
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Absorption Exceptions"
-        description="Budget absorption failures across all projects. Open exceptions mean budget lines are not tracking committed or actual costs."
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="Absorption Exceptions"
+          description="Budget absorption failures across all projects. Open exceptions mean budget lines are not tracking committed or actual costs."
+        />
+        {/* Export scoped to the current project filter. The export route
+            requires a projectId, so the button is disabled when viewing
+            the unfiltered cross-project list. Arrive here with ?project=
+            from the Budget page banner to enable the export. */}
+        <div className="pt-1">
+          <ExportMenu
+            endpoint="/api/exports/absorption-exceptions"
+            query={{
+              projectId: initialProjectId,
+              status:
+                statusFilter === 'open' || statusFilter === 'resolved'
+                  ? statusFilter
+                  : 'all',
+            }}
+            label="Export"
+            disabled={!initialProjectId}
+            disabledReason="Filter to a single project to enable export."
+          />
+        </div>
+      </div>
 
       {/* Project-filter indicator — shown when arrived via Budget-page CTA. */}
       {initialProjectId && (

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@fmksa/ui/components/table';
 import { trpc } from '@/lib/trpc-client';
+import { ExportMenu } from '@/components/common/export-menu';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -112,10 +113,21 @@ export default function ProjectBudgetPage() {
         Back to Project
       </Link>
 
-      <PageHeader
-        title="Project Budget"
-        description="Read-only. Budget lines are edited from the project workspace. Absorption exceptions are resolved in Admin → Absorption Exceptions."
-      />
+      <div className="flex items-start justify-between gap-4">
+        <PageHeader
+          title="Project Budget"
+          description="Read-only. Budget lines are edited from the project workspace. Absorption exceptions are resolved in Admin → Absorption Exceptions."
+        />
+        {/* Export — XLSX has Summary / Budget Lines / Open Exceptions /
+            Missing Budget Lines sheets. CSV flattens to Budget Lines. */}
+        <div className="pt-1">
+          <ExportMenu
+            endpoint="/api/exports/budget"
+            query={{ projectId }}
+            label="Export"
+          />
+        </div>
+      </div>
 
       {error?.data?.code === 'FORBIDDEN' ? (
         <div className="py-16 text-center space-y-2">
@@ -450,11 +462,15 @@ export default function ProjectBudgetPage() {
                             : formatMoney(variance);
                         return (
                           <TableRow key={line.id}>
+                            {/* Category: human label first, raw code muted-
+                                small after. Standardized with the Project
+                                Overview budget card so operators see
+                                the same formatting across surfaces. */}
                             <TableCell className="text-sm">
-                              <span className="font-mono text-[11px] text-muted-foreground mr-2">
+                              {line.categoryName}
+                              <span className="font-mono text-[11px] text-muted-foreground ml-2">
                                 {line.categoryCode}
                               </span>
-                              {line.categoryName}
                             </TableCell>
                             <TableCell className="text-right font-mono tabular-nums text-sm">
                               {formatMoney(line.budgetAmount)}

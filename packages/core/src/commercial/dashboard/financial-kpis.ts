@@ -212,11 +212,14 @@ export async function getFinancialKpis(
       _sum: { approvedCostImpact: true },
     }),
 
-    // System-derived revised contract value from approved variations
-    // Revised Contract Value = contractValue + SUM(approved variation deltas)
-    // VOs: count client_approved and closed with non-null approvedCostImpact
-    // COs: count approved_internal, signed, issued, closed with non-null approvedCostImpact
-    // This replaces the manual revisedContractValue field on Project.
+    // System-derived revised contract value from approved variations.
+    // Revised Contract Value = contractValue + SUM(approved variation deltas).
+    // This replaces the manual revisedContractValue field on Project and
+    // MUST stay formula-identical to getDerivedRevisedContractValue() in
+    // ../revised-contract-value.ts — that helper is the shared source used
+    // by the Project Overview card so the Dashboard and Overview don't
+    // disagree on the same number. `assertFinancialKpisMatchHelper` test
+    // locks this invariant.
     prisma.variation.aggregate({
       where: {
         projectId,

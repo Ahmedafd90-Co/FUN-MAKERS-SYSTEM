@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from '@fmksa/ui/components/dialog';
 import { trpc } from '@/lib/trpc-client';
+import { ExportMenu } from '@/components/common/export-menu';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -195,10 +196,17 @@ export default function ForecastAdminPage() {
         title="IPA Forecast"
         description="Per-period plan of record. Actual amounts are sourced from approved+ IPAs."
         actions={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add Forecast
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExportMenu
+              endpoint="/api/exports/forecast"
+              query={{ projectId: params.id }}
+              label="Export"
+            />
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add Forecast
+            </Button>
+          </div>
         }
       />
 
