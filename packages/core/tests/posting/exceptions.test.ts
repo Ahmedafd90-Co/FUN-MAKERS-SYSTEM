@@ -77,11 +77,17 @@ describe('postingExceptionService', () => {
   }
 
   describe('listExceptions', () => {
+    // These tests create fixture events with eventType='TEST_EVENT_M1'
+    // and sourceRecordType='test_record'. The service now default-excludes
+    // those markers from operator-facing views (leakage guard added
+    // 2026-04-21). Tests must opt in via includeTestFixtures: true to
+    // exercise the filter plumbing itself.
     it('returns paginated list with filter by status=open', async () => {
       await createFailedException(`exc-list-open-${ts}`);
 
       const result = await postingExceptionService.listExceptions({
         status: 'open',
+        includeTestFixtures: true,
       });
 
       expect(result.exceptions.length).toBeGreaterThanOrEqual(1);
@@ -97,6 +103,7 @@ describe('postingExceptionService', () => {
 
       const result = await postingExceptionService.listExceptions({
         projectId: testProject.id,
+        includeTestFixtures: true,
       });
 
       expect(result.exceptions.length).toBeGreaterThanOrEqual(1);
@@ -110,11 +117,27 @@ describe('postingExceptionService', () => {
 
       const result = await postingExceptionService.listExceptions({
         eventType: 'TEST_EVENT_M1',
+        includeTestFixtures: true,
       });
 
       expect(result.exceptions.length).toBeGreaterThanOrEqual(1);
       for (const exc of result.exceptions) {
         expect(exc.event.eventType).toBe('TEST_EVENT_M1');
+      }
+    });
+
+    it('default excludes TEST_EVENT_M1 / test_record fixtures', async () => {
+      // Regression guard for the leakage defense: operator-facing list
+      // (no includeTestFixtures flag) must not return vitest markers.
+      await createFailedException(`exc-list-leak-guard-${ts}`);
+
+      const result = await postingExceptionService.listExceptions({
+        status: 'open',
+      });
+
+      for (const exc of result.exceptions) {
+        expect(exc.event.eventType).not.toBe('TEST_EVENT_M1');
+        expect(exc.event.sourceRecordType).not.toBe('test_record');
       }
     });
   });

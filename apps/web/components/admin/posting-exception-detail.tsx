@@ -22,10 +22,14 @@ import { Textarea } from '@fmksa/ui/components/textarea';
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   Loader2,
   RefreshCw,
   RotateCcw,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -64,6 +68,26 @@ type PostingExceptionDetailProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+function buildSourceRecordHref(
+  projectId: string,
+  recordType: string,
+  recordId: string,
+): string | null {
+  const base = `/projects/${projectId}`;
+  switch (recordType) {
+    case 'purchase_order':
+      return `${base}/procurement/purchase-orders/${recordId}`;
+    case 'supplier_invoice':
+      return `${base}/procurement/supplier-invoices/${recordId}`;
+    case 'expense':
+      return `${base}/procurement/expenses/${recordId}`;
+    case 'credit_note':
+      return `${base}/procurement/credit-notes/${recordId}`;
+    default:
+      return null;
+  }
+}
+
 export function PostingExceptionDetail({
   exceptionId,
   open,
@@ -71,6 +95,7 @@ export function PostingExceptionDetail({
 }: PostingExceptionDetailProps) {
   const [resolveNote, setResolveNote] = useState('');
   const [showResolveForm, setShowResolveForm] = useState(false);
+  const [payloadExpanded, setPayloadExpanded] = useState(false);
 
   const utils = trpc.useUtils();
 
@@ -110,6 +135,8 @@ export function PostingExceptionDetail({
   const exception = data?.exception;
   const auditLogs = data?.auditLogs ?? [];
   const event = exception?.event;
+  const project = event?.project;
+  const sourceRecordExists = data?.sourceRecordExists ?? false;
   const isResolved = !!exception?.resolvedAt;
 
   function handleRetry() {
@@ -178,12 +205,50 @@ export function PostingExceptionDetail({
                 <span>{event.sourceService}</span>
 
                 <span className="text-muted-foreground">Source Record</span>
-                <span className="font-mono text-xs">
-                  {event.sourceRecordType}/{event.sourceRecordId}
-                </span>
+                {(() => {
+                  const href = buildSourceRecordHref(
+                    event.projectId,
+                    event.sourceRecordType,
+                    event.sourceRecordId,
+                  );
+                  const canLink = href && sourceRecordExists;
+                  return (
+                    <div className="flex flex-col gap-0.5">
+                      {canLink ? (
+                        <Link
+                          href={href}
+                          className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline w-fit"
+                        >
+                          {event.sourceRecordType}/{event.sourceRecordId.slice(0, 8)}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {event.sourceRecordType}/{event.sourceRecordId.slice(0, 8)}
+                        </span>
+                      )}
+                      {!sourceRecordExists && (
+                        <span className="text-[11px] text-muted-foreground italic">
+                          Source record no longer available
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
-                <span className="text-muted-foreground">Project ID</span>
-                <span className="font-mono text-xs">{event.projectId}</span>
+                <span className="text-muted-foreground">Project</span>
+                {project ? (
+                  <span>
+                    {project.name}{' '}
+                    <span className="text-xs font-mono text-muted-foreground">
+                      ({project.code})
+                    </span>
+                  </span>
+                ) : (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {event.projectId}
+                  </span>
+                )}
 
                 <span className="text-muted-foreground">Event Status</span>
                 <span>{event.status}</span>
@@ -219,14 +284,73 @@ export function PostingExceptionDetail({
 
             <Separator />
 
-            {/* Payload */}
+            {/* Payload — collapsed by default so the JSON doesn't
+                dominate the sheet. Operators usually only need it when
+                actively debugging. Key-value preview stays visible so the
+                most relevant fields are always one glance away. */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">
-                Payload
-              </h3>
-              <pre className="rounded-md border bg-muted/50 p-3 text-xs overflow-x-auto max-h-48">
-                {JSON.stringify(event.payloadJson, null, 2)}
-              </pre>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Payload
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setPayloadExpanded((v) => !v)}
+                >
+                  {payloadExpanded ? (
+                    <>
+                      <ChevronUp className="h-3 w-3 mr-1" />
+                      Hide raw JSON
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3 mr-1" />
+                      Show raw JSON
+                    </>
+                  )}
+                </Button>
+              </div>
+              {/* Key-value preview — always visible. Object values are
+                  stringified; deep nesting falls back to the raw JSON
+                  expander below. */}
+              {typeof event.payloadJson === 'object' && event.payloadJson !== null ? (
+                <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs rounded-md border bg-muted/30 p-3">
+                  {Object.entries(event.payloadJson as Record<string, unknown>)
+                    .slice(0, 8)
+                    .map(([k, v]) => (
+                      <div key={k} className="contents">
+                        <span className="text-muted-foreground font-mono">{k}</span>
+                        <span className="font-mono break-all">
+                          {v == null
+                            ? '—'
+                            : typeof v === 'object'
+                              ? '{…}'
+                              : String(v)}
+                        </span>
+                      </div>
+                    ))}
+                  {Object.keys(event.payloadJson as Record<string, unknown>).length > 8 && (
+                    <div className="col-span-2 text-[11px] text-muted-foreground italic">
+                      +
+                      {Object.keys(event.payloadJson as Record<string, unknown>).length - 8}{' '}
+                      more — expand raw JSON to see all fields
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Payload is not an object (shape:{' '}
+                  {event.payloadJson === null ? 'null' : typeof event.payloadJson}
+                  )
+                </p>
+              )}
+              {payloadExpanded && (
+                <pre className="rounded-md border bg-muted/50 p-3 text-xs overflow-x-auto max-h-48">
+                  {JSON.stringify(event.payloadJson, null, 2)}
+                </pre>
+              )}
             </div>
 
             {/* Resolution info (if resolved) */}

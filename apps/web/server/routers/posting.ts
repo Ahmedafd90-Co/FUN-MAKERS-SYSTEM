@@ -135,7 +135,14 @@ const exceptionsRouter = router({
         eventType?: string;
         skip?: number;
         take?: number;
-      } = { skip: input.skip, take: input.take };
+        includeTestFixtures?: boolean;
+      } = {
+        skip: input.skip,
+        take: input.take,
+        // Pass-through the opt-in so an admin can debug the test pipeline
+        // without having to edit the router. Default remains false via Zod.
+        includeTestFixtures: input.includeTestFixtures,
+      };
       if (input.status !== undefined) filters.status = input.status;
       if (input.projectId !== undefined) filters.projectId = input.projectId;
       if (input.eventType !== undefined) filters.eventType = input.eventType;

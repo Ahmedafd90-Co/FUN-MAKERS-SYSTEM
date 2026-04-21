@@ -92,14 +92,25 @@ const templatesRouter = router({
         .object({
           recordType: z.string().optional(),
           isActive: z.boolean().optional(),
+          /**
+           * When false (default), exclude `recordType='test_record'`
+           * templates that vitest leaves behind on the shared dev DB.
+           */
+          includeTestFixtures: z.boolean().optional(),
         })
         .optional(),
     )
     .query(async ({ input }) => {
       if (!input) return workflowTemplateService.listTemplates();
-      const filters: { recordType?: string; isActive?: boolean } = {};
+      const filters: {
+        recordType?: string;
+        isActive?: boolean;
+        includeTestFixtures?: boolean;
+      } = {};
       if (input.recordType !== undefined) filters.recordType = input.recordType;
       if (input.isActive !== undefined) filters.isActive = input.isActive;
+      if (input.includeTestFixtures !== undefined)
+        filters.includeTestFixtures = input.includeTestFixtures;
       return workflowTemplateService.listTemplates(filters);
     }),
 

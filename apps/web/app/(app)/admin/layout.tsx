@@ -4,7 +4,6 @@ import { cn } from '@fmksa/ui/lib/utils';
 import {
   Users,
   Shield,
-  FolderKanban,
   Building2,
   Database,
   GitBranch,
@@ -35,7 +34,13 @@ type AdminNavItem = {
 const adminNavItems: AdminNavItem[] = [
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Roles & Permissions', href: '/admin/roles', icon: Shield },
-  { label: 'Project Assignments', href: '/admin/assignments', icon: FolderKanban },
+  // Project Assignments (/admin/assignments) is intentionally hidden
+  // from the admin sidebar. The current component is a placeholder stub —
+  // it renders one row per project with "-" in User/Role columns rather
+  // than real assignment data. Showing it to operators is misleading;
+  // hiding it is the honest move until the page is actually wired to
+  // query real assignments. The route still resolves, so existing deep
+  // links don't break.
   { label: 'Entities', href: '/admin/entities', icon: Building2 },
   { label: 'Reference Data', href: '/admin/reference-data', icon: Database },
   {

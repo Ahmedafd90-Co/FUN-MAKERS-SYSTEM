@@ -13,7 +13,19 @@ type ListExceptionsInput = {
   eventType?: string;
   skip?: number;
   take?: number;
+  /**
+   * When false/undefined (default), exclude vitest fixture rows from the
+   * result set. Admin surfaces should never see these.
+   */
+  includeTestFixtures?: boolean;
 };
+
+// Recognised fixture markers — rows the vitest suite leaves behind on the
+// shared dev DB. Keep in sync with packages/core/tests/**/*.test.ts.
+// eventType='TEST_EVENT_M1'        ← posting/*.test.ts
+// sourceRecordType='test_record'   ← posting/*.test.ts, audit/coverage.test.ts
+const TEST_EVENT_TYPES = ['TEST_EVENT_M1'] as const;
+const TEST_SOURCE_RECORD_TYPES = ['test_record'] as const;
 
 // ---------------------------------------------------------------------------
 // Posting Exception Service
@@ -28,6 +40,7 @@ export const postingExceptionService = {
    */
   async listExceptions(input: ListExceptionsInput = {}) {
     const { status, projectId, eventType, skip = 0, take = 50 } = input;
+    const includeTestFixtures = input.includeTestFixtures ?? false;
 
     // Build the where clause
     const where: Record<string, unknown> = {};
@@ -41,7 +54,18 @@ export const postingExceptionService = {
     // Filters that live on the related PostingEvent
     const eventWhere: Record<string, unknown> = {};
     if (projectId) eventWhere.projectId = projectId;
-    if (eventType) eventWhere.eventType = eventType;
+    if (eventType) {
+      // Explicit filter wins — caller asked for this specific eventType,
+      // don't also apply the notIn (it would be redundant or contradictory).
+      eventWhere.eventType = eventType;
+    } else if (!includeTestFixtures) {
+      // Default-exclude vitest leakage when caller hasn't asked for a
+      // specific eventType. The includeTestFixtures flag opts back in.
+      eventWhere.eventType = { notIn: TEST_EVENT_TYPES };
+    }
+    if (!includeTestFixtures) {
+      eventWhere.sourceRecordType = { notIn: TEST_SOURCE_RECORD_TYPES };
+    }
     if (Object.keys(eventWhere).length > 0) {
       where.event = eventWhere;
     }
@@ -49,7 +73,15 @@ export const postingExceptionService = {
     const [exceptions, total] = await Promise.all([
       prisma.postingException.findMany({
         where,
-        include: { event: true },
+        include: {
+          event: {
+            include: {
+              // Include project name/code so the admin list can show a
+              // human identity instead of a sliced UUID.
+              project: { select: { id: true, code: true, name: true } },
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take,
@@ -62,15 +94,68 @@ export const postingExceptionService = {
 
   /**
    * Get a single exception with its related event and audit logs.
+   *
+   * Enriched for the admin detail sheet with:
+   *   - `project` (on the event) so the sheet can show a readable label
+   *   - `sourceRecordExists` so the UI can decide whether the source
+   *     record reference is clickable or should render as muted text
+   *     with a "no longer available" note (matches the pattern used for
+   *     absorption exceptions).
    */
   async getException(id: string) {
     const exception = await prisma.postingException.findUnique({
       where: { id },
-      include: { event: true },
+      include: {
+        event: {
+          include: {
+            project: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
     });
 
     if (!exception) {
       throw new Error(`PostingException '${id}' not found.`);
+    }
+
+    // Resolve source-record existence by source type. Mirrors the approach
+    // in the absorption-exception router — lets the UI avoid showing
+    // clickable links that 404.
+    let sourceRecordExists = false;
+    try {
+      const srid = exception.event.sourceRecordId;
+      switch (exception.event.sourceRecordType) {
+        case 'purchase_order':
+          sourceRecordExists = !!(await prisma.purchaseOrder.findUnique({
+            where: { id: srid },
+            select: { id: true },
+          }));
+          break;
+        case 'supplier_invoice':
+          sourceRecordExists = !!(await prisma.supplierInvoice.findUnique({
+            where: { id: srid },
+            select: { id: true },
+          }));
+          break;
+        case 'expense':
+          sourceRecordExists = !!(await prisma.expense.findUnique({
+            where: { id: srid },
+            select: { id: true },
+          }));
+          break;
+        case 'credit_note':
+          sourceRecordExists = !!(await prisma.creditNote.findUnique({
+            where: { id: srid },
+            select: { id: true },
+          }));
+          break;
+        default:
+          // Unknown / test record type — treat as non-existent. UI renders
+          // a muted reference with a "no longer available" note.
+          sourceRecordExists = false;
+      }
+    } catch {
+      sourceRecordExists = false;
     }
 
     // Fetch related audit logs for the event
@@ -82,7 +167,7 @@ export const postingExceptionService = {
       orderBy: { createdAt: 'desc' },
     });
 
-    return { exception, auditLogs };
+    return { exception, auditLogs, sourceRecordExists };
   },
 
   /**
