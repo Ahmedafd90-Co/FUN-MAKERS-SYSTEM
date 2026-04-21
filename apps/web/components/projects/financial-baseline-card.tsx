@@ -33,7 +33,6 @@ import { formatMoney } from '@/components/commercial/shared';
 type FinancialBaselineCardProps = {
   projectId: string;
   contractValue: string | number | null;
-  revisedContractValue: string | number | null;
   currency: string;
   currencySymbol: string;
   /** Whether the current user can edit (project.edit). */
@@ -47,15 +46,23 @@ type FinancialBaselineCardProps = {
 export function FinancialBaselineCard({
   projectId,
   contractValue,
-  revisedContractValue,
   currency,
   currencySymbol,
   canEdit,
 }: FinancialBaselineCardProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // Revised Contract Value is system-derived from getFinancialKpis
+  // (contractValue + Σ approved variation deltas). The stored
+  // project.revisedContractValue column is intentionally not read here —
+  // see revised-budget-field-independence.test.ts for the guard.
+  const { data: financialKpis } = trpc.commercial.dashboard.financialKpis.useQuery(
+    { projectId },
+  );
+
   const cvNum = contractValue !== null ? parseFloat(String(contractValue)) : null;
-  const rcvNum = revisedContractValue !== null ? parseFloat(String(revisedContractValue)) : null;
+  const revisedKpiValue = financialKpis?.kpis.revised_budget?.value ?? null;
+  const rcvNum = revisedKpiValue !== null ? parseFloat(revisedKpiValue) : null;
 
   const hasBaseline = cvNum !== null;
 

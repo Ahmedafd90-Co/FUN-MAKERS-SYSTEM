@@ -29,7 +29,6 @@ type ProjectData = {
   entity: { id: string; name: string; code: string } | null;
   currency: { code: string; name: string; symbol: string } | null;
   contractValue: string | number | null;
-  revisedContractValue: string | number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -93,7 +92,6 @@ function OverviewTab({ project, canEditProject }: { project: ProjectData; canEdi
       <FinancialBaselineCard
         projectId={project.id}
         contractValue={project.contractValue}
-        revisedContractValue={project.revisedContractValue}
         currency={project.currency?.code ?? project.currencyCode}
         currencySymbol={project.currency?.symbol ?? project.currencyCode}
         canEdit={canEditProject}

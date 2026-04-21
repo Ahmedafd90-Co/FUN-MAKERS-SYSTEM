@@ -93,7 +93,6 @@ export default function ProjectWorkspacePage() {
             ? { code: project.currency.code, name: project.currency.name, symbol: project.currency.symbol }
             : null,
           contractValue: toStringOrNull(project.contractValue),
-          revisedContractValue: toStringOrNull(project.revisedContractValue),
         }}
       />
     </>
