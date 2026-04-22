@@ -9,4 +9,5 @@ export * from './correspondence';
 export * from './invoice-collection';
 export * from './dashboard';
 export * from './forecast';
+export * from './monthly-cost-sheet';
 export * from './revised-contract-value';
