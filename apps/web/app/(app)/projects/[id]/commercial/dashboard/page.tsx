@@ -16,11 +16,16 @@ export default function CommercialDashboardPage() {
         />
         {/* Export — XLSX has Financial KPIs / Forecast Periods / Register
             Summary / Variations sheets. CSV flattens to Financial KPIs. */}
-        <div className="pt-1">
+        <div className="flex items-center gap-2 pt-1">
           <ExportMenu
             endpoint="/api/exports/commercial"
             query={{ projectId: params.id }}
             label="Export"
+          />
+          <ExportMenu
+            endpoint="/api/exports/monthly-cost-sheet"
+            query={{ projectId: params.id }}
+            label="Monthly Cost Sheet"
           />
         </div>
       </div>
