@@ -15,23 +15,25 @@
  *   - actorSource = 'system'
  *   - workflow instance ID, template code, step name, action context
  *
- * Supported record types: 'ipa', 'ipc', 'rfq', 'variation', 'correspondence'.
+ * Supported record types: 'ipa', 'ipc', 'rfq', 'variation', 'correspondence',
+ * 'purchase_order'.
  *
  * Call registerConvergenceHandlers() once during app initialization.
  */
 
 import { prisma } from '@fmksa/db';
-import type { IpaStatus, IpcStatus, CorrespondenceStatus } from '@fmksa/db';
+import type { IpaStatus, IpcStatus, CorrespondenceStatus, PurchaseOrderStatus } from '@fmksa/db';
 import type { WorkflowEventPayload } from '@fmksa/contracts';
 import * as workflowEvents from './events';
 import { auditService } from '../audit/service';
 import { postingService } from '../posting/service';
+import { absorbPoCommitment } from '../budget/absorption';
 
 // ---------------------------------------------------------------------------
 // Type registry — which record types have convergence wired
 // ---------------------------------------------------------------------------
 
-const CONVERGENCE_RECORD_TYPES = ['ipa', 'ipc', 'rfq', 'variation', 'correspondence'] as const;
+const CONVERGENCE_RECORD_TYPES = ['ipa', 'ipc', 'rfq', 'variation', 'correspondence', 'purchase_order'] as const;
 
 function isConvergenceWired(recordType: string): boolean {
   return (CONVERGENCE_RECORD_TYPES as readonly string[]).includes(recordType);
@@ -739,6 +741,183 @@ async function handleCorrespondenceRejected(payload: WorkflowEventPayload): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Purchase Order convergence
+// ---------------------------------------------------------------------------
+//
+// When the workflow for a PO completes (approved / returned / rejected), we
+// drive the PO's status to match. On approval, we also run budget absorption
+// and fire the PO_COMMITTED posting event — the same side effects the manual
+// transition path has.
+//
+// KNOWN LIMITATION: If budget absorption fails with a blocking reason (e.g.
+// no budget line, no category mapping), the manual transition path reverts
+// the status. In the convergence path, by the time we get here the workflow
+// is already complete, so we leave the PO in 'approved' state and rely on
+// the recorded absorption exception to surface the problem to an admin.
+// A follow-up should pre-validate budget mapping before the final workflow
+// step can complete, so the error never lands post-approval.
+
+async function handlePoApproved(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({
+    where: { id: payload.recordId },
+    include: { project: true },
+  });
+  if (!po) return;
+  if (po.status === 'approved') return; // already converged (idempotent)
+
+  const beforeStatus = po.status;
+
+  // Update record status
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved' as PurchaseOrderStatus },
+  });
+
+  // Audit with workflow provenance
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_approved',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  // Budget absorption — same as the manual transition path. An absorption
+  // exception is recorded in the DB regardless of outcome; the block-and-
+  // revert behavior of the manual path is intentionally NOT replicated here
+  // (see file header comment above).
+  const absorption = await absorbPoCommitment(po.projectId, po.id, payload.actorUserId);
+  if (!absorption.absorbed) {
+    console.warn(
+      `[convergence] PO ${po.id}: budget absorption failed (${absorption.reasonCode}) — ${absorption.message}. Exception: ${absorption.exceptionId}. PO remains in 'approved' state; admin must resolve the absorption exception.`,
+    );
+  }
+
+  // Posting event: PO_COMMITTED — parity with manual transition path.
+  await postingService.post({
+    eventType: 'PO_COMMITTED',
+    sourceService: 'procurement',
+    sourceRecordType: 'purchase_order',
+    sourceRecordId: po.id,
+    projectId: po.projectId,
+    entityId: po.project.entityId,
+    idempotencyKey: `po-committed-${po.id}`,
+    payload: {
+      purchaseOrderId: po.id,
+      poNumber: po.poNumber,
+      vendorId: po.vendorId,
+      totalAmount: String(po.totalAmount),
+      currency: po.currency,
+      categoryId: po.categoryId,
+      projectId: po.projectId,
+      entityId: po.project.entityId,
+    },
+    actorUserId: payload.actorUserId,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → approved (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handlePoReturned(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: payload.recordId } });
+  if (!po) return;
+  if (po.status === 'returned') return; // idempotent
+
+  const beforeStatus = po.status;
+
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as PurchaseOrderStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_returned',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handlePoRejected(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: payload.recordId } });
+  if (!po) return;
+  if (po.status === 'rejected') return; // idempotent
+
+  const beforeStatus = po.status;
+
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as PurchaseOrderStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_rejected',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Event dispatchers
 // ---------------------------------------------------------------------------
 
@@ -750,6 +929,7 @@ async function onWorkflowApproved(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'rfq') return handleRfqApproved(payload);
   if (payload.recordType === 'variation') return handleVariationApproved(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
+  if (payload.recordType === 'purchase_order') return handlePoApproved(payload);
 }
 
 async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> {
@@ -760,6 +940,7 @@ async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'rfq') return handleRfqReturned(payload);
   if (payload.recordType === 'variation') return handleVariationReturned(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
+  if (payload.recordType === 'purchase_order') return handlePoReturned(payload);
 }
 
 async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> {
@@ -770,6 +951,7 @@ async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'rfq') return handleRfqRejected(payload);
   if (payload.recordType === 'variation') return handleVariationRejected(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
+  if (payload.recordType === 'purchase_order') return handlePoRejected(payload);
 }
 
 // ---------------------------------------------------------------------------
