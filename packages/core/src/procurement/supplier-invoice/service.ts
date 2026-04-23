@@ -10,8 +10,14 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
-import { SI_TRANSITIONS, SI_TERMINAL_STATUSES, SI_ACTION_TO_STATUS } from './transitions';
+import { SI_TRANSITIONS, SI_TERMINAL_STATUSES, SI_ACTION_TO_STATUS, SI_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { absorbSupplierInvoiceActual } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -155,6 +161,25 @@ export async function transitionSupplierInvoice(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when a workflow is
+  // active. These actions are driven by the workflow step service, not direct
+  // transitions. Legacy manual approval is still allowed when no workflow
+  // instance exists (projects without an SI workflow template configured).
+  if (SI_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'supplier_invoice',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this supplier invoice — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Update status
   const updated = await prisma.supplierInvoice.update({
     where: { id },
@@ -174,6 +199,41 @@ export async function transitionSupplierInvoice(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on review (parity with PO/IPA — but triggered when
+  // the SI enters the review phase, since SI has no 'submitted' state)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'supplier_invoice', this is graceful —
+  // the transition still succeeds. Workflows are optional infrastructure;
+  // projects without a template fall back to manual approval.
+  if (newStatus === 'under_review') {
+    try {
+      const resolution = await resolveTemplate('supplier_invoice', existing.projectId);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'supplier_invoice',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[si-workflow] No workflow template configured for supplier_invoice in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[si-workflow] Skipped workflow start for SI ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Posting event: SUPPLIER_INVOICE_APPROVED
