@@ -16,24 +16,24 @@
  *   - workflow instance ID, template code, step name, action context
  *
  * Supported record types: 'ipa', 'ipc', 'rfq', 'variation', 'correspondence',
- * 'purchase_order'.
+ * 'purchase_order', 'supplier_invoice'.
  *
  * Call registerConvergenceHandlers() once during app initialization.
  */
 
 import { prisma } from '@fmksa/db';
-import type { IpaStatus, IpcStatus, CorrespondenceStatus, PurchaseOrderStatus } from '@fmksa/db';
+import type { IpaStatus, IpcStatus, CorrespondenceStatus, PurchaseOrderStatus, SupplierInvoiceStatus } from '@fmksa/db';
 import type { WorkflowEventPayload } from '@fmksa/contracts';
 import * as workflowEvents from './events';
 import { auditService } from '../audit/service';
 import { postingService } from '../posting/service';
-import { absorbPoCommitment } from '../budget/absorption';
+import { absorbPoCommitment, absorbSupplierInvoiceActual } from '../budget/absorption';
 
 // ---------------------------------------------------------------------------
 // Type registry — which record types have convergence wired
 // ---------------------------------------------------------------------------
 
-const CONVERGENCE_RECORD_TYPES = ['ipa', 'ipc', 'rfq', 'variation', 'correspondence', 'purchase_order'] as const;
+const CONVERGENCE_RECORD_TYPES = ['ipa', 'ipc', 'rfq', 'variation', 'correspondence', 'purchase_order', 'supplier_invoice'] as const;
 
 function isConvergenceWired(recordType: string): boolean {
   return (CONVERGENCE_RECORD_TYPES as readonly string[]).includes(recordType);
@@ -918,6 +918,184 @@ async function handlePoRejected(payload: WorkflowEventPayload): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Supplier Invoice convergence
+// ---------------------------------------------------------------------------
+//
+// When the workflow for an SI completes (approved / returned / rejected), we
+// drive the SI's status to match. On approval, we also run budget absorption
+// (SI approved → actualAmount++) and fire the SUPPLIER_INVOICE_APPROVED posting
+// event — the same side effects the manual transition path has.
+//
+// Option A semantics: workflow-returned SIs land in 'disputed' state (the
+// same state operators use for manual dispute). One state, unified meaning
+// — "this invoice has an issue that needs resolution".
+//
+// KNOWN LIMITATION: Same as PO — if budget absorption fails during workflow
+// approval, the SI stays at 'approved' and the absorption exception is
+// recorded for admin resolution. Follow-up: pre-validate budget mapping
+// before the final workflow step can complete.
+
+async function handleSupplierInvoiceApproved(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({
+    where: { id: payload.recordId },
+    include: { project: true },
+  });
+  if (!si) return;
+  if (si.status === 'approved') return; // already converged (idempotent)
+
+  const beforeStatus = si.status;
+
+  // Update record status
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved' as SupplierInvoiceStatus },
+  });
+
+  // Audit with workflow provenance
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_approved',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  // Budget absorption — SI approved → actualAmount++. Parity with manual path.
+  const absorption = await absorbSupplierInvoiceActual(si.projectId, si.id, payload.actorUserId);
+  if (!absorption.absorbed) {
+    console.warn(
+      `[convergence] SI ${si.id}: budget absorption failed (${absorption.reasonCode}) — ${absorption.message}. Exception: ${absorption.exceptionId}. SI remains in 'approved' state; admin must resolve the absorption exception.`,
+    );
+  }
+
+  // Posting event: SUPPLIER_INVOICE_APPROVED — same idempotency key as manual
+  // path, so duplicate events from both paths deduplicate at the posting service.
+  await postingService.post({
+    eventType: 'SUPPLIER_INVOICE_APPROVED',
+    sourceService: 'procurement',
+    sourceRecordType: 'supplier_invoice',
+    sourceRecordId: si.id,
+    projectId: si.projectId,
+    entityId: si.project.entityId,
+    idempotencyKey: `si-approved-${si.id}`,
+    payload: {
+      supplierInvoiceId: si.id,
+      invoiceNumber: si.invoiceNumber,
+      vendorId: si.vendorId,
+      purchaseOrderId: si.purchaseOrderId,
+      grossAmount: String(si.grossAmount),
+      vatAmount: String(si.vatAmount),
+      totalAmount: String(si.totalAmount),
+      currency: si.currency,
+      projectId: si.projectId,
+      entityId: si.project.entityId,
+    },
+    actorUserId: payload.actorUserId,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → approved (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleSupplierInvoiceReturned(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!si) return;
+  if (si.status === 'disputed') return; // idempotent
+
+  const beforeStatus = si.status;
+
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'disputed' as SupplierInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_returned',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'disputed',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → disputed (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleSupplierInvoiceRejected(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!si) return;
+  if (si.status === 'rejected') return; // idempotent
+
+  const beforeStatus = si.status;
+
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as SupplierInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_rejected',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Event dispatchers
 // ---------------------------------------------------------------------------
 
@@ -930,6 +1108,7 @@ async function onWorkflowApproved(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'variation') return handleVariationApproved(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
   if (payload.recordType === 'purchase_order') return handlePoApproved(payload);
+  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceApproved(payload);
 }
 
 async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> {
@@ -941,6 +1120,7 @@ async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'variation') return handleVariationReturned(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
   if (payload.recordType === 'purchase_order') return handlePoReturned(payload);
+  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceReturned(payload);
 }
 
 async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> {
@@ -952,6 +1132,7 @@ async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> 
   if (payload.recordType === 'variation') return handleVariationRejected(payload);
   if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
   if (payload.recordType === 'purchase_order') return handlePoRejected(payload);
+  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceRejected(payload);
 }
 
 // ---------------------------------------------------------------------------
