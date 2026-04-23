@@ -1904,6 +1904,7 @@ enum PurchaseOrderStatus {
   closed              @map("closed")
   rejected            @map("rejected")
   cancelled           @map("cancelled")
+  returned            @map("returned")
 
   @@map("purchase_order_status")
 }

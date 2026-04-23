@@ -7,6 +7,7 @@
  * Call `registerWorkflowNotificationHandlers()` once during app initialization.
  *
  * Event → notification mappings:
+ *  - workflow.started      → notify approvers of the FIRST step
  *  - workflow.stepApproved → notify approvers of the NEXT step
  *  - workflow.approved     → notify the workflow starter
  *  - workflow.rejected     → notify the workflow starter
@@ -57,6 +58,65 @@ async function buildRecipients(
     select: { id: true, name: true },
   });
   return users as Array<{ id: string; name: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Handler: workflow.started → notify first step approvers
+// ---------------------------------------------------------------------------
+//
+// Without this handler, the first approver in the chain has no idea a record
+// is waiting for them until they happen to open the My Approvals page. That
+// is the exact "approvals by email/WhatsApp chase" behavior the system is
+// trying to eliminate. This handler closes the gap.
+
+async function handleWorkflowStarted(payload: WorkflowEventPayload): Promise<void> {
+  const { instanceId, projectId, recordType, recordId } = payload;
+
+  const instance = await loadInstance(instanceId);
+  if (!instance) return;
+
+  const currentStepId = instance.currentStepId as string | null;
+  if (!currentStepId) return; // no first step resolved — nothing to notify
+
+  const steps = instance.template.steps as Array<{
+    id: string;
+    name: string;
+    orderIndex: number;
+    approverRuleJson: unknown;
+  }>;
+
+  const currentStep = steps.find((s) => s.id === currentStepId);
+  if (!currentStep) return;
+
+  let approverIds: string[] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    approverIds = await resolveApprovers(
+      currentStep.approverRuleJson as any,
+      projectId,
+    );
+  } catch {
+    // If we can't resolve approvers, skip the notification silently.
+    // The My Approvals query applies the same filter, so users will still
+    // see the work when they check — they just won't get a push notification.
+    return;
+  }
+
+  const recipients = await buildRecipients(approverIds);
+  if (recipients.length === 0) return;
+
+  await notify({
+    templateCode: 'workflow_step_assigned',
+    recipients,
+    payload: {
+      stepName: currentStep.name,
+      recordType,
+      recordRef: recordId,
+      projectName: projectId, // real name resolved in later phase
+    },
+    idempotencyKey: `workflow.started:${instanceId}:${currentStepId}`,
+    channels: ['in_app', 'email'],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +340,7 @@ export function registerWorkflowNotificationHandlers(): void {
   // notifications reference the record. (Event bus executes in registration order.)
   registerConvergenceHandlers();
 
+  workflowEvents.on('workflow.started', handleWorkflowStarted);
   workflowEvents.on('workflow.stepApproved', handleStepApproved);
   workflowEvents.on('workflow.approved', handleWorkflowApproved);
   workflowEvents.on('workflow.rejected', handleWorkflowRejected);

@@ -10,8 +10,14 @@ import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
-import { PO_TRANSITIONS, PO_TERMINAL_STATUSES, PO_ACTION_TO_STATUS, PO_APPROVED_PLUS_STATUSES } from './transitions';
+import { PO_TRANSITIONS, PO_TERMINAL_STATUSES, PO_ACTION_TO_STATUS, PO_APPROVED_PLUS_STATUSES, PO_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { absorbPoCommitment, reversePoCommitment } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,6 +199,25 @@ export async function transitionPurchaseOrder(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when a workflow is
+  // active. These actions are driven by the workflow step service, not direct
+  // transitions. Legacy manual approval is still allowed when no workflow
+  // instance exists (projects without a PO workflow template configured).
+  if (PO_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'purchase_order',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this PO — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   // Update status
   const updated = await prisma.purchaseOrder.update({
     where: { id },
@@ -212,6 +237,40 @@ export async function transitionPurchaseOrder(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on submit (parity with IPA / IPC / Correspondence)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'purchase_order', this is graceful — the
+  // transition still succeeds. Workflows are optional infrastructure; projects
+  // without a template fall back to manual approval.
+  if (newStatus === 'submitted') {
+    try {
+      const resolution = await resolveTemplate('purchase_order', existing.projectId);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'purchase_order',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[po-workflow] No workflow template configured for purchase_order in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[po-workflow] Skipped workflow start for PO ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Posting events
