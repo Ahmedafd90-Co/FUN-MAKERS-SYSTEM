@@ -12,8 +12,15 @@ import {
   EXPENSE_TRANSITIONS,
   EXPENSE_TERMINAL_STATUSES,
   EXPENSE_ACTION_TO_STATUS,
+  EXPENSE_WORKFLOW_MANAGED_ACTIONS,
 } from './transitions';
 import { absorbExpenseActual } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Create (status: draft)
@@ -176,6 +183,25 @@ export async function transitionExpense(
     );
   }
 
+  // Workflow guard: block manual approval-phase actions when a workflow is
+  // active. These actions are driven by the workflow step service, not direct
+  // transitions. Legacy manual approval is still allowed when no workflow
+  // instance exists (projects without an Expense workflow template configured).
+  if (EXPENSE_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    const activeWorkflow = await prisma.workflowInstance.findFirst({
+      where: {
+        recordType: 'expense',
+        recordId: id,
+        status: { in: ['in_progress', 'returned'] },
+      },
+    });
+    if (activeWorkflow) {
+      throw new Error(
+        `Cannot manually '${action}' this expense — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
+      );
+    }
+  }
+
   const updated = await prisma.expense.update({
     where: { id },
     data: { status: newStatus as ExpenseStatus },
@@ -193,6 +219,40 @@ export async function transitionExpense(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on submit (parity with PO / IPA pattern)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'expense', this is graceful — the
+  // transition still succeeds. Workflows are optional infrastructure;
+  // projects without a template fall back to manual approval.
+  if (newStatus === 'submitted') {
+    try {
+      const resolution = await resolveTemplate('expense', existing.projectId);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'expense',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[expense-workflow] No workflow template configured for expense in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[expense-workflow] Skipped workflow start for expense ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // Budget absorption: Expense approved → actualAmount++
   if (newStatus === 'approved') {
