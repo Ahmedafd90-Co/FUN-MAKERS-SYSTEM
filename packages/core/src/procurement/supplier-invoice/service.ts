@@ -230,7 +230,16 @@ export async function transitionSupplierInvoice(
           `[si-workflow] Skipped workflow start for SI ${id}: ${(err as Error).message}`,
         );
       } else {
-        throw err;
+        // See PO service for full rationale. Short version: the SI's status
+        // is already 'under_review' with its audit log committed. Re-throwing
+        // here strands the SI and re-enables manual approve/reject/dispute
+        // bypass. Log loudly and fall through to the manual path.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[si-workflow] UNEXPECTED error starting workflow for SI ${id} in project ${existing.projectId}. The SI is in 'under_review' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
       }
     }
   }

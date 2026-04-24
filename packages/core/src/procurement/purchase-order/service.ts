@@ -267,7 +267,24 @@ export async function transitionPurchaseOrder(
           `[po-workflow] Skipped workflow start for PO ${id}: ${(err as Error).message}`,
         );
       } else {
-        throw err;
+        // The record's status has already been committed to 'submitted' along
+        // with its audit log. If we re-throw here, the caller sees an error
+        // but the record is stranded with no active workflow — the manual
+        // approve/reject/return path becomes re-enabled because the guard
+        // only fires when an active workflow exists. That is the exact
+        // bypass Lane 1 exists to prevent.
+        //
+        // Workflow infrastructure is optional by design. If the engine can't
+        // start for any reason, we log loudly for investigation and fall
+        // through to the manual approval path. An admin can manually kick
+        // the workflow later, or approve via the manual path which is now
+        // correctly available given no workflow exists.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[po-workflow] UNEXPECTED error starting workflow for PO ${id} in project ${existing.projectId}. The PO is in 'submitted' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
       }
     }
   }

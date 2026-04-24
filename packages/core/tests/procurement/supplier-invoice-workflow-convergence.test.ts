@@ -51,6 +51,7 @@ const ROLES_NEEDED = ['procurement', 'finance'] as const;
 describe('Supplier Invoice Workflow Convergence Proof', () => {
   let testProject: { id: string; code: string; entityId: string };
   let testVendor: { id: string };
+  let previousTemplateStates: Array<{ id: string; isActive: boolean }> = [];
   const ts = Date.now();
 
   /** Map from role code → userId created for this test */
@@ -58,6 +59,12 @@ describe('Supplier Invoice Workflow Convergence Proof', () => {
 
   beforeAll(async () => {
     registerConvergenceHandlers();
+
+    // Capture current template state so afterAll can restore it.
+    previousTemplateStates = await prisma.workflowTemplate.findMany({
+      where: { recordType: 'supplier_invoice' },
+      select: { id: true, isActive: true },
+    });
 
     // Ensure SI templates are active
     await prisma.workflowTemplate.updateMany({
@@ -141,10 +148,16 @@ describe('Supplier Invoice Workflow Convergence Proof', () => {
   });
 
   afterAll(async () => {
-    await prisma.workflowTemplate.updateMany({
-      where: { recordType: 'supplier_invoice' },
-      data: { isActive: true },
-    });
+    // Restore original template state so other tests that intentionally
+    // set templates inactive are not affected by our setup.
+    await Promise.all(
+      previousTemplateStates.map((template) =>
+        prisma.workflowTemplate.update({
+          where: { id: template.id },
+          data: { isActive: template.isActive },
+        }),
+      ),
+    );
   });
 
   const makeSiInput = (overrides = {}) => ({
