@@ -49,12 +49,19 @@ const ROLES_NEEDED = ['project_manager', 'finance'] as const;
 
 describe('Expense Workflow Convergence Proof', () => {
   let testProject: { id: string; code: string; entityId: string };
+  let previousTemplateStates: Array<{ id: string; isActive: boolean }> = [];
   const ts = Date.now();
 
   const roleUsers: Record<string, string> = {};
 
   beforeAll(async () => {
     registerConvergenceHandlers();
+
+    // Capture current template state so afterAll can restore it.
+    previousTemplateStates = await prisma.workflowTemplate.findMany({
+      where: { recordType: 'expense' },
+      select: { id: true, isActive: true },
+    });
 
     await prisma.workflowTemplate.updateMany({
       where: { recordType: 'expense' },
@@ -126,10 +133,16 @@ describe('Expense Workflow Convergence Proof', () => {
   });
 
   afterAll(async () => {
-    await prisma.workflowTemplate.updateMany({
-      where: { recordType: 'expense' },
-      data: { isActive: true },
-    });
+    // Restore original template state so other tests that intentionally
+    // set templates inactive are not affected by our setup.
+    await Promise.all(
+      previousTemplateStates.map((template) =>
+        prisma.workflowTemplate.update({
+          where: { id: template.id },
+          data: { isActive: template.isActive },
+        }),
+      ),
+    );
   });
 
   const makeExpenseInput = (overrides = {}) => ({

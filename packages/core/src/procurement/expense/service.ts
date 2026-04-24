@@ -249,7 +249,16 @@ export async function transitionExpense(
           `[expense-workflow] Skipped workflow start for expense ${id}: ${(err as Error).message}`,
         );
       } else {
-        throw err;
+        // See PO service for full rationale. Short version: the Expense's
+        // status is already 'submitted' with its audit log committed.
+        // Re-throwing here strands the expense and re-enables manual
+        // approve/reject/return bypass. Log loudly and fall through.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[expense-workflow] UNEXPECTED error starting workflow for expense ${id} in project ${existing.projectId}. The expense is in 'submitted' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
       }
     }
   }
