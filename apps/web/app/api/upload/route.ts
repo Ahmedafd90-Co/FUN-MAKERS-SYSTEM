@@ -20,6 +20,8 @@ import {
   documentService,
   accessControlService,
   assertProjectScope,
+  UnsupportedRecordTypeError,
+  ScopeMismatchError,
 } from '@fmksa/core';
 import { NextResponse } from 'next/server';
 
@@ -188,16 +190,37 @@ async function handleCreate(params: {
   // are non-empty strings; the service then validates the target record
   // exists and is in the same project (UnsupportedRecordTypeError /
   // ScopeMismatchError thrown on failure).
-  const document = await documentService.createDocument({
-    projectId,
-    title: title.trim(),
-    category,
-    createdBy: userId,
-    ...(typeof recordType === 'string' && recordType !== ''
-      ? { recordType }
-      : {}),
-    ...(typeof recordId === 'string' && recordId !== '' ? { recordId } : {}),
-  });
+  let document;
+  try {
+    document = await documentService.createDocument({
+      projectId,
+      title: title.trim(),
+      category,
+      createdBy: userId,
+      ...(typeof recordType === 'string' && recordType !== ''
+        ? { recordType }
+        : {}),
+      ...(typeof recordId === 'string' && recordId !== '' ? { recordId } : {}),
+    });
+  } catch (err) {
+    if (err instanceof UnsupportedRecordTypeError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    if (err instanceof ScopeMismatchError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    // Prisma findUniqueOrThrow on a missing record throws
+    // PrismaClientKnownRequestError with code P2025. Detect via property
+    // access to avoid pulling Prisma's runtime types into the route bundle.
+    if ((err as { code?: unknown })?.code === 'P2025') {
+      return NextResponse.json(
+        { error: 'Linked record not found.' },
+        { status: 404 },
+      );
+    }
+    // Unexpected — bubble to outer catch as 500.
+    throw err;
+  }
 
   // Upload the first version
   const version = await documentService.uploadVersion({

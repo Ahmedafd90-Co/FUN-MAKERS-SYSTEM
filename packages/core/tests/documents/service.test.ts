@@ -162,18 +162,38 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
     ).rejects.toThrow(/not found/);
   });
 
-  it('creates document with optional recordType and recordId', async () => {
-    const doc = await documentService.createDocument({
-      projectId: testProject.id,
-      title: 'Linked Doc',
-      category: 'contract_attachment',
-      recordType: 'purchase_order',
-      recordId: '00000000-0000-0000-0000-111111111111',
-      createdBy: testUser.id,
-    });
+  // Removed: 'creates document with optional recordType and recordId'.
+  // The previous test asserted that recordType/recordId persist correctly
+  // by passing a hardcoded fake UUID. Once verifyRecordInProject was added
+  // to createDocument, the fake UUID failed FK validation. The assertion
+  // it covered (column persistence) is implicitly proven by the
+  // verify-record.test.ts cases, which create real records and exercise
+  // the same persistence path through valid attachments. See PR #24.
 
-    expect(doc.recordType).toBe('purchase_order');
-    expect(doc.recordId).toBe('00000000-0000-0000-0000-111111111111');
+  it('rejects when recordType is provided without recordId', async () => {
+    await expect(
+      documentService.createDocument({
+        projectId: testProject.id,
+        title: 'Half-attached doc 1',
+        category: 'general',
+        recordType: 'expense',
+        // recordId intentionally omitted
+        createdBy: testUser.id,
+      }),
+    ).rejects.toThrow(/must be provided together/);
+  });
+
+  it('rejects when recordId is provided without recordType', async () => {
+    await expect(
+      documentService.createDocument({
+        projectId: testProject.id,
+        title: 'Half-attached doc 2',
+        category: 'general',
+        recordId: '00000000-0000-0000-0000-000000000000',
+        // recordType intentionally omitted
+        createdBy: testUser.id,
+      }),
+    ).rejects.toThrow(/must be provided together/);
   });
 
   // -------------------------------------------------------------------------

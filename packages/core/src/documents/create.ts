@@ -53,6 +53,15 @@ export async function createDocument(input: CreateDocumentInput) {
     throw new Error(`Project not found: ${projectId}`);
   }
 
+  // Both recordType and recordId must be provided together — partial
+  // attachments are invalid and would produce inconsistent rows
+  // (recordType set but recordId null, or vice versa).
+  if ((recordType == null) !== (recordId == null)) {
+    throw new Error(
+      'recordType and recordId must be provided together (or both omitted).',
+    );
+  }
+
   // If this document is being attached to a specific record (polymorphic FK),
   // verify the target exists and is in the same project. This protects against
   // attaching to records in other projects.
