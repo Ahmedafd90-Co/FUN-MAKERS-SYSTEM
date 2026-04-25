@@ -1,5 +1,6 @@
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { verifyRecordInProject } from './verify-record';
 
 // ---------------------------------------------------------------------------
 // Task 1.6.2 — createDocument
@@ -50,6 +51,13 @@ export async function createDocument(input: CreateDocumentInput) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) {
     throw new Error(`Project not found: ${projectId}`);
+  }
+
+  // If this document is being attached to a specific record (polymorphic FK),
+  // verify the target exists and is in the same project. This protects against
+  // attaching to records in other projects.
+  if (recordType != null && recordId != null) {
+    await verifyRecordInProject(recordType, recordId, projectId);
   }
 
   // Create document in a transaction with audit log

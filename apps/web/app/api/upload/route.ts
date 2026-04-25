@@ -107,6 +107,8 @@ export async function POST(request: NextRequest) {
       mimeType: file.type || 'application/octet-stream',
       title: formData.get('title') as string | null,
       category: formData.get('category') as string | null,
+      recordType: formData.get('recordType') as string | null,
+      recordId: formData.get('recordId') as string | null,
     });
   } catch (error) {
     console.error('[upload] Unexpected error:', error);
@@ -129,9 +131,20 @@ async function handleCreate(params: {
   mimeType: string;
   title: string | null;
   category: string | null;
+  recordType: string | null;
+  recordId: string | null;
 }) {
-  const { userId, projectId, fileBuffer, fileName, mimeType, title, category } =
-    params;
+  const {
+    userId,
+    projectId,
+    fileBuffer,
+    fileName,
+    mimeType,
+    title,
+    category,
+    recordType,
+    recordId,
+  } = params;
 
   // Validate required fields
   if (!title || title.trim().length === 0) {
@@ -171,12 +184,19 @@ async function handleCreate(params: {
     );
   }
 
-  // Create the document
+  // Create the document. recordType + recordId are passed only when both
+  // are non-empty strings; the service then validates the target record
+  // exists and is in the same project (UnsupportedRecordTypeError /
+  // ScopeMismatchError thrown on failure).
   const document = await documentService.createDocument({
     projectId,
     title: title.trim(),
     category,
     createdBy: userId,
+    ...(typeof recordType === 'string' && recordType !== ''
+      ? { recordType }
+      : {}),
+    ...(typeof recordId === 'string' && recordId !== '' ? { recordId } : {}),
   });
 
   // Upload the first version
