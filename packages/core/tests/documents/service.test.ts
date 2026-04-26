@@ -169,6 +169,15 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
   // it covered (column persistence) is implicitly proven by the
   // verify-record.test.ts cases, which create real records and exercise
   // the same persistence path through valid attachments. See PR #24.
+  //
+  // Tracking note: CodeRabbit on PR #24 second pass suggested adding
+  // a single happy-path integration test using real fixtures (vendor +
+  // PO + project) to prove createDocument's persistence path with valid
+  // recordType/recordId. Deferred — verify-record.test.ts covers the
+  // verifier path, but the createDocument orchestrator's persistence
+  // step is currently only proven by rejection-only tests. Real coverage
+  // gap, just small. Address when service.test.ts gets MinIO fixtures
+  // (would close the broader skipIf coverage gap at the same time).
 
   it('rejects when recordType is provided without recordId', async () => {
     await expect(

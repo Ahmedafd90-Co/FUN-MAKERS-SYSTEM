@@ -186,6 +186,20 @@ async function handleCreate(params: {
     );
   }
 
+  // Atomic-pair check on the polymorphic FK fields. The service layer
+  // also enforces this, but doing it here returns a precise 400 instead
+  // of letting the service's plain Error fall through to the outer 500
+  // catch. Defense-in-depth — service still validates as the source
+  // of truth.
+  const hasRecordType = typeof recordType === 'string' && recordType !== '';
+  const hasRecordId = typeof recordId === 'string' && recordId !== '';
+  if (hasRecordType !== hasRecordId) {
+    return NextResponse.json(
+      { error: 'recordType and recordId must be provided together.' },
+      { status: 400 },
+    );
+  }
+
   // Create the document. recordType + recordId are passed only when both
   // are non-empty strings; the service then validates the target record
   // exists and is in the same project (UnsupportedRecordTypeError /
