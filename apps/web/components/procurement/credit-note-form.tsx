@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import { getTodayLocalDateString } from '@/lib/date';
 
 type CreditNoteFormData = {
   vendorId: string;
@@ -52,7 +53,7 @@ export function CreditNoteForm({ projectId }: Props) {
     amount: '',
     currency: 'SAR',
     reason: '',
-    receivedDate: new Date().toISOString().split('T')[0]!,
+    receivedDate: getTodayLocalDateString(),
     supplierInvoiceId: '',
   });
 
@@ -92,6 +93,7 @@ export function CreditNoteForm({ projectId }: Props) {
     formData.creditNoteNumber.trim() !== '' &&
     formData.amount.trim() !== '' &&
     parseFloat(formData.amount) > 0 &&
+    formData.currency.trim().length === 3 &&
     formData.reason.trim() !== '' &&
     formData.receivedDate !== '';
 

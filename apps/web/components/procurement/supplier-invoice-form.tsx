@@ -20,6 +20,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import { getTodayLocalDateString } from '@/lib/date';
 
 // Saudi Arabia default VAT rate
 const DEFAULT_VAT_RATE = '0.15';
@@ -51,7 +52,7 @@ export function SupplierInvoiceForm({ projectId }: Props) {
   const [formData, setFormData] = useState<SupplierInvoiceFormData>({
     vendorId: '',
     purchaseOrderId: '',
-    invoiceDate: new Date().toISOString().split('T')[0]!,
+    invoiceDate: getTodayLocalDateString(),
     dueDate: '',
     currency: 'SAR',
     grossAmount: '',
@@ -115,9 +116,27 @@ export function SupplierInvoiceForm({ projectId }: Props) {
 
   // Validation
   const grossNum = parseFloat(formData.grossAmount);
+  const vatNum = parseFloat(formData.vatAmount);
   const totalNum = parseFloat(formData.totalAmount);
+
+  // Operational data correctness: gross + vatAmount must equal totalAmount
+  // within 0.01 (the smallest unit for any 2-decimal currency including SAR
+  // halala). Without this check, clearing vatRate skips the auto-compute and
+  // leaves stale vatAmount/totalAmount, producing internally-inconsistent
+  // invoice rows that fail ZATCA VAT-period reconciliation later.
+  // The intentional manual-override path (tax rulings) still works as long as
+  // the user keeps the math consistent.
+  const amountsAreConsistent =
+    !isNaN(grossNum) &&
+    !isNaN(vatNum) &&
+    !isNaN(totalNum) &&
+    Math.abs(grossNum + vatNum - totalNum) <= 0.01;
+
   const hasValidAmounts =
-    !isNaN(grossNum) && grossNum > 0 && !isNaN(totalNum) && totalNum > 0;
+    !isNaN(grossNum) && grossNum > 0 &&
+    !isNaN(vatNum) && vatNum >= 0 &&
+    !isNaN(totalNum) && totalNum > 0 &&
+    amountsAreConsistent;
 
   const hasPOOrReason =
     formData.purchaseOrderId !== '' || formData.noPOReason.trim() !== '';
@@ -126,13 +145,24 @@ export function SupplierInvoiceForm({ projectId }: Props) {
     formData.vendorId !== '' &&
     formData.invoiceDate !== '' &&
     hasValidAmounts &&
+    formData.currency.trim().length === 3 &&
     hasPOOrReason;
 
   const handleSubmit = () => {
     if (!isValid) {
-      setSubmitError(
-        'Please complete all required fields. If this invoice is not linked to a PO, explain why.',
-      );
+      if (
+        !isNaN(grossNum) && grossNum > 0 &&
+        !isNaN(totalNum) && totalNum > 0 &&
+        !amountsAreConsistent
+      ) {
+        setSubmitError(
+          'Amounts do not add up: gross + VAT must equal total. Please review the VAT rate and amount.',
+        );
+      } else {
+        setSubmitError(
+          'Please complete all required fields. If this invoice is not linked to a PO, explain why.',
+        );
+      }
       return;
     }
     setSubmitError(null);
