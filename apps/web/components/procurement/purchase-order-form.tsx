@@ -104,7 +104,8 @@ export function PurchaseOrderForm({ projectId }: Props) {
     formData.title.trim() !== '' &&
     formData.items.length > 0 &&
     hasValidItem &&
-    computedTotal > 0;
+    computedTotal > 0 &&
+    formData.currency.trim().length === 3;
 
   const handleSubmit = () => {
     if (!isValid) {
