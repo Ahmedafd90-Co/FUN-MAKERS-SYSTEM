@@ -9,6 +9,8 @@ export interface ListDocumentsInput {
   category?: string;
   status?: string;
   search?: string;
+  recordType?: string;
+  recordId?: string;
   skip?: number;
   take?: number;
 }
@@ -26,6 +28,8 @@ export async function listDocuments(input: ListDocumentsInput) {
     category,
     status,
     search,
+    recordType,
+    recordId,
     skip = 0,
     take = 20,
   } = input;
@@ -46,6 +50,14 @@ export async function listDocuments(input: ListDocumentsInput) {
       contains: search,
       mode: 'insensitive',
     };
+  }
+
+  if (recordType !== undefined) {
+    where.recordType = recordType;
+  }
+
+  if (recordId !== undefined) {
+    where.recordId = recordId;
   }
 
   const [items, total] = await Promise.all([
