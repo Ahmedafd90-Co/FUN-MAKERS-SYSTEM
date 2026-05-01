@@ -58,6 +58,47 @@ CREATE TYPE "credit_note_status" AS ENUM (
 -- Drop default → convert column type → re-apply default, for each table
 -- IMPORTANT: drop default first; can't ALTER TYPE while a TEXT default sits on the column.
 
+-- Preflight validation — fail fast with a clear message if any legacy status value
+-- falls outside the enum set. Without this, the ALTER COLUMN ... USING cast below
+-- would fail cryptically with a generic Postgres cast error. This guard surfaces
+-- a deterministic, actionable error message naming the affected table.
+--
+-- This is defensive: on existing dev DBs the migration runs via
+-- `migrate resolve --applied` (skipping execution); on fresh DBs no data exists.
+-- The guard becomes meaningful when ProjectLedger runs on a customer DB with
+-- arbitrary historical data (commercial pivot, year 2+).
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "purchase_orders"
+    WHERE "status" NOT IN ('draft','submitted','approved','issued','partially_delivered','delivered','closed','rejected','cancelled')
+  ) THEN
+    RAISE EXCEPTION 'Invalid purchase_orders.status value(s) found before enum cast — fix data before re-running migration';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM "expenses"
+    WHERE "status" NOT IN ('draft','submitted','approved','paid','closed','rejected','cancelled')
+  ) THEN
+    RAISE EXCEPTION 'Invalid expenses.status value(s) found before enum cast — fix data before re-running migration';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM "supplier_invoices"
+    WHERE "status" NOT IN ('received','under_review','approved','disputed','paid','closed','rejected')
+  ) THEN
+    RAISE EXCEPTION 'Invalid supplier_invoices.status value(s) found before enum cast — fix data before re-running migration';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM "credit_notes"
+    WHERE "status" NOT IN ('received','verified','applied','disputed','closed','cancelled')
+  ) THEN
+    RAISE EXCEPTION 'Invalid credit_notes.status value(s) found before enum cast — fix data before re-running migration';
+  END IF;
+END $$;
+
 -- purchase_orders
 ALTER TABLE "purchase_orders" ALTER COLUMN "status" DROP DEFAULT;
 ALTER TABLE "purchase_orders" ALTER COLUMN "status" TYPE "purchase_order_status" USING "status"::"purchase_order_status";
