@@ -26,21 +26,25 @@ import {
   deleteProjectParticipant,
 } from '@fmksa/core';
 import { router, projectProcedure, protectedProcedure } from '../../trpc';
-import { mapError } from './_helpers';
+import { mapError, hasPerm } from './_helpers';
 
 export const projectParticipantsRouter = router({
   list: projectProcedure
     .input(ListProjectParticipantsFilterSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('project_participant.view'))
+      if (!hasPerm(ctx, 'project_participant.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
-      return listProjectParticipants(input);
+      try {
+        return await listProjectParticipants(input);
+      } catch (err) {
+        mapError(err);
+      }
     }),
 
   get: projectProcedure
     .input(z.object({ projectId: z.string().uuid(), id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('project_participant.view'))
+      if (!hasPerm(ctx, 'project_participant.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await getProjectParticipant(input.id, input.projectId);
@@ -52,7 +56,7 @@ export const projectParticipantsRouter = router({
   create: projectProcedure
     .input(CreateProjectParticipantInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('project_participant.create'))
+      if (!hasPerm(ctx, 'project_participant.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await createProjectParticipant(input);
@@ -64,7 +68,7 @@ export const projectParticipantsRouter = router({
   update: projectProcedure
     .input(UpdateProjectParticipantInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('project_participant.edit'))
+      if (!hasPerm(ctx, 'project_participant.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateProjectParticipant(input, ctx.user.id);
@@ -76,7 +80,7 @@ export const projectParticipantsRouter = router({
   delete: projectProcedure
     .input(z.object({ projectId: z.string().uuid(), id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('project_participant.delete'))
+      if (!hasPerm(ctx, 'project_participant.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         await deleteProjectParticipant(input.id, input.projectId, ctx.user.id);

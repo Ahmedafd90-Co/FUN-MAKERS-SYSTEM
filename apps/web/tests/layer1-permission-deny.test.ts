@@ -262,13 +262,22 @@ async function expectForbidden(fn: () => Promise<unknown>) {
 }
 
 async function expectNotForbidden(fn: () => Promise<unknown>) {
-  // For positive permission-gate tests: the call may still throw (NOT_FOUND
-  // for fake IDs, BAD_REQUEST for other validation), but it MUST NOT be
-  // FORBIDDEN — that would mean the permission gate rejected it.
+  // For positive permission-gate tests: the call must either return a defined
+  // value (gate passed and handler ran) OR throw a non-FORBIDDEN error (gate
+  // passed and handler threw downstream — NOT_FOUND for fake IDs, BAD_REQUEST
+  // for validation, etc). Silently returning undefined without throwing would
+  // mean the handler short-circuited and we never actually exercised the gate.
+  let returned: unknown;
+  let threw: unknown;
   try {
-    await fn();
+    returned = await fn();
   } catch (e) {
-    expect((e as TRPCError).code).not.toBe('FORBIDDEN');
+    threw = e;
+  }
+  if (threw !== undefined) {
+    expect((threw as TRPCError).code).not.toBe('FORBIDDEN');
+  } else {
+    expect(returned).toBeDefined();
   }
 }
 

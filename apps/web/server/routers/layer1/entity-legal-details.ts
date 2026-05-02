@@ -16,13 +16,13 @@ import {
   deleteEntityLegalDetails,
 } from '@fmksa/core';
 import { router, entityProcedure, protectedProcedure } from '../../trpc';
-import { mapError } from './_helpers';
+import { mapError, hasPerm } from './_helpers';
 
 export const entityLegalDetailsRouter = router({
   get: entityProcedure
     .input(z.object({ entityId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('entity_legal_details.view'))
+      if (!hasPerm(ctx, 'entity_legal_details.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await getEntityLegalDetails(input.entityId);
@@ -34,7 +34,7 @@ export const entityLegalDetailsRouter = router({
   upsert: entityProcedure
     .input(UpsertEntityLegalDetailsInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('entity_legal_details.edit'))
+      if (!hasPerm(ctx, 'entity_legal_details.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await upsertEntityLegalDetails(input);
@@ -46,7 +46,7 @@ export const entityLegalDetailsRouter = router({
   delete: entityProcedure
     .input(z.object({ entityId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('entity_legal_details.delete'))
+      if (!hasPerm(ctx, 'entity_legal_details.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         await deleteEntityLegalDetails(input.entityId, ctx.user.id);

@@ -40,15 +40,19 @@ export const intercompanyContractRouter = router({
   list: projectProcedure
     .input(ListIntercompanyContractsFilterSchema)
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('intercompany_contract.view'))
+      if (!hasPerm(ctx, 'intercompany_contract.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
-      return listIntercompanyContracts(input);
+      try {
+        return await listIntercompanyContracts(input);
+      } catch (err) {
+        mapError(err);
+      }
     }),
 
   get: projectProcedure
     .input(z.object({ projectId: z.string().uuid(), id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('intercompany_contract.view'))
+      if (!hasPerm(ctx, 'intercompany_contract.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await getIntercompanyContract(input.id, input.projectId);
@@ -60,7 +64,7 @@ export const intercompanyContractRouter = router({
   create: projectProcedure
     .input(CreateIntercompanyContractInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('intercompany_contract.create'))
+      if (!hasPerm(ctx, 'intercompany_contract.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await createIntercompanyContract(input);
@@ -72,7 +76,7 @@ export const intercompanyContractRouter = router({
   update: projectProcedure
     .input(UpdateIntercompanyContractInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('intercompany_contract.edit'))
+      if (!hasPerm(ctx, 'intercompany_contract.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updateIntercompanyContract(input, ctx.user.id);
@@ -108,7 +112,7 @@ export const intercompanyContractRouter = router({
   delete: projectProcedure
     .input(z.object({ projectId: z.string().uuid(), id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('intercompany_contract.delete'))
+      if (!hasPerm(ctx, 'intercompany_contract.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         await deleteIntercompanyContract(input.id, input.projectId, ctx.user.id);

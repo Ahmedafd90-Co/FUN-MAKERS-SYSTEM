@@ -42,7 +42,7 @@ export const primeContractRouter = router({
   get: projectProcedure
     .input(z.object({ projectId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('prime_contract.view'))
+      if (!hasPerm(ctx, 'prime_contract.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await getPrimeContract(input.projectId);
@@ -54,7 +54,7 @@ export const primeContractRouter = router({
   create: projectProcedure
     .input(CreatePrimeContractInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('prime_contract.create'))
+      if (!hasPerm(ctx, 'prime_contract.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await createPrimeContract(input);
@@ -66,7 +66,7 @@ export const primeContractRouter = router({
   update: projectProcedure
     .input(UpdatePrimeContractInputSchema)
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('prime_contract.edit'))
+      if (!hasPerm(ctx, 'prime_contract.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         return await updatePrimeContract(input, ctx.user.id);
@@ -100,7 +100,7 @@ export const primeContractRouter = router({
   delete: projectProcedure
     .input(z.object({ projectId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user.permissions.includes('prime_contract.delete'))
+      if (!hasPerm(ctx, 'prime_contract.delete'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
         await deletePrimeContract(input.projectId, ctx.user.id);

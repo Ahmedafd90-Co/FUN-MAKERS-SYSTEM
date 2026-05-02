@@ -36,14 +36,24 @@ const LAYER1_ACTION_TO_PERM_SUFFIX: Record<string, Record<string, string>> = {
 
 /**
  * Resolves the required permission code for a Layer 1 transition action.
- * Returns `{resource}.{permSuffix}` if the action is valid for the resource,
- * otherwise falls back to `{resource}.edit` (callers should still validate
- * the action against the service-layer state machine).
+ * Returns `{resource}.{permSuffix}` if the action is valid for the resource.
+ *
+ * Throws if the action is not in the map. Defense-in-depth: routers already
+ * gate the action verb via `z.enum([...])`, so an unmapped action reaching
+ * here means either (a) a new action was added to the enum without updating
+ * this map, or (b) the function was called from somewhere that bypassed the
+ * enum. Either way, fail closed rather than silently downgrading to `edit`,
+ * which would let an unmapped action pass any caller holding `edit` rights.
  */
 export function getLayer1ActionPermission(
   resource: 'prime_contract' | 'intercompany_contract',
   action: string,
 ): string {
   const suffix = LAYER1_ACTION_TO_PERM_SUFFIX[resource]?.[action];
-  return suffix ? `${resource}.${suffix}` : `${resource}.edit`;
+  if (!suffix) {
+    throw new Error(
+      `Unknown action '${action}' for resource '${resource}' in Layer 1 permission map. Add it to LAYER1_ACTION_TO_PERM_SUFFIX or fix the action verb.`,
+    );
+  }
+  return `${resource}.${suffix}`;
 }
