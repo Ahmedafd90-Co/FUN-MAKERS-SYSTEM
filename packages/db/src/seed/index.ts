@@ -17,6 +17,7 @@ import { seedCommercialRolePermissions } from './commercial-role-permissions';
 import { seedCommercialWorkflowTemplates } from './commercial-workflow-templates';
 import { seedCommercialNotificationTemplates } from './commercial-notification-templates';
 import { seedProcurementPermissions } from './procurement-permissions';
+import { seedLayer1Permissions } from './layer1-permissions';
 import { seedProcurementRolePermissions } from './procurement-role-permissions';
 import { seedProcurementWorkflowTemplates } from './procurement-workflow-templates';
 import { seedProcurementNotificationTemplates } from './procurement-notification-templates';
@@ -52,6 +53,7 @@ async function main() {
   await seedCommercialNotificationTemplates(prisma);
   await seedProcurementPermissions(prisma);
   await seedProcurementRolePermissions(prisma);
+  await seedLayer1Permissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);
   await seedProcurementCategories(prisma);

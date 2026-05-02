@@ -14,6 +14,7 @@
 import { PERMISSIONS } from './permissions';
 import { COMMERCIAL_PERMISSIONS } from './commercial-permissions';
 import { PROCUREMENT_PERMISSIONS } from './procurement-permissions';
+import { LAYER1_PERMISSIONS } from './layer1-permissions';
 
 // ---------------------------------------------------------------------------
 // Build the unified set from all module seeds
@@ -23,6 +24,7 @@ export const PERMISSION_CATALOG: ReadonlySet<string> = new Set([
   ...PERMISSIONS.map(p => p.code),
   ...COMMERCIAL_PERMISSIONS.map(p => p.code),
   ...PROCUREMENT_PERMISSIONS.map(p => p.code),
+  ...LAYER1_PERMISSIONS.map(p => p.code),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -45,7 +47,7 @@ export function assertValidPermission(code: string): void {
     throw new Error(
       `Unknown permission code: "${code}". ` +
       `This code is not in the permission catalog. ` +
-      `Add it to the appropriate seed file (permissions.ts, commercial-permissions.ts, or procurement-permissions.ts) first.`,
+      `Add it to the appropriate seed file (permissions.ts, commercial-permissions.ts, procurement-permissions.ts, or layer1-permissions.ts) first.`,
     );
   }
 }
