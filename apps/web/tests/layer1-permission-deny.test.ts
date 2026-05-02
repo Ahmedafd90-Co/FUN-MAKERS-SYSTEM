@@ -28,6 +28,10 @@ import { prisma } from '@fmksa/db';
 // ---------------------------------------------------------------------------
 
 const ts = Date.now();
+// Per-test-file isolation scope. Used to build entity/project codes that are
+// guaranteed unique to this run, so the fixtures don't collide with seeded
+// demo data or with stale fixtures left behind by a prior crashed run.
+const runId = `test-${Date.now()}-${process.pid}`;
 const FAKE_UUID = '00000000-0000-0000-0000-000000000000';
 
 let testEntityId: string;
@@ -148,38 +152,34 @@ async function makeUserWithRole(opts: {
 
 beforeAll(async () => {
   // ── Shared entity + project ──
-  const entity = await prisma.entity.findFirst({ where: { status: 'active' } });
-  if (entity) {
-    testEntityId = entity.id;
-  } else {
-    const e = await prisma.entity.create({
-      data: {
-        code: `L1TEST-${ts}`,
-        name: 'Layer 1 Test Entity',
-        type: 'branch',
-        status: 'active',
-      },
-    });
-    testEntityId = e.id;
-  }
+  // Always create — never findFirst. Earlier this used findFirst() which on a
+  // fully-seeded dev DB returned a mismatched entity↔project pair (the project
+  // belonged to a different entity than the one returned by entity.findFirst),
+  // causing entityProcedure's membership check to reject view-user smoke tests
+  // with FORBIDDEN. Creating here guarantees the project's entityId matches the
+  // entity we just created.
+  const entity = await prisma.entity.create({
+    data: {
+      code: `E_${runId}`,
+      name: `Layer 1 Test Entity ${runId}`,
+      type: 'branch',
+      status: 'active',
+    },
+  });
+  testEntityId = entity.id;
 
-  const project = await prisma.project.findFirst();
-  if (project) {
-    testProjectId = project.id;
-  } else {
-    const p = await prisma.project.create({
-      data: {
-        code: `L1TEST-${ts}`,
-        name: 'Layer 1 Test Project',
-        status: 'active',
-        entityId: testEntityId,
-        currencyCode: 'SAR',
-        startDate: new Date(),
-        createdBy: 'test',
-      },
-    });
-    testProjectId = p.id;
-  }
+  const project = await prisma.project.create({
+    data: {
+      code: `P_${runId}`,
+      name: `Layer 1 Test Project ${runId}`,
+      status: 'active',
+      entityId: testEntityId,
+      currencyCode: 'SAR',
+      startDate: new Date(),
+      createdBy: 'test',
+    },
+  });
+  testProjectId = project.id;
 
   // ── No-permission user ──
   const noPerm = await makeUserWithRole({
@@ -232,11 +232,16 @@ afterAll(async () => {
   const allUserIds = [noPermUserId, viewUserId, ...Object.values(transitionUsers).map((u) => u.userId)];
   const allRoleIds = [noPermRoleId, viewRoleId, ...Object.values(transitionUsers).map((u) => u.roleId)];
 
+  // Order matters: child rows first, then parents. Project + Entity at the
+  // end because user assignments / role permissions / users / roles all need
+  // to clear before the FK-referenced project / entity can be deleted.
   await prisma.projectAssignment.deleteMany({ where: { userId: { in: allUserIds } } });
   await prisma.userRole.deleteMany({ where: { userId: { in: allUserIds } } });
   await prisma.rolePermission.deleteMany({ where: { roleId: { in: allRoleIds } } });
   await prisma.user.deleteMany({ where: { id: { in: allUserIds } } });
   await prisma.role.deleteMany({ where: { id: { in: allRoleIds } } });
+  await prisma.project.deleteMany({ where: { id: testProjectId } });
+  await prisma.entity.deleteMany({ where: { id: testEntityId } });
 });
 
 // ---------------------------------------------------------------------------
