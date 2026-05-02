@@ -3,6 +3,7 @@
 import { Button } from '@fmksa/ui/components/button';
 import { cn } from '@fmksa/ui/lib/utils';
 import { Menu, Search, X } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -95,9 +96,25 @@ export function TopNav({ userName, userEmail, permissions }: TopNavProps) {
         {/* Left: Branding */}
         <Link
           href="/home"
-          className="mr-6 flex items-center gap-2 font-semibold tracking-tight text-foreground shrink-0"
+          aria-label="Pico Play — Home"
+          className="mr-6 flex items-center shrink-0"
         >
-          Fun Makers KSA
+          <Image
+            src="/logo-colour.png"
+            alt="Pico Play"
+            width={120}
+            height={32}
+            priority
+            className="h-8 w-auto dark:hidden"
+          />
+          <Image
+            src="/logo-colour-white.png"
+            alt="Pico Play"
+            width={120}
+            height={32}
+            priority
+            className="hidden h-8 w-auto dark:block"
+          />
         </Link>
 
         {/* Center: Nav items (desktop) */}

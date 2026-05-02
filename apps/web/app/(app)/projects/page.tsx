@@ -5,7 +5,7 @@ import { CreateProjectButton } from '@/components/projects/create-project-button
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Projects — Pico Play Fun Makers KSA',
+  title: 'Projects — Pico Play',
 };
 
 export default function ProjectsPage() {

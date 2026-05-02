@@ -86,6 +86,14 @@ module.exports = {
           superseded: 'hsl(var(--status-superseded) / <alpha-value>)',
           exception: 'hsl(var(--status-exception) / <alpha-value>)',
         },
+        // Pico Play brand tokens. `brand-teal` is the bright decorative teal;
+        // `brand-orange` is a restrained interactive accent. Do not layer
+        // white text on `brand-teal` — use `primary` for that (it resolves to
+        // a darker operational teal that passes WCAG AA with white text).
+        brand: {
+          teal: 'hsl(var(--brand-teal) / <alpha-value>)',
+          orange: 'hsl(var(--brand-orange) / <alpha-value>)',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

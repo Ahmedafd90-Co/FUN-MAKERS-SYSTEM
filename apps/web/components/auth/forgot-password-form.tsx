@@ -7,7 +7,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@fmksa/ui/components/card';
-import { ArrowLeft, ShieldAlert } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 // ---------------------------------------------------------------------------
@@ -17,10 +18,23 @@ import Link from 'next/link';
 export function ForgotPasswordForm() {
   return (
     <Card className="w-full max-w-md border-border bg-card">
-      <CardHeader className="space-y-1 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <ShieldAlert className="h-6 w-6 text-muted-foreground" />
-        </div>
+      <CardHeader className="space-y-3 text-center">
+        <Image
+          src="/logo-colour.png"
+          alt="Pico Play"
+          width={160}
+          height={42}
+          priority
+          className="mx-auto h-10 w-auto dark:hidden"
+        />
+        <Image
+          src="/logo-colour-white.png"
+          alt="Pico Play"
+          width={160}
+          height={42}
+          priority
+          className="mx-auto hidden h-10 w-auto dark:block"
+        />
         <CardTitle className="text-xl font-bold tracking-tight">
           Password Reset
         </CardTitle>

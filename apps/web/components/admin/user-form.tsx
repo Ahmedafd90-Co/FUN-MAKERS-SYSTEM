@@ -80,7 +80,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. ahmed@funmakers.sa"
+              placeholder="e.g. ahmed@company.com"
             />
           </div>
           <div className="space-y-2">

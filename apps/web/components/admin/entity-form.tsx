@@ -134,7 +134,7 @@ export function CreateEntityDialog({
               id="entity-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Fun Makers KSA"
+              placeholder="e.g. Pico Play"
             />
           </div>
           <div className="space-y-2">
