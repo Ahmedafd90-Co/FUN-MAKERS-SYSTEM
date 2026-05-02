@@ -94,10 +94,20 @@ CREATE INDEX IF NOT EXISTS "invoice_collections_collection_date_idx" ON "invoice
 -- via pg_constraint lookup. Both FKs use ON DELETE RESTRICT (parent rows can't
 -- be deleted while child rows reference them) and ON UPDATE CASCADE (child FKs
 -- track parent ID renames, though id renames are unusual).
+--
+-- IMPORTANT: pg_constraint.conname is unique PER TABLE, not globally. The
+-- existence checks below scope by con.contype = 'f' (foreign keys only) AND
+-- con.conrelid = '"<table>"'::regclass (specific table), so a same-named
+-- constraint on another table can't fool the guard into silently skipping
+-- FK creation.
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'budget_absorption_exceptions_project_id_fkey'
+    SELECT 1
+    FROM pg_constraint con
+    WHERE con.conname = 'budget_absorption_exceptions_project_id_fkey'
+      AND con.contype = 'f'
+      AND con.conrelid = '"budget_absorption_exceptions"'::regclass
   ) THEN
     ALTER TABLE "budget_absorption_exceptions"
       ADD CONSTRAINT "budget_absorption_exceptions_project_id_fkey"
@@ -106,7 +116,11 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'invoice_collections_tax_invoice_id_fkey'
+    SELECT 1
+    FROM pg_constraint con
+    WHERE con.conname = 'invoice_collections_tax_invoice_id_fkey'
+      AND con.contype = 'f'
+      AND con.conrelid = '"invoice_collections"'::regclass
   ) THEN
     ALTER TABLE "invoice_collections"
       ADD CONSTRAINT "invoice_collections_tax_invoice_id_fkey"
