@@ -263,6 +263,63 @@ describe('PrimeContract Service', () => {
     expect(mockAuditLog).not.toHaveBeenCalled();
   });
 
+  it('update: rejects when partial update would violate signedDate ≤ effectiveDate (merged-state validation)', async () => {
+    const existing = fakePrimeContract({
+      signedDate: null,
+      effectiveDate: new Date('2026-01-01'),
+      expectedCompletionDate: null,
+    });
+    mockPrisma.primeContract.findUniqueOrThrow.mockResolvedValue(existing);
+
+    await expect(
+      updatePrimeContract(
+        // Setting only signedDate AFTER existing effectiveDate — would violate ordering
+        { projectId: PROJECT_ID, signedDate: '2026-06-01T00:00:00.000Z' },
+        ACTOR,
+      ),
+    ).rejects.toThrow(/signedDate must be ≤ effectiveDate/);
+
+    expect(mockPrisma.primeContract.update).not.toHaveBeenCalled();
+    expect(mockAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('update: rejects when partial update would violate effectiveDate ≤ expectedCompletionDate (merged-state validation)', async () => {
+    const existing = fakePrimeContract({
+      signedDate: null,
+      effectiveDate: null,
+      expectedCompletionDate: new Date('2026-06-01'),
+    });
+    mockPrisma.primeContract.findUniqueOrThrow.mockResolvedValue(existing);
+
+    await expect(
+      updatePrimeContract(
+        // Setting only effectiveDate AFTER existing expectedCompletionDate
+        { projectId: PROJECT_ID, effectiveDate: '2026-12-01T00:00:00.000Z' },
+        ACTOR,
+      ),
+    ).rejects.toThrow(/effectiveDate must be ≤ expectedCompletionDate/);
+
+    expect(mockPrisma.primeContract.update).not.toHaveBeenCalled();
+  });
+
+  it('update: rejects when partial update would violate signedDate ≤ expectedCompletionDate (merged-state validation)', async () => {
+    const existing = fakePrimeContract({
+      signedDate: null,
+      effectiveDate: null,
+      expectedCompletionDate: new Date('2026-06-01'),
+    });
+    mockPrisma.primeContract.findUniqueOrThrow.mockResolvedValue(existing);
+
+    await expect(
+      updatePrimeContract(
+        { projectId: PROJECT_ID, signedDate: '2026-12-01T00:00:00.000Z' },
+        ACTOR,
+      ),
+    ).rejects.toThrow(/signedDate must be ≤ expectedCompletionDate/);
+
+    expect(mockPrisma.primeContract.update).not.toHaveBeenCalled();
+  });
+
   it('update: contractValue change syncs Project.contractValue in same transaction', async () => {
     const existing = fakePrimeContract({ contractValue: decimal('1000000.00') });
     mockPrisma.primeContract.findUniqueOrThrow.mockResolvedValue(existing);

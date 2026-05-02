@@ -44,10 +44,15 @@ export const CreateIntercompanyContractInputSchema = z
   });
 export type CreateIntercompanyContractInput = z.infer<typeof CreateIntercompanyContractInputSchema>;
 
+// Update boundaries (PR #28 CodeRabbit review):
+//   - status changes go through transitionIntercompanyContractStatus (state machine).
+//   - fromEntityId / toEntityId are immutable on existing intercompany contracts;
+//     change party set requires explicit delete + recreate.
+// All three fields intentionally absent here. The service layer also rejects them
+// defensively if a non-Zod-validated caller manages to slip them in.
 export const UpdateIntercompanyContractInputSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
-  // fromEntityId / toEntityId intentionally absent — entities immutable per PIC-8 spec.
   scope: z.string().min(1).optional(),
   pricingType: intercompanyPricingTypeEnum.optional(),
   markupPercent: z.number().nonnegative().optional(),
@@ -55,7 +60,6 @@ export const UpdateIntercompanyContractInputSchema = z.object({
   contractCurrency: z.string().length(3).optional(),
   managingDepartment: intercompanyManagingDepartmentEnum.optional(),
   signedDate: z.string().datetime().nullish(),
-  status: intercompanyContractStatusEnum.optional(),
   notes: z.string().nullish(),
 });
 export type UpdateIntercompanyContractInput = z.infer<typeof UpdateIntercompanyContractInputSchema>;

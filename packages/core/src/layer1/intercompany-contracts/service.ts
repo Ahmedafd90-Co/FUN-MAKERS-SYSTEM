@@ -167,6 +167,26 @@ export async function updateIntercompanyContract(
   input: UpdateIntercompanyContractInput,
   actorUserId: string,
 ) {
+  // Defense-in-depth: contract schema strips status / fromEntityId / toEntityId,
+  // but a non-Zod-validated caller (raw tRPC bypass, scripted import) could
+  // still try. Reject loudly so the boundary is enforced at both layers.
+  const inputRecord = input as unknown as Record<string, unknown>;
+  if ('status' in inputRecord && inputRecord.status !== undefined) {
+    throw new Error(
+      'Cannot update intercompany contract status directly: use transitionIntercompanyContractStatus (state machine).',
+    );
+  }
+  if ('fromEntityId' in inputRecord && inputRecord.fromEntityId !== undefined) {
+    throw new Error(
+      'Cannot update intercompany contract fromEntityId: it is immutable on existing contracts. Delete + recreate to change the party set.',
+    );
+  }
+  if ('toEntityId' in inputRecord && inputRecord.toEntityId !== undefined) {
+    throw new Error(
+      'Cannot update intercompany contract toEntityId: it is immutable on existing contracts. Delete + recreate to change the party set.',
+    );
+  }
+
   const existing = await prisma.intercompanyContract.findUniqueOrThrow({
     where: { id: input.id },
   });
@@ -182,7 +202,6 @@ export async function updateIntercompanyContract(
   if (input.managingDepartment !== undefined) data.managingDepartment = input.managingDepartment;
   if (input.signedDate !== undefined)
     data.signedDate = input.signedDate ? new Date(input.signedDate) : null;
-  if (input.status !== undefined) data.status = input.status;
   if (input.notes !== undefined) data.notes = input.notes ?? null;
 
   const updated = await prisma.intercompanyContract.update({

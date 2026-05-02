@@ -178,6 +178,41 @@ export async function updatePrimeContract(
     where: { projectId: input.projectId },
   });
 
+  // Validate date ordering against the MERGED record (existing + input).
+  // The contract schema's .refine only sees the input, so a partial update
+  // setting just one date can still produce an invalid post-update ordering
+  // when combined with the existing record's other dates. Block it before
+  // any mutation.
+  const mergedDate = (
+    inputValue: string | null | undefined,
+    existingValue: Date | null,
+  ): Date | null => {
+    if (inputValue === undefined) return existingValue;
+    if (inputValue === null) return null;
+    return new Date(inputValue);
+  };
+  const mergedSigned = mergedDate(input.signedDate, existing.signedDate);
+  const mergedEffective = mergedDate(input.effectiveDate, existing.effectiveDate);
+  const mergedCompletion = mergedDate(
+    input.expectedCompletionDate,
+    existing.expectedCompletionDate,
+  );
+  if (mergedSigned && mergedEffective && mergedSigned > mergedEffective) {
+    throw new Error(
+      'Date ordering violated: signedDate must be ≤ effectiveDate after this update.',
+    );
+  }
+  if (mergedEffective && mergedCompletion && mergedEffective > mergedCompletion) {
+    throw new Error(
+      'Date ordering violated: effectiveDate must be ≤ expectedCompletionDate after this update.',
+    );
+  }
+  if (mergedSigned && mergedCompletion && mergedSigned > mergedCompletion) {
+    throw new Error(
+      'Date ordering violated: signedDate must be ≤ expectedCompletionDate after this update.',
+    );
+  }
+
   return prisma.$transaction(async (tx) => {
     const data: Prisma.PrimeContractUpdateInput = {};
     if (input.clientName !== undefined) data.clientName = input.clientName;

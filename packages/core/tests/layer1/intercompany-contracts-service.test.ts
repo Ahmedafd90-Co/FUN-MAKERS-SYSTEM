@@ -263,6 +263,41 @@ describe('IntercompanyContract Service', () => {
     expect(updateCall.data).not.toHaveProperty('toEntityId');
   });
 
+  it('update: rejects status field (defense-in-depth — schema strips, service guards too)', async () => {
+    await expect(
+      updateIntercompanyContract(
+        // Cast to bypass TS — simulates a non-Zod-validated caller
+        { id: 'ic1', projectId: PROJECT_ID, status: 'signed' } as any,
+        ACTOR,
+      ),
+    ).rejects.toThrow(/transitionIntercompanyContractStatus/);
+
+    expect(mockPrisma.intercompanyContract.update).not.toHaveBeenCalled();
+    expect(mockAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('update: rejects fromEntityId field (entities immutable)', async () => {
+    await expect(
+      updateIntercompanyContract(
+        { id: 'ic1', projectId: PROJECT_ID, fromEntityId: 'other-entity' } as any,
+        ACTOR,
+      ),
+    ).rejects.toThrow(/immutable/);
+
+    expect(mockPrisma.intercompanyContract.update).not.toHaveBeenCalled();
+  });
+
+  it('update: rejects toEntityId field (entities immutable)', async () => {
+    await expect(
+      updateIntercompanyContract(
+        { id: 'ic1', projectId: PROJECT_ID, toEntityId: 'other-entity' } as any,
+        ACTOR,
+      ),
+    ).rejects.toThrow(/immutable/);
+
+    expect(mockPrisma.intercompanyContract.update).not.toHaveBeenCalled();
+  });
+
   // -- Transition --
 
   it('transition: draft → signed → active → closed (full happy path)', async () => {

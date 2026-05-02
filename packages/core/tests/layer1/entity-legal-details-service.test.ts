@@ -170,6 +170,80 @@ describe('EntityLegalDetails Service', () => {
     expect(mockAuditLog.mock.calls[0]![0].action).toBe('entity_legal_details.delete');
   });
 
+  it('upsert: preserves omitted fields (no clobbering) — only present keys go into update data', async () => {
+    mockPrisma.entity.findUniqueOrThrow.mockResolvedValue(fakeEntity());
+    const existing = fakeLegalDetails({
+      taxId: 'OLD_TAX',
+      bankIban: 'OLD_IBAN',
+      contactEmail: 'old@example.com',
+    });
+    mockPrisma.entityLegalDetails.findUnique.mockResolvedValue(existing);
+    mockPrisma.entityLegalDetails.upsert.mockResolvedValue(existing);
+
+    // Caller upserts with ONLY contactEmail — taxId, bankIban etc. must NOT be touched.
+    await upsertEntityLegalDetails({
+      entityId: ENTITY_ID,
+      contactEmail: 'new@example.com',
+      updatedBy: ACTOR,
+    });
+
+    const upsertCall = mockPrisma.entityLegalDetails.upsert.mock.calls[0]![0];
+    expect(upsertCall.update).toHaveProperty('contactEmail', 'new@example.com');
+    expect(upsertCall.update).toHaveProperty('updatedBy', ACTOR);
+    // Fields NOT in input must NOT appear in update data
+    expect(upsertCall.update).not.toHaveProperty('taxId');
+    expect(upsertCall.update).not.toHaveProperty('bankIban');
+    expect(upsertCall.update).not.toHaveProperty('registrationNumber');
+    expect(upsertCall.update).not.toHaveProperty('jurisdiction');
+  });
+
+  it('upsert: explicitly null clears a field (null is preserved as explicit clear)', async () => {
+    mockPrisma.entity.findUniqueOrThrow.mockResolvedValue(fakeEntity());
+    mockPrisma.entityLegalDetails.findUnique.mockResolvedValue(fakeLegalDetails());
+    mockPrisma.entityLegalDetails.upsert.mockResolvedValue(fakeLegalDetails({ taxId: null }));
+
+    await upsertEntityLegalDetails({
+      entityId: ENTITY_ID,
+      taxId: null,
+      updatedBy: ACTOR,
+    });
+
+    const upsertCall = mockPrisma.entityLegalDetails.upsert.mock.calls[0]![0];
+    expect(upsertCall.update).toHaveProperty('taxId', null);
+  });
+
+  it('upsert: redacts banking + contact fields in audit log (raw values not written)', async () => {
+    mockPrisma.entity.findUniqueOrThrow.mockResolvedValue(fakeEntity());
+    mockPrisma.entityLegalDetails.findUnique.mockResolvedValue(null);
+    const created = fakeLegalDetails({
+      bankIban: 'SA0380000000608010167519',
+      bankAccountNumber: '0000123456789',
+      bankSwift: 'NCBKSAJEXXX',
+      contactEmail: 'finance@example.com',
+      contactPhone: '+966500000000',
+    });
+    mockPrisma.entityLegalDetails.upsert.mockResolvedValue(created);
+
+    await upsertEntityLegalDetails({
+      entityId: ENTITY_ID,
+      bankIban: 'SA0380000000608010167519',
+      bankAccountNumber: '0000123456789',
+      bankSwift: 'NCBKSAJEXXX',
+      contactEmail: 'finance@example.com',
+      contactPhone: '+966500000000',
+      updatedBy: ACTOR,
+    });
+
+    const auditCall = mockAuditLog.mock.calls[0]![0];
+    expect(auditCall.afterJson.bankIban).toMatch(/\*+7519$/);
+    expect(auditCall.afterJson.bankIban).not.toContain('608010');
+    expect(auditCall.afterJson.bankAccountNumber).toMatch(/\*+6789$/);
+    expect(auditCall.afterJson.bankSwift).toMatch(/\*+EXXX$/);
+    expect(auditCall.afterJson.bankSwift).not.toBe('NCBKSAJEXXX');
+    expect(auditCall.afterJson.contactPhone).toMatch(/\*+0000$/);
+    expect(auditCall.afterJson.contactEmail).toBe('fi***@example.com');
+  });
+
   it('delete: throws when no row exists', async () => {
     mockPrisma.entityLegalDetails.findUnique.mockResolvedValue(null);
 
