@@ -11,6 +11,7 @@ import { UploadWidget } from '@/components/documents/upload-widget';
 
 import { BudgetOverviewCard } from './budget-overview-card';
 import { FinancialBaselineCard } from './financial-baseline-card';
+import { PrimeContractTab } from './prime-contract-tab';
 import { ProjectSettingsTab } from './project-settings-tab';
 import { ProjectTeamTab } from './project-team-tab';
 
@@ -129,6 +130,7 @@ export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspa
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="documents">Documents</TabsTrigger>
         <TabsTrigger value="team">Team</TabsTrigger>
+        <TabsTrigger value="prime-contract">Prime Contract</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
 
@@ -186,6 +188,10 @@ export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspa
 
       <TabsContent value="team">
         <ProjectTeamTab projectId={project.id} />
+      </TabsContent>
+
+      <TabsContent value="prime-contract">
+        <PrimeContractTab projectId={project.id} />
       </TabsContent>
 
       <TabsContent value="settings">
