@@ -9,8 +9,9 @@
  * class of bugs by catching mismatches at CI time.
  *
  * HOW: Reads router source files as text, extracts all strings passed to
- * `permissions.includes('xxx')` and `entityPermissions.includes('xxx')`,
- * then asserts each exists in PERMISSION_CATALOG.
+ * `permissions.includes('xxx')` (legacy direct-check pattern) and
+ * `hasPerm(ctx, 'xxx')` (current helper-based pattern, used by Layer 1 and
+ * later routers), then asserts each exists in PERMISSION_CATALOG.
  *
  * Created 2026-04-12 — System Integrity Pass.
  */
@@ -22,6 +23,7 @@ import { PERMISSION_CATALOG } from '../../src/seed/permission-catalog';
 import { PERMISSIONS } from '../../src/seed/permissions';
 import { COMMERCIAL_PERMISSIONS } from '../../src/seed/commercial-permissions';
 import { PROCUREMENT_PERMISSIONS } from '../../src/seed/procurement-permissions';
+import { LAYER1_PERMISSIONS } from '../../src/seed/layer1-permissions';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,21 +44,27 @@ function collectTsFiles(dir: string, acc: string[] = []): string[] {
 
 /**
  * Extract permission codes from source text.
- * Matches patterns like:
- *   ctx.user.permissions.includes('ipa.view')
- *   ctx.entityPermissions.includes('rfq.edit')
- *   permissions.includes('system.admin')
+ * Matches both patterns currently used by routers:
+ *   - Legacy direct check: ctx.user.permissions.includes('ipa.view')
+ *                          ctx.entityPermissions.includes('rfq.edit')
+ *   - Current helper:      hasPerm(ctx, 'project_participant.view')
+ *
+ * Either pattern reaching a code that isn't in PERMISSION_CATALOG would
+ * silently fail closed in production — this scan catches the drift at CI time.
  */
 function extractPermissionChecks(source: string, filePath: string): { code: string; line: number; file: string }[] {
   const results: { code: string; line: number; file: string }[] = [];
-  const regex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
   const lines = source.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
+    // Reset regexes for each line — exec() with /g is stateful.
+    const includesRegex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const hasPermRegex = /hasPerm\(\s*[^,]+,\s*['"]([^'"]+)['"]\s*\)/g;
     let match: RegExpExecArray | null;
-    // Reset regex for each line
-    const lineRegex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
-    while ((match = lineRegex.exec(lines[i]!)) !== null) {
+    while ((match = includesRegex.exec(lines[i]!)) !== null) {
+      results.push({ code: match[1]!, line: i + 1, file: filePath });
+    }
+    while ((match = hasPermRegex.exec(lines[i]!)) !== null) {
       results.push({ code: match[1]!, line: i + 1, file: filePath });
     }
   }
@@ -141,6 +149,7 @@ describe('Permission Catalog Guardrail', () => {
       ...PERMISSIONS.map(p => p.code),
       ...COMMERCIAL_PERMISSIONS.map(p => p.code),
       ...PROCUREMENT_PERMISSIONS.map(p => p.code),
+      ...LAYER1_PERMISSIONS.map(p => p.code),
     ];
 
     const seen = new Set<string>();
