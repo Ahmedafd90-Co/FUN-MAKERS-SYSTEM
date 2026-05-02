@@ -23,6 +23,12 @@ export type {
   ImportType,
   ImportBatchStatus,
   ImportRowStatus,
+  // Layer 1 — ProjectLedger (PIC-8)
+  ProjectParticipantRole,
+  PrimeContractStatus,
+  IntercompanyPricingType,
+  IntercompanyManagingDepartment,
+  IntercompanyContractStatus,
 } from '@prisma/client';
 
 // Seed data exports — for structural testing (H8)
