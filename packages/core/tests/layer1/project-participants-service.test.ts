@@ -112,7 +112,7 @@ describe('ProjectParticipant Service', () => {
 
     expect(result.role).toBe('factory');
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('project_participant.create');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('project_participant.create');
   });
 
   it('create: rejects when entity not in active status', async () => {
@@ -123,6 +123,7 @@ describe('ProjectParticipant Service', () => {
         projectId: PROJECT_ID,
         entityId: ENTITY_ID,
         role: 'sub_contractor',
+        isPrime: false,
         createdBy: ACTOR,
       }),
     ).rejects.toThrow(/active entities can participate/);
@@ -144,6 +145,7 @@ describe('ProjectParticipant Service', () => {
         projectId: PROJECT_ID,
         entityId: ENTITY_ID,
         role: 'sub_contractor',
+        isPrime: false,
         createdBy: ACTOR,
       }),
     ).rejects.toThrow(/already a participant/);
@@ -200,7 +202,7 @@ describe('ProjectParticipant Service', () => {
     expect(result.role).toBe('factory');
     expect(result.notes).toBe('changed');
     // entityId is not part of UpdateProjectParticipantInput — TypeScript prevents passing it.
-    const updateCall = mockPrisma.projectParticipant.update.mock.calls[0][0];
+    const updateCall = mockPrisma.projectParticipant.update.mock.calls[0]![0];
     expect(updateCall.data).not.toHaveProperty('entityId');
   });
 
@@ -217,7 +219,7 @@ describe('ProjectParticipant Service', () => {
 
     expect(mockPrisma.projectParticipant.delete).toHaveBeenCalledTimes(1);
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('project_participant.delete');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('project_participant.delete');
   });
 
   it('delete: rejects when participant is prime contract holder', async () => {
@@ -250,7 +252,7 @@ describe('ProjectParticipant Service', () => {
 
     expect(mockPrisma.projectParticipant.delete).not.toHaveBeenCalled();
     // Verify the positive-list filter was applied (status IN draft/signed/active).
-    const ic = mockPrisma.intercompanyContract.findFirst.mock.calls[0][0];
+    const ic = mockPrisma.intercompanyContract.findFirst.mock.calls[0]![0];
     expect(ic.where.status).toEqual({ in: ['draft', 'signed', 'active'] });
   });
 

@@ -99,6 +99,7 @@ const baseCreateInput = {
   scope: 'Design services',
   pricingType: 'cost_plus_markup' as const,
   markupPercent: 0.15,
+  contractCurrency: 'SAR',
   managingDepartment: 'me_contract' as const,
   status: 'draft' as const,
   createdBy: ACTOR,
@@ -136,7 +137,7 @@ describe('IntercompanyContract Service', () => {
     const result = await createIntercompanyContract(baseCreateInput);
 
     expect(result.id).toBe('ic1');
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('intercompany_contract.create');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('intercompany_contract.create');
   });
 
   it('create: rejects when from === to (service-level, in addition to schema)', async () => {
@@ -304,7 +305,7 @@ describe('IntercompanyContract Service', () => {
     await deleteIntercompanyContract('ic1', PROJECT_ID, ACTOR);
 
     expect(mockPrisma.intercompanyContract.delete).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('intercompany_contract.delete');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('intercompany_contract.delete');
   });
 
   it('delete: rejects when active', async () => {

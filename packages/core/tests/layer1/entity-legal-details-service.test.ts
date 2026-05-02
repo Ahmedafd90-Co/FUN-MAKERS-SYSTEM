@@ -125,7 +125,7 @@ describe('EntityLegalDetails Service', () => {
     expect(result).toEqual(created);
     expect(mockPrisma.entityLegalDetails.upsert).toHaveBeenCalledTimes(1);
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('entity_legal_details.create');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('entity_legal_details.create');
   });
 
   it('upsert: updates existing row (audit action = update)', async () => {
@@ -142,7 +142,7 @@ describe('EntityLegalDetails Service', () => {
     });
 
     expect(result.taxId).toBe('300000000000099');
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('entity_legal_details.update');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('entity_legal_details.update');
   });
 
   it('upsert: rejects when entity is archived', async () => {
@@ -167,7 +167,7 @@ describe('EntityLegalDetails Service', () => {
       where: { entityId: ENTITY_ID },
     });
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('entity_legal_details.delete');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('entity_legal_details.delete');
   });
 
   it('delete: throws when no row exists', async () => {

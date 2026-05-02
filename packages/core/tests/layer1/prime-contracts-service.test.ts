@@ -150,7 +150,7 @@ describe('PrimeContract Service', () => {
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     expect(mockPrisma.primeContract.create).toHaveBeenCalledTimes(1);
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('prime_contract.create');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('prime_contract.create');
   });
 
   it('create: creates ProjectParticipant when entity not yet a participant (role=prime_contractor, isPrime=true)', async () => {
@@ -291,7 +291,7 @@ describe('PrimeContract Service', () => {
 
     const result = await transitionPrimeContractStatus(PROJECT_ID, 'sign', ACTOR);
     expect(result.status).toBe('signed');
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('prime_contract.transition.sign');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('prime_contract.transition.sign');
   });
 
   it('transition: draft → completed NOT allowed', async () => {
@@ -329,7 +329,7 @@ describe('PrimeContract Service', () => {
       where: { id: PROJECT_ID },
       data: { primeContractId: null, contractValue: null },
     });
-    expect(mockAuditLog.mock.calls[0][0].action).toBe('prime_contract.delete');
+    expect(mockAuditLog.mock.calls[0]![0].action).toBe('prime_contract.delete');
   });
 
   it('delete: rejects when active', async () => {
