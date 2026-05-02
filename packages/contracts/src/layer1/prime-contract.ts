@@ -51,10 +51,15 @@ export const CreatePrimeContractInputSchema = z
   });
 export type CreatePrimeContractInput = z.infer<typeof CreatePrimeContractInputSchema>;
 
+// Update boundaries (PIC-8 Stage 3 review):
+//   - status changes go through transitionPrimeContractStatus (state machine).
+//   - contractingEntityId is immutable on existing prime contracts; the explicit
+//     path to change the contracting entity is delete + recreate.
+// Both fields intentionally absent here. The service layer also rejects them
+// defensively if a non-Zod-validated caller manages to slip them in.
 export const UpdatePrimeContractInputSchema = z
   .object({
     projectId: z.string().uuid(),
-    contractingEntityId: z.string().uuid().optional(),
     clientName: z.string().min(1).optional(),
     clientReference: z.string().nullish(),
     contractValue: z.number().positive().optional(),
@@ -62,7 +67,6 @@ export const UpdatePrimeContractInputSchema = z
     signedDate: z.string().datetime().nullish(),
     effectiveDate: z.string().datetime().nullish(),
     expectedCompletionDate: z.string().datetime().nullish(),
-    status: primeContractStatusEnum.optional(),
     notes: z.string().nullish(),
   })
   .refine(datesOrderedNonDecreasing, {

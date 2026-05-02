@@ -159,14 +159,27 @@ export async function updatePrimeContract(
   input: UpdatePrimeContractInput,
   actorUserId: string,
 ) {
+  // Defense-in-depth: contract schema already strips status / contractingEntityId,
+  // but a non-Zod-validated caller (raw tRPC bypass, scripted import) could still
+  // try. Reject loudly so the boundary is enforced at both layers.
+  const inputRecord = input as unknown as Record<string, unknown>;
+  if ('status' in inputRecord && inputRecord.status !== undefined) {
+    throw new Error(
+      'Cannot update prime contract status directly: use transitionPrimeContractStatus (state machine).',
+    );
+  }
+  if ('contractingEntityId' in inputRecord && inputRecord.contractingEntityId !== undefined) {
+    throw new Error(
+      'Cannot update prime contract contractingEntityId: it is immutable on existing prime contracts. Delete + recreate to change the contracting entity.',
+    );
+  }
+
   const existing = await prisma.primeContract.findUniqueOrThrow({
     where: { projectId: input.projectId },
   });
 
   return prisma.$transaction(async (tx) => {
     const data: Prisma.PrimeContractUpdateInput = {};
-    if (input.contractingEntityId !== undefined)
-      data.contractingEntity = { connect: { id: input.contractingEntityId } };
     if (input.clientName !== undefined) data.clientName = input.clientName;
     if (input.clientReference !== undefined)
       data.clientReference = input.clientReference ?? null;
@@ -181,7 +194,6 @@ export async function updatePrimeContract(
       data.expectedCompletionDate = input.expectedCompletionDate
         ? new Date(input.expectedCompletionDate)
         : null;
-    if (input.status !== undefined) data.status = input.status;
     if (input.notes !== undefined) data.notes = input.notes ?? null;
 
     const updated = await tx.primeContract.update({

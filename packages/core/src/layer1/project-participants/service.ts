@@ -168,8 +168,10 @@ export async function deleteProjectParticipant(
   }
 
   // Active-intercompany-contracts check: is this entity a from/to party on any
-  // intercompany contract on this project that is still active (not cancelled
-  // and not closed)?
+  // intercompany contract on this project that is still active?
+  // Positive list (status IN draft/signed/active) — robust to future enum
+  // additions; new states default to NOT blocking deletion unless explicitly
+  // added here.
   const activeIntercompany = await prisma.intercompanyContract.findFirst({
     where: {
       projectId: existing.projectId,
@@ -177,7 +179,7 @@ export async function deleteProjectParticipant(
         { fromEntityId: existing.entityId },
         { toEntityId: existing.entityId },
       ],
-      status: { notIn: ['cancelled', 'closed'] },
+      status: { in: ['draft', 'signed', 'active'] },
     },
     select: { id: true, status: true },
   });
