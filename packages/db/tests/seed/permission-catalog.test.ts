@@ -43,29 +43,37 @@ function collectTsFiles(dir: string, acc: string[] = []): string[] {
 }
 
 /**
- * Extract permission codes from source text.
- * Matches both patterns currently used by routers:
- *   - Legacy direct check: ctx.user.permissions.includes('ipa.view')
- *                          ctx.entityPermissions.includes('rfq.edit')
- *   - Current helper:      hasPerm(ctx, 'project_participant.view')
+ * Patterns used to find permission code references in router source text.
+ * Each pattern captures the literal code into group 1.
  *
- * Either pattern reaching a code that isn't in PERMISSION_CATALOG would
+ * Coverage:
+ *   - {namespace.}permissions.includes('X') — covers permissions and entityPermissions
+ *     (e.g., ctx.user.permissions.includes(...), ctx.entityPermissions.includes(...))
+ *   - hasPerm(ctx, 'X') — current canonical pattern; first arg constrained to a
+ *     bare or dotted identifier (ctx, this.ctx) to avoid matching function
+ *     declarations like `function hasPerm(ctx: { user: ... }, perm)` or letting an
+ *     unbounded lazy quantifier slide into nearby JSDoc/code below — both of which
+ *     produced false positives during the initial PIC-15 fix attempt.
+ *
+ * Case-insensitivity on the first pattern is what lets `\w*permissions` match
+ * both `permissions` and `entityPermissions` (the capital P in the latter
+ * would otherwise prevent the literal match).
+ *
+ * Any reference reaching a code that isn't in PERMISSION_CATALOG would
  * silently fail closed in production — this scan catches the drift at CI time.
  */
+const PERMISSION_REFERENCE_PATTERNS: RegExp[] = [
+  /\b(?:\w+\.)*\w*permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/gi,
+  /\bhasPerm\(\s*\w+(?:\.\w+)*\s*,\s*['"]([^'"]+)['"]\s*\)/g,
+];
+
 function extractPermissionChecks(source: string, filePath: string): { code: string; line: number; file: string }[] {
   const results: { code: string; line: number; file: string }[] = [];
-  const lines = source.split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    // Reset regexes for each line — exec() with /g is stateful.
-    const includesRegex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
-    const hasPermRegex = /hasPerm\(\s*[^,]+,\s*['"]([^'"]+)['"]\s*\)/g;
-    let match: RegExpExecArray | null;
-    while ((match = includesRegex.exec(lines[i]!)) !== null) {
-      results.push({ code: match[1]!, line: i + 1, file: filePath });
-    }
-    while ((match = hasPermRegex.exec(lines[i]!)) !== null) {
-      results.push({ code: match[1]!, line: i + 1, file: filePath });
+  for (const pattern of PERMISSION_REFERENCE_PATTERNS) {
+    for (const match of source.matchAll(pattern)) {
+      const idx = match.index ?? 0;
+      const line = source.slice(0, idx).split('\n').length;
+      results.push({ code: match[1]!, line, file: filePath });
     }
   }
   return results;
@@ -137,7 +145,7 @@ describe('Permission Catalog Guardrail', () => {
         ...violations,
         '',
         'Fix: add the missing code to the appropriate seed file',
-        '  (permissions.ts, commercial-permissions.ts, or procurement-permissions.ts)',
+        '  (permissions.ts, commercial-permissions.ts, procurement-permissions.ts, or layer1-permissions.ts)',
         '  then re-run this test.',
       ].join('\n');
       expect.fail(msg);
