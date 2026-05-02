@@ -41,7 +41,10 @@ model Currency {
   decimalPlaces Int    @map("decimal_places")
 
   // Relations
-  projects Project[]
+  projects              Project[]
+  // Layer 1 — ProjectLedger relations
+  primeContracts        PrimeContract[]        @relation("PrimeContractCurrency")
+  intercompanyContracts IntercompanyContract[] @relation("IntercompanyContractCurrency")
 
   @@map("currencies")
 }
@@ -110,12 +113,17 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  sessions           UserSession[]
-  userRoles          UserRole[]
-  projectAssignments ProjectAssignment[]
-  documentSignatures DocumentSignature[]
-  notifications      Notification[]
-  notificationPrefs  NotificationPreference[]
+  sessions                     UserSession[]
+  userRoles                    UserRole[]
+  projectAssignments           ProjectAssignment[]
+  documentSignatures           DocumentSignature[]
+  notifications                Notification[]
+  notificationPrefs            NotificationPreference[]
+  // Layer 1 — ProjectLedger reverse relations
+  projectParticipantsCreated   ProjectParticipant[]     @relation("ProjectParticipantCreator")
+  primeContractsCreated        PrimeContract[]          @relation("PrimeContractCreator")
+  intercompanyContractsCreated IntercompanyContract[]   @relation("IntercompanyContractCreator")
+  entityLegalDetailsUpdated    EntityLegalDetails[]     @relation("EntityLegalDetailsUpdater")
 
   @@map("users")
 }
@@ -239,12 +247,19 @@ model Entity {
   children Entity[] @relation("EntityParent")
 
   // Relations
-  projects              Project[]
+  projects                  Project[]
   // Module 3 — Procurement Engine relations
-  vendors               Vendor[]
-  procurementCategories ProcurementCategory[]
-  itemCatalogs          ItemCatalog[]
-  frameworkAgreements   FrameworkAgreement[]
+  vendors                   Vendor[]
+  procurementCategories     ProcurementCategory[]
+  itemCatalogs              ItemCatalog[]
+  frameworkAgreements       FrameworkAgreement[]
+  // Layer 1 — ProjectLedger reverse relations
+  legalDetails              EntityLegalDetails?    @relation("EntityLegalDetailsEntity")
+  projectParticipations     ProjectParticipant[]
+  primeContractsHeld        PrimeContract[]        @relation("PrimeContractContractingEntity")
+  intercompanyContractsFrom IntercompanyContract[] @relation("IntercompanyContractFrom")
+  intercompanyContractsTo   IntercompanyContract[] @relation("IntercompanyContractTo")
+  vendorAliases             Vendor[]               @relation("VendorInternalEntity")
 
   @@map("entities")
 }
@@ -278,6 +293,9 @@ model Project {
   // Financial control — baseline contract values (Phase D2)
   contractValue        Decimal?      @map("contract_value") @db.Decimal(18, 2)
   revisedContractValue Decimal?      @map("revised_contract_value") @db.Decimal(18, 2)
+  // Layer 1 — denormalized cache pointer to current PrimeContract
+  // (FK enforced via primeContractRef relation; canonical relation is primeContract via PrimeContract.projectId)
+  primeContractId      String?       @unique @map("prime_contract_id")
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -315,6 +333,11 @@ model Project {
   budgetAbsorptionExceptions BudgetAbsorptionException[]
   // Import layer relations
   importBatches              ImportBatch[]
+  // Layer 1 — ProjectLedger relations
+  participants               ProjectParticipant[]
+  primeContract              PrimeContract?              @relation("ProjectPrimeContract")
+  primeContractRef           PrimeContract?              @relation("ProjectPrimeContractRef", fields: [primeContractId], references: [id], onDelete: Restrict)
+  intercompanyContracts      IntercompanyContract[]      @relation("ProjectIntercompanyContracts")
 
   @@index([entityId])
   @@map("projects")
@@ -1424,8 +1447,13 @@ model Vendor {
   createdBy          String       @map("created_by")
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
+  // Layer 1 — internal-entity vendor flag
+  // Service layer enforces co-presence: isInternalEntity ↔ internalEntityId non-null
+  isInternalEntity   Boolean      @default(false) @map("is_internal_entity")
+  internalEntityId   String?      @map("internal_entity_id")
 
   entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  internalEntity      Entity?              @relation("VendorInternalEntity", fields: [internalEntityId], references: [id], onDelete: Restrict)
   projectVendors      ProjectVendor[]
   vendorContracts     VendorContract[]
   frameworkAgreements FrameworkAgreement[]
@@ -1438,6 +1466,7 @@ model Vendor {
   @@unique([entityId, vendorCode])
   @@index([entityId, status])
   @@index([entityId, name])
+  @@index([internalEntityId])
   @@map("vendors")
 }
 
@@ -2292,4 +2321,175 @@ model IpaAdjustmentField {
 
   @@index([batchId])
   @@map("ipa_adjustment_fields")
+}
+
+// ===========================================================================
+// Layer 1 — ProjectLedger Foundation (PIC-8)
+// ProjectParticipant, PrimeContract, IntercompanyContract, EntityLegalDetails
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Enums — Layer 1
+// ---------------------------------------------------------------------------
+
+enum ProjectParticipantRole {
+  prime_contractor
+  sub_contractor
+  factory
+  design
+  management
+  other
+}
+
+enum PrimeContractStatus {
+  draft
+  signed
+  active
+  completed
+  terminated
+  cancelled
+}
+
+enum IntercompanyPricingType {
+  cost_plus_markup
+  management_fee
+  fixed_fee
+}
+
+enum IntercompanyManagingDepartment {
+  me_contract
+  asia_pac_contract
+}
+
+enum IntercompanyContractStatus {
+  draft
+  signed
+  active
+  closed
+  cancelled
+}
+
+// ---------------------------------------------------------------------------
+// Models — Layer 1
+// ---------------------------------------------------------------------------
+
+/// Bridge between Project and Entity declaring participation roles.
+/// Unique on (project_id, entity_id) — single role per participation; multi-role
+/// modeling deferred to Phase 2 if needed.
+model ProjectParticipant {
+  id        String                 @id @default(uuid())
+  projectId String                 @map("project_id")
+  entityId  String                 @map("entity_id")
+  role      ProjectParticipantRole
+  isPrime   Boolean                @default(false) @map("is_prime")
+  notes     String?                @db.Text
+  createdBy String                 @map("created_by")
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  creator User    @relation("ProjectParticipantCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, entityId], name: "project_entity_unique")
+  @@index([projectId])
+  @@index([entityId])
+  @@index([projectId, role])
+  @@map("project_participants")
+}
+
+/// Client-side prime contract. 1:1 with Project (revenue source-of-truth).
+/// Project.contractValue is a synced denormalized cache; service layer keeps
+/// them aligned within a transaction. Project.primeContractId is also a
+/// denormalized cache pointer; the canonical FK lives on PrimeContract.projectId.
+model PrimeContract {
+  id                     String              @id @default(uuid())
+  projectId              String              @unique @map("project_id")
+  contractingEntityId    String              @map("contracting_entity_id")
+  clientName             String              @map("client_name")
+  clientReference        String?             @map("client_reference")
+  contractValue          Decimal             @map("contract_value") @db.Decimal(18, 2)
+  contractCurrency       String              @default("SAR") @map("contract_currency")
+  signedDate             DateTime?           @map("signed_date") @db.Date
+  effectiveDate          DateTime?           @map("effective_date") @db.Date
+  expectedCompletionDate DateTime?           @map("expected_completion_date") @db.Date
+  status                 PrimeContractStatus @default(draft)
+  notes                  String?             @db.Text
+  createdBy              String              @map("created_by")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+
+  project              Project  @relation("ProjectPrimeContract", fields: [projectId], references: [id], onDelete: Restrict)
+  // Back-reference for Project.primeContractRef (the cache-pointer FK on Project.primeContractId)
+  projectAsCachedPrime Project? @relation("ProjectPrimeContractRef")
+  contractingEntity    Entity   @relation("PrimeContractContractingEntity", fields: [contractingEntityId], references: [id], onDelete: Restrict)
+  creator              User     @relation("PrimeContractCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  currency             Currency @relation("PrimeContractCurrency", fields: [contractCurrency], references: [code], onDelete: Restrict)
+
+  @@index([contractingEntityId])
+  @@index([status])
+  @@map("prime_contracts")
+}
+
+/// Directional inter-company contract between two Entities, scoped to a Project.
+/// Service layer enforces fromEntityId !== toEntityId and that both entities
+/// are project participants.
+model IntercompanyContract {
+  id                 String                         @id @default(uuid())
+  projectId          String                         @map("project_id")
+  fromEntityId       String                         @map("from_entity_id")
+  toEntityId         String                         @map("to_entity_id")
+  scope              String                         @db.Text
+  pricingType        IntercompanyPricingType        @map("pricing_type")
+  markupPercent      Decimal                        @map("markup_percent") @db.Decimal(8, 4)
+  contractValue      Decimal?                       @map("contract_value") @db.Decimal(18, 2)
+  contractCurrency   String                         @default("SAR") @map("contract_currency")
+  managingDepartment IntercompanyManagingDepartment @map("managing_department")
+  signedDate         DateTime?                      @map("signed_date") @db.Date
+  status             IntercompanyContractStatus     @default(draft)
+  notes              String?                        @db.Text
+  createdBy          String                         @map("created_by")
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  updatedAt          DateTime                       @updatedAt @map("updated_at")
+
+  project    Project  @relation("ProjectIntercompanyContracts", fields: [projectId], references: [id], onDelete: Restrict)
+  fromEntity Entity   @relation("IntercompanyContractFrom", fields: [fromEntityId], references: [id], onDelete: Restrict)
+  toEntity   Entity   @relation("IntercompanyContractTo", fields: [toEntityId], references: [id], onDelete: Restrict)
+  creator    User     @relation("IntercompanyContractCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  currency   Currency @relation("IntercompanyContractCurrency", fields: [contractCurrency], references: [code], onDelete: Restrict)
+
+  @@index([projectId])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@index([projectId, managingDepartment])
+  @@index([status])
+  @@map("intercompany_contracts")
+}
+
+/// 1:1 sidecar to Entity for legal/commercial fields (taxId, registration,
+/// address, banking). Cascade on parent Entity delete; banking fields stored
+/// plain in Phase 1 (encryption deferred). No createdBy/createdAt — row is
+/// upserted on first save.
+model EntityLegalDetails {
+  id                 String   @id @default(uuid())
+  entityId           String   @unique @map("entity_id")
+  taxId              String?  @map("tax_id")
+  registrationNumber String?  @map("registration_number")
+  jurisdiction       String?
+  registeredAddress  String?  @map("registered_address") @db.Text
+  contactName        String?  @map("contact_name")
+  contactEmail       String?  @map("contact_email")
+  contactPhone       String?  @map("contact_phone")
+  bankName           String?  @map("bank_name")
+  bankAccountNumber  String?  @map("bank_account_number")
+  bankIban           String?  @map("bank_iban")
+  bankSwift          String?  @map("bank_swift")
+  notes              String?  @db.Text
+  updatedBy          String   @map("updated_by")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  entity  Entity @relation("EntityLegalDetailsEntity", fields: [entityId], references: [id], onDelete: Cascade)
+  updater User   @relation("EntityLegalDetailsUpdater", fields: [updatedBy], references: [id], onDelete: Restrict)
+
+  @@map("entity_legal_details")
 }
