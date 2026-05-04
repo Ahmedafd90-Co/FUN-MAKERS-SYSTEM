@@ -48,20 +48,27 @@ export default function EditProjectParticipantPage() {
   const [form, setForm] = useState<FormState>({ role: '', notes: '' });
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Seed form state ONCE on initial data load. Earlier this depended on `data`
-  // directly, which meant a background refetch (tab focus, query invalidation,
-  // sibling mutation) would clobber any unsaved edits. The seededRef guard
-  // makes the effect a one-shot.
-  const seededRef = useRef(false);
+  // Seed form state when (a) data first loads for a given participant, OR
+  // (b) the user navigates from one participant's edit page to another. In
+  // Next.js App Router, navigating between two `[participantId]` URLs
+  // preserves the component instance — `useParams()` returns updated values
+  // but `useRef` state persists. A boolean "seeded once, never reset" guard
+  // would keep participant A's form values when the URL flips to participant B,
+  // and submit() would then write A's values to B's row.
+  //
+  // Tracking the seeded participantId by value (not a boolean) re-seeds on
+  // cross-navigation while still skipping re-seeds on background refetch
+  // (tab focus, query invalidation) for the SAME participant.
+  const seededParticipantRef = useRef<string | null>(null);
   useEffect(() => {
-    if (data && !seededRef.current) {
+    if (data && seededParticipantRef.current !== participantId) {
       setForm({
         role: data.role as RoleValue,
         notes: data.notes ?? '',
       });
-      seededRef.current = true;
+      seededParticipantRef.current = participantId;
     }
-  }, [data]);
+  }, [data, participantId]);
 
   const updateMut = trpc.layer1.projectParticipants.update.useMutation({
     onSuccess: () => {
