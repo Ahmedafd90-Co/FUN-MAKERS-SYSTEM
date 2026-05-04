@@ -1,11 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import { ArrowRight, ExternalLink } from 'lucide-react';
+import { Button } from '@fmksa/ui/components/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@fmksa/ui/components/card';
 import { Separator } from '@fmksa/ui/components/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@fmksa/ui/components/tabs';
 import { useState } from 'react';
 
+import { trpc } from '@/lib/trpc-client';
 import { DocumentList } from '@/components/documents/document-list';
 import { UploadWidget } from '@/components/documents/upload-widget';
 
@@ -112,6 +115,45 @@ function OverviewTab({ project, canEditProject }: { project: ProjectData; canEdi
 }
 
 // ---------------------------------------------------------------------------
+// Participants tab — discoverability surface; the actual list lives at
+// /projects/[id]/participants/. Renders a count + CTA so users find it without
+// needing to type the URL.
+// ---------------------------------------------------------------------------
+
+function ParticipantsTab({ projectId }: { projectId: string }) {
+  const { data, isLoading } = trpc.layer1.projectParticipants.list.useQuery({
+    projectId,
+  });
+
+  const count = data?.length ?? 0;
+  const summary = isLoading
+    ? 'Loading participants...'
+    : count === 0
+      ? 'No participants assigned to this project yet.'
+      : `${count} participant${count === 1 ? '' : 's'} assigned to this project.`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Project Participants</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Manage entities (companies / branches) involved in this project.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">{summary}</p>
+        <Button size="sm" asChild>
+          <Link href={`/projects/${projectId}/participants`}>
+            Manage Participants
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -124,12 +166,23 @@ type ProjectWorkspaceTabsProps = {
 export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspaceTabsProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
+  // Permission gate for the Participants tab — hidden if the caller has neither
+  // view nor create. Layer 1 surfaces are project-workspace-discoverable.
+  const { data: participantPerms } = trpc.layer1.projectParticipants.myPermissions.useQuery();
+  const canViewParticipants =
+    (participantPerms ?? []).includes('project_participant.view') ||
+    (participantPerms ?? []).includes('project_participant.create') ||
+    (participantPerms ?? []).includes('system.admin');
+
   return (
     <Tabs defaultValue="overview" className="w-full">
       <TabsList className="flex-wrap h-auto gap-1">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="documents">Documents</TabsTrigger>
         <TabsTrigger value="team">Team</TabsTrigger>
+        {canViewParticipants && (
+          <TabsTrigger value="participants">Participants</TabsTrigger>
+        )}
         <TabsTrigger value="prime-contract">Prime Contract</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
@@ -189,6 +242,12 @@ export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspa
       <TabsContent value="team">
         <ProjectTeamTab projectId={project.id} />
       </TabsContent>
+
+      {canViewParticipants && (
+        <TabsContent value="participants">
+          <ParticipantsTab projectId={project.id} />
+        </TabsContent>
+      )}
 
       <TabsContent value="prime-contract">
         <PrimeContractTab projectId={project.id} />
