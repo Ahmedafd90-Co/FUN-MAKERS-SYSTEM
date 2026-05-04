@@ -31,6 +31,7 @@ import {
   PRIME_CONTRACT_STATUS_ACTIONS,
   STATUS_LABELS,
   checkDateOrdering,
+  formatDate,
   statusVariant,
   type PrimeContractAction,
   type PrimeContractStatus,
@@ -295,6 +296,57 @@ describe('STATUS_LABELS + statusVariant', () => {
 
   it('statusVariant defaults to outline for unknown statuses', () => {
     expect(statusVariant('something_else_entirely')).toBe('outline');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group 5b — formatDate (UTC stability)
+//
+// Contract dates are stored at midnight UTC. Rendering them via
+// toLocaleDateString() (the prior implementation) interprets the timestamp in
+// the runtime's local timezone — viewers west of UTC saw every contract date
+// shifted back by one day. The current implementation forces timeZone: 'UTC'
+// so the calendar day stays stable.
+//
+// Locale-tolerant assertions: don't pin a specific format string (e.g.
+// "May 4, 2026") because the runtime locale can vary. Instead, assert the
+// year + day-of-month appear and the previous calendar day does NOT.
+// ---------------------------------------------------------------------------
+
+describe('formatDate (UTC stability)', () => {
+  it('returns "—" for null / undefined / empty input', () => {
+    expect(formatDate(null)).toBe('—');
+    expect(formatDate(undefined)).toBe('—');
+    expect(formatDate('')).toBe('—');
+  });
+
+  it('renders the same calendar day as the stored ISO date (no timezone drift)', () => {
+    // 2026-05-04 stored at midnight UTC. With the prior local-time formatting,
+    // viewers west of UTC saw "May 3, 2026" — one day off. The UTC formatter
+    // must always show the 4th.
+    const iso = '2026-05-04T00:00:00.000Z';
+    const result = formatDate(iso);
+    expect(result).toContain('2026');
+    expect(result).toMatch(/\b4\b/);
+    // Must NOT have shifted to the previous calendar day.
+    expect(result).not.toMatch(/\b3,?\s+2026\b/);
+  });
+
+  it('handles a Date object input the same as an ISO string', () => {
+    const iso = '2026-12-31T00:00:00.000Z';
+    const fromString = formatDate(iso);
+    const fromDate = formatDate(new Date(iso));
+    expect(fromDate).toBe(fromString);
+  });
+
+  it('renders December 31 as Dec 31 of the same year (no year rollover)', () => {
+    // Edge case: stored 2026-12-31T00:00:00Z. A viewer in (e.g.) UTC-5 with
+    // local-time formatting would see "Dec 30, 2026". UTC formatter must keep
+    // it on the 31st.
+    const iso = '2026-12-31T00:00:00.000Z';
+    const result = formatDate(iso);
+    expect(result).toContain('2026');
+    expect(result).toMatch(/\b31\b/);
   });
 });
 

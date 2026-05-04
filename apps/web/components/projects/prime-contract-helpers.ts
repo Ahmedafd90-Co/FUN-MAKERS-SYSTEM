@@ -98,6 +98,28 @@ export function statusVariant(status: string): 'default' | 'secondary' | 'destru
 }
 
 // ---------------------------------------------------------------------------
+// Date display — formats an ISO timestamp as a calendar date in UTC, NOT in
+// the viewer's local timezone. Contract dates are stored at `T00:00:00.000Z`
+// (see dateInputToISO in prime-contract-tab.tsx). Rendering them via
+// toLocaleDateString() interprets the timestamp in the runtime's local
+// timezone, so any viewer west of UTC sees the date shifted back by one day
+// — the calendar day the user picked is silently wrong.
+//
+// Intl.DateTimeFormat with timeZone: 'UTC' produces the same calendar day
+// regardless of viewer location, matching the contract's intent.
+// ---------------------------------------------------------------------------
+
+export function formatDate(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(iso));
+}
+
+// ---------------------------------------------------------------------------
 // Date ordering validation — mirrors the .refine() check in
 // packages/contracts/src/layer1/prime-contract.ts datesOrderedNonDecreasing.
 // Client-side guard so we surface a helpful message before the round-trip.

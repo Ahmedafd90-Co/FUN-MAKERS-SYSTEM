@@ -36,6 +36,7 @@ import {
   PRIME_CONTRACT_STATUS_ACTIONS,
   STATUS_LABELS,
   checkDateOrdering,
+  formatDate,
   statusVariant,
   type PrimeContractAction as Action,
   type PrimeContractActionDef as ActionDef,
@@ -54,11 +55,6 @@ function formatMoney(val: unknown, currency?: string): string {
     maximumFractionDigits: 2,
   });
   return currency ? `${formatted} ${currency}` : formatted;
-}
-
-function formatDate(iso: string | Date | null | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString();
 }
 
 function isoToDateInput(iso: string | Date | null | undefined): string {
