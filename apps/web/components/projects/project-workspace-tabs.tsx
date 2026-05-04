@@ -166,13 +166,19 @@ type ProjectWorkspaceTabsProps = {
 export function ProjectWorkspaceTabs({ project, canEditProject }: ProjectWorkspaceTabsProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // Permission gate for the Participants tab — hidden if the caller has neither
-  // view nor create. Layer 1 surfaces are project-workspace-discoverable.
+  // Permission gate for the Participants tab. Aligns with the list query's
+  // server-side gate (project_participant.view): the tab content immediately
+  // calls projectParticipants.list, so a gate that admits 'create'-only users
+  // would render the tab but then 403 the list query and fall through to
+  // misleading "No participants assigned" copy. Tightened to require view.
+  //
+  // system.admin is intentionally NOT special-cased here — the layer1
+  // myPermissions query filters by prefix and won't surface system.admin in
+  // its return set; admin users get project_participant.view through their
+  // role assignments and pass via the same code path.
   const { data: participantPerms } = trpc.layer1.projectParticipants.myPermissions.useQuery();
   const canViewParticipants =
-    (participantPerms ?? []).includes('project_participant.view') ||
-    (participantPerms ?? []).includes('project_participant.create') ||
-    (participantPerms ?? []).includes('system.admin');
+    (participantPerms ?? []).includes('project_participant.view');
 
   return (
     <Tabs defaultValue="overview" className="w-full">
