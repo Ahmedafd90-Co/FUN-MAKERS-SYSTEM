@@ -37,6 +37,10 @@ export default function ProjectParticipantsListPage() {
 
   const { data: userPermissions } = trpc.layer1.projectParticipants.myPermissions.useQuery();
   const canCreate = (userPermissions ?? []).includes('project_participant.create');
+  // Gate row navigation on edit perm — the only target route is the edit page,
+  // which itself rejects users without project_participant.edit. Without this
+  // gate, view-only users would click through to PermissionDenied (dead-end UX).
+  const canEdit = (userPermissions ?? []).includes('project_participant.edit');
 
   const { data, isLoading, error } = trpc.layer1.projectParticipants.list.useQuery({
     projectId,
@@ -108,12 +112,18 @@ export default function ProjectParticipantsListPage() {
                 return (
                   <TableRow key={p.id} className="hover:bg-muted/50">
                     <TableCell>
-                      <Link
-                        href={`/projects/${projectId}/participants/${p.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {entity?.name ?? '(unknown entity)'}
-                      </Link>
+                      {canEdit ? (
+                        <Link
+                          href={`/projects/${projectId}/participants/${p.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {entity?.name ?? '(unknown entity)'}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">
+                          {entity?.name ?? '(unknown entity)'}
+                        </span>
+                      )}
                       {entity?.code && (
                         <span className="ml-2 text-xs text-muted-foreground font-mono">
                           ({entity.code})
@@ -133,12 +143,14 @@ export default function ProjectParticipantsListPage() {
                       {new Date(p.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link
-                        href={`/projects/${projectId}/participants/${p.id}`}
-                        className="text-sm text-primary hover:underline"
-                      >
-                        Edit
-                      </Link>
+                      {canEdit ? (
+                        <Link
+                          href={`/projects/${projectId}/participants/${p.id}`}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          Edit
+                        </Link>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
