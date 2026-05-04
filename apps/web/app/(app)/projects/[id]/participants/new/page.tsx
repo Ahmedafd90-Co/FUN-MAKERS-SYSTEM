@@ -19,20 +19,10 @@ import { Textarea } from '@fmksa/ui/components/textarea';
 import { trpc } from '@/lib/trpc-client';
 import { PageHeader } from '@/components/layout/page-header';
 import { PermissionDenied } from '@/components/ui/permission-denied';
-
-const ROLES: ReadonlyArray<{
-  value: 'prime_contractor' | 'sub_contractor' | 'factory' | 'design' | 'management' | 'other';
-  label: string;
-}> = [
-  { value: 'prime_contractor', label: 'Prime Contractor' },
-  { value: 'sub_contractor', label: 'Subcontractor' },
-  { value: 'factory', label: 'Factory' },
-  { value: 'design', label: 'Design' },
-  { value: 'management', label: 'Management' },
-  { value: 'other', label: 'Other' },
-];
-
-type RoleValue = (typeof ROLES)[number]['value'];
+import {
+  ROLES,
+  type ParticipantRole as RoleValue,
+} from '@/components/projects/participant-helpers';
 
 type FormState = {
   entityId: string;

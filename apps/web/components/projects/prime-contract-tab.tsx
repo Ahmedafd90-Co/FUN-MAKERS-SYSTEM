@@ -29,76 +29,18 @@ import { Textarea } from '@fmksa/ui/components/textarea';
 import { trpc } from '@/lib/trpc-client';
 import { PermissionDenied } from '@/components/ui/permission-denied';
 
-// ---------------------------------------------------------------------------
-// Types & constants
-// ---------------------------------------------------------------------------
-
-type Status = 'draft' | 'signed' | 'active' | 'completed' | 'terminated' | 'cancelled';
-type Action = 'sign' | 'activate' | 'complete' | 'terminate' | 'cancel';
-
-type ActionDef = {
-  action: Action;
-  label: string;
-  variant: 'default' | 'destructive' | 'outline';
-};
-
-const PRIME_CONTRACT_STATUS_ACTIONS: Record<Status, ActionDef[]> = {
-  draft: [
-    { action: 'sign', label: 'Sign Contract', variant: 'default' },
-    { action: 'cancel', label: 'Cancel', variant: 'outline' },
-  ],
-  signed: [
-    { action: 'activate', label: 'Activate', variant: 'default' },
-    { action: 'cancel', label: 'Cancel', variant: 'outline' },
-  ],
-  active: [
-    { action: 'complete', label: 'Mark Complete', variant: 'default' },
-    { action: 'terminate', label: 'Terminate', variant: 'destructive' },
-    { action: 'cancel', label: 'Cancel', variant: 'outline' },
-  ],
-  completed: [],
-  terminated: [],
-  cancelled: [],
-};
-
-const COMMENT_REQUIRED_ACTIONS: Action[] = []; // optional everywhere
-const CONFIRM_ACTIONS: Action[] = ['terminate', 'cancel'];
-
-// Past-tense action labels for success toast messages. Naive string concatenation
-// (`Contract ${action}d.`) produces ungrammatical results for "sign" → "signd"
-// and inconsistent ones for double-l verbs ("cancelled" vs "canceld").
-const ACTION_PAST_TENSE: Record<Action, string> = {
-  sign: 'signed',
-  activate: 'activated',
-  complete: 'completed',
-  terminate: 'terminated',
-  cancel: 'cancelled',
-};
-
-const STATUS_LABELS: Record<Status, string> = {
-  draft: 'Draft',
-  signed: 'Signed',
-  active: 'Active',
-  completed: 'Completed',
-  terminated: 'Terminated',
-  cancelled: 'Cancelled',
-};
-
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status as Status) {
-    case 'active':
-    case 'completed':
-      return 'default';
-    case 'signed':
-      return 'secondary';
-    case 'terminated':
-      return 'destructive';
-    case 'draft':
-    case 'cancelled':
-    default:
-      return 'outline';
-  }
-}
+import {
+  ACTION_PAST_TENSE,
+  COMMENT_REQUIRED_ACTIONS,
+  CONFIRM_ACTIONS,
+  PRIME_CONTRACT_STATUS_ACTIONS,
+  STATUS_LABELS,
+  checkDateOrdering,
+  statusVariant,
+  type PrimeContractAction as Action,
+  type PrimeContractActionDef as ActionDef,
+  type PrimeContractStatus as Status,
+} from './prime-contract-helpers';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,26 +69,6 @@ function isoToDateInput(iso: string | Date | null | undefined): string {
 
 function dateInputToISO(value: string): string {
   return new Date(`${value}T00:00:00.000Z`).toISOString();
-}
-
-function checkDateOrdering(
-  signedDate: string,
-  effectiveDate: string,
-  expectedCompletionDate: string,
-): string | null {
-  const sd = signedDate ? new Date(signedDate) : null;
-  const ed = effectiveDate ? new Date(effectiveDate) : null;
-  const cd = expectedCompletionDate ? new Date(expectedCompletionDate) : null;
-  if (sd && ed && sd > ed) {
-    return 'Signed date must be on or before the effective date.';
-  }
-  if (ed && cd && ed > cd) {
-    return 'Effective date must be on or before the expected completion date.';
-  }
-  if (sd && cd && !ed && sd > cd) {
-    return 'Signed date must be on or before the expected completion date.';
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------

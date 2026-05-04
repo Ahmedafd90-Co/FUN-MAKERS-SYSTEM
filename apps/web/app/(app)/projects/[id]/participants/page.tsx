@@ -17,18 +17,13 @@ import {
 import { trpc } from '@/lib/trpc-client';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
-
-const ROLE_LABELS: Record<string, string> = {
-  prime_contractor: 'Prime Contractor',
-  sub_contractor: 'Subcontractor',
-  factory: 'Factory',
-  design: 'Design',
-  management: 'Management',
-  other: 'Other',
-};
+import {
+  ROLE_LABELS,
+  type ParticipantRole,
+} from '@/components/projects/participant-helpers';
 
 function roleLabel(role: string): string {
-  return ROLE_LABELS[role] ?? role;
+  return ROLE_LABELS[role as ParticipantRole] ?? role;
 }
 
 function truncate(text: string | null | undefined, max = 60): string {
