@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pencil, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@fmksa/ui/components/badge';
@@ -602,8 +602,15 @@ function PrimeContractDisplay({
     enabled: isEditing,
   });
 
+  // Seed form state once when entering edit mode. Earlier this depended on
+  // the whole `contract` object, so any background refetch (window refocus,
+  // sibling mutation, query invalidation) while editing would silently
+  // overwrite unsaved edits with server values. The seededRef + reset-on-exit
+  // pattern means: seed on isEditing transition true → keep until isEditing
+  // returns to false → re-seed from current contract on next entry.
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (contract && isEditing) {
+    if (isEditing && contract && !seededRef.current) {
       setForm({
         contractingEntityId: contract.contractingEntityId,
         clientName: contract.clientName,
@@ -616,6 +623,10 @@ function PrimeContractDisplay({
         notes: contract.notes ?? '',
       });
       setError(null);
+      seededRef.current = true;
+    }
+    if (!isEditing) {
+      seededRef.current = false;
     }
   }, [contract, isEditing]);
 
