@@ -64,6 +64,17 @@ const PRIME_CONTRACT_STATUS_ACTIONS: Record<Status, ActionDef[]> = {
 const COMMENT_REQUIRED_ACTIONS: Action[] = []; // optional everywhere
 const CONFIRM_ACTIONS: Action[] = ['terminate', 'cancel'];
 
+// Past-tense action labels for success toast messages. Naive string concatenation
+// (`Contract ${action}d.`) produces ungrammatical results for "sign" → "signd"
+// and inconsistent ones for double-l verbs ("cancelled" vs "canceld").
+const ACTION_PAST_TENSE: Record<Action, string> = {
+  sign: 'signed',
+  activate: 'activated',
+  complete: 'completed',
+  terminate: 'terminated',
+  cancel: 'cancelled',
+};
+
 const STATUS_LABELS: Record<Status, string> = {
   draft: 'Draft',
   signed: 'Signed',
@@ -199,7 +210,7 @@ function TransitionActionsBar({
   const transitionMut = trpc.layer1.primeContract.transition.useMutation({
     onSuccess: (_, variables) => {
       utils.layer1.primeContract.get.invalidate({ projectId });
-      toast.success(`Contract ${variables.action}d.`);
+      toast.success(`Contract ${ACTION_PAST_TENSE[variables.action as Action]}.`);
       setConfirmAction(null);
       setComment('');
     },
