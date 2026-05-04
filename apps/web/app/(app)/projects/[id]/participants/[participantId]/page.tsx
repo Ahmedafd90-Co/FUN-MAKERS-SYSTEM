@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ShieldOff } from 'lucide-react';
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
@@ -48,12 +48,18 @@ export default function EditProjectParticipantPage() {
   const [form, setForm] = useState<FormState>({ role: '', notes: '' });
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Seed form state ONCE on initial data load. Earlier this depended on `data`
+  // directly, which meant a background refetch (tab focus, query invalidation,
+  // sibling mutation) would clobber any unsaved edits. The seededRef guard
+  // makes the effect a one-shot.
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (data) {
+    if (data && !seededRef.current) {
       setForm({
         role: data.role as RoleValue,
         notes: data.notes ?? '',
       });
+      seededRef.current = true;
     }
   }, [data]);
 
