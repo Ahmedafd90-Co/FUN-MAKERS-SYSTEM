@@ -14,7 +14,8 @@
   "scripts": {
     "generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
+    "db:seed": "tsx src/seed/index.ts",
+    "db:seed:qa-fixtures": "SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
