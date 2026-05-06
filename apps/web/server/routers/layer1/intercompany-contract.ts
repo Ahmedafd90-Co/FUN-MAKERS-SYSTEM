@@ -67,7 +67,7 @@ export const intercompanyContractRouter = router({
       if (!hasPerm(ctx, 'intercompany_contract.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await createIntercompanyContract(input);
+        return await createIntercompanyContract(input, ctx.user.id);
       } catch (err) {
         mapError(err);
       }

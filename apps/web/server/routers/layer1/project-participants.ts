@@ -59,7 +59,7 @@ export const projectParticipantsRouter = router({
       if (!hasPerm(ctx, 'project_participant.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await createProjectParticipant(input);
+        return await createProjectParticipant(input, ctx.user.id);
       } catch (err) {
         mapError(err);
       }

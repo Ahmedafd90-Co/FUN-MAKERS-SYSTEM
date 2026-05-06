@@ -25,7 +25,10 @@ import { auditService } from '../../audit/service';
 // State machine
 // ---------------------------------------------------------------------------
 
-const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = {
+// PIC-24: exported so the layer1-ui-logic test imports it as the canonical
+// source of truth instead of duplicating the literal locally. If this map
+// changes, the test fails — which is the intended behavior.
+export const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = {
   draft: ['signed', 'cancelled'],
   signed: ['active', 'cancelled'],
   active: ['completed', 'terminated', 'cancelled'],
@@ -34,7 +37,9 @@ const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = 
   cancelled: [],
 };
 
-const ACTION_TO_STATUS: Record<string, PrimeContractStatus> = {
+// PIC-24: also exported — the test asserts the UI action map produces these
+// target statuses, which requires the action→status mapping too.
+export const ACTION_TO_STATUS: Record<string, PrimeContractStatus> = {
   sign: 'signed',
   activate: 'active',
   complete: 'completed',
@@ -55,7 +60,10 @@ const DELETABLE_STATUSES: PrimeContractStatus[] = ['draft', 'cancelled'];
 // 4. Sync Project.primeContractId + Project.contractValue
 // 5. Audit log (inside transaction via tx)
 
-export async function createPrimeContract(input: CreatePrimeContractInput) {
+export async function createPrimeContract(
+  input: CreatePrimeContractInput,
+  actorUserId: string,
+) {
   return prisma.$transaction(async (tx) => {
     // (1) Entity active check
     const entity = await tx.entity.findUniqueOrThrow({
@@ -81,7 +89,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
           entityId: input.contractingEntityId,
           role: 'prime_contractor',
           isPrime: true,
-          createdBy: input.createdBy,
+          createdBy: actorUserId,
         },
       });
     } else if (!existingParticipant.isPrime) {
@@ -107,7 +115,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
           : null,
         status: input.status ?? 'draft',
         notes: input.notes ?? null,
-        createdBy: input.createdBy,
+        createdBy: actorUserId,
       },
     });
 
@@ -123,7 +131,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
     // (5) Audit log inside transaction
     await auditService.log(
       {
-        actorUserId: input.createdBy,
+        actorUserId: actorUserId,
         actorSource: 'user',
         action: 'prime_contract.create',
         resourceType: 'prime_contract',

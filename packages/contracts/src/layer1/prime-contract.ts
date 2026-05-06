@@ -30,6 +30,9 @@ function datesOrderedNonDecreasing(data: {
 const dateOrderingMessage =
   'Date ordering violated: signedDate ≤ effectiveDate ≤ expectedCompletionDate when all are provided.';
 
+// PIC-20: createdBy intentionally absent. The router injects ctx.user.id when
+// calling the service so client code cannot impersonate another user as the
+// record's creator.
 export const CreatePrimeContractInputSchema = z
   .object({
     projectId: z.string().uuid(),
@@ -43,7 +46,6 @@ export const CreatePrimeContractInputSchema = z
     expectedCompletionDate: z.string().datetime().nullish(),
     status: primeContractStatusEnum.optional().default('draft'),
     notes: z.string().nullish(),
-    createdBy: z.string().uuid(),
   })
   .refine(datesOrderedNonDecreasing, {
     message: dateOrderingMessage,

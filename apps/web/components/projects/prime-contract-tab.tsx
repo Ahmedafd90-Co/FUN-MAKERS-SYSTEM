@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pencil, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
+import type { PrimeContractWithProject } from '@fmksa/contracts';
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@fmksa/ui/components/card';
@@ -436,7 +437,6 @@ function PrimeContractCreatePanel({
   canCreate: boolean;
 }) {
   const utils = trpc.useUtils();
-  const { data: me } = trpc.auth.me.useQuery();
   const { data: entities, isLoading: entitiesLoading } = trpc.entities.list.useQuery(
     { includeArchived: false },
     { enabled: canCreate },
@@ -502,11 +502,9 @@ function PrimeContractCreatePanel({
       setError(orderingError);
       return;
     }
-    if (!me?.id) {
-      setError('Unable to identify current user. Please refresh.');
-      return;
-    }
 
+    // PIC-20: createdBy is no longer in the input schema — the router
+    // injects ctx.user.id server-side.
     createMut.mutate({
       projectId,
       contractingEntityId: form.contractingEntityId,
@@ -520,7 +518,6 @@ function PrimeContractCreatePanel({
         ? dateInputToISO(form.expectedCompletionDate)
         : null,
       notes: form.notes.trim() || null,
-      createdBy: me.id,
     });
   };
 
@@ -554,7 +551,7 @@ function PrimeContractCreatePanel({
               name: c.name,
             }))}
           />
-          <Button type="submit" disabled={createMut.isPending || !me?.id}>
+          <Button type="submit" disabled={createMut.isPending}>
             {createMut.isPending ? 'Creating...' : 'Create Contract'}
           </Button>
         </form>
@@ -567,20 +564,9 @@ function PrimeContractCreatePanel({
 // Display (read-only + edit toggle)
 // ---------------------------------------------------------------------------
 
-type ContractData = {
-  id: string;
-  status: string;
-  contractingEntityId: string;
-  clientName: string;
-  clientReference: string | null;
-  contractValue: unknown;
-  contractCurrency: string;
-  signedDate: string | Date | null;
-  effectiveDate: string | Date | null;
-  expectedCompletionDate: string | Date | null;
-  notes: string | null;
-  contractingEntity?: { id: string; name: string; code: string } | null;
-};
+// PIC-22: PrimeContractWithProject comes from @fmksa/contracts. Replaces the
+// previous inline `ContractData` type that duplicated the joined shape.
+type ContractData = PrimeContractWithProject;
 
 function PrimeContractDisplay({
   projectId,

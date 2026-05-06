@@ -18,7 +18,10 @@ import { assertProjectScope } from '../../scope-binding';
 // Create
 // ---------------------------------------------------------------------------
 
-export async function createProjectParticipant(input: CreateProjectParticipantInput) {
+export async function createProjectParticipant(
+  input: CreateProjectParticipantInput,
+  actorUserId: string,
+) {
   const entity = await prisma.entity.findUniqueOrThrow({
     where: { id: input.entityId },
   });
@@ -37,7 +40,7 @@ export async function createProjectParticipant(input: CreateProjectParticipantIn
         role: input.role,
         isPrime: input.isPrime ?? false,
         notes: input.notes ?? null,
-        createdBy: input.createdBy,
+        createdBy: actorUserId,
       },
     });
   } catch (err: unknown) {
@@ -53,7 +56,7 @@ export async function createProjectParticipant(input: CreateProjectParticipantIn
   }
 
   await auditService.log({
-    actorUserId: input.createdBy,
+    actorUserId,
     actorSource: 'user',
     action: 'project_participant.create',
     resourceType: 'project_participant',

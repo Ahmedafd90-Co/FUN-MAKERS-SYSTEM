@@ -75,7 +75,10 @@ export async function getEntityLegalDetails(entityId: string) {
 // Upsert — preserves omitted fields (no clobbering)
 // ---------------------------------------------------------------------------
 
-export async function upsertEntityLegalDetails(input: UpsertEntityLegalDetailsInput) {
+export async function upsertEntityLegalDetails(
+  input: UpsertEntityLegalDetailsInput,
+  actorUserId: string,
+) {
   const entity = await prisma.entity.findUniqueOrThrow({
     where: { id: input.entityId },
   });
@@ -91,7 +94,7 @@ export async function upsertEntityLegalDetails(input: UpsertEntityLegalDetailsIn
 
   // Build update data: only include keys whose value is present (not undefined).
   // null is preserved as an explicit clear.
-  const updateData: Record<string, unknown> = { updatedBy: input.updatedBy };
+  const updateData: Record<string, unknown> = { updatedBy: actorUserId };
   for (const key of MUTABLE_FIELDS) {
     if (input[key] !== undefined) {
       updateData[key] = input[key];
@@ -101,7 +104,7 @@ export async function upsertEntityLegalDetails(input: UpsertEntityLegalDetailsIn
   // Build create data: same omission semantics (omitted → DB default = null).
   const createData: Record<string, unknown> = {
     entityId: input.entityId,
-    updatedBy: input.updatedBy,
+    updatedBy: actorUserId,
   };
   for (const key of MUTABLE_FIELDS) {
     if (input[key] !== undefined) {
@@ -116,7 +119,7 @@ export async function upsertEntityLegalDetails(input: UpsertEntityLegalDetailsIn
   });
 
   await auditService.log({
-    actorUserId: input.updatedBy,
+    actorUserId,
     actorSource: 'user',
     action: existing ? 'entity_legal_details.update' : 'entity_legal_details.create',
     resourceType: 'entity_legal_details',

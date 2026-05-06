@@ -119,8 +119,7 @@ describe('EntityLegalDetails Service', () => {
       registrationNumber: 'CR-1234567890',
       jurisdiction: 'KSA',
       registeredAddress: 'Riyadh',
-      updatedBy: ACTOR,
-    });
+    }, ACTOR);
 
     expect(result).toEqual(created);
     expect(mockPrisma.entityLegalDetails.upsert).toHaveBeenCalledTimes(1);
@@ -138,8 +137,7 @@ describe('EntityLegalDetails Service', () => {
     const result = await upsertEntityLegalDetails({
       entityId: ENTITY_ID,
       taxId: '300000000000099',
-      updatedBy: ACTOR,
-    });
+    }, ACTOR);
 
     expect(result.taxId).toBe('300000000000099');
     expect(mockAuditLog.mock.calls[0]![0].action).toBe('entity_legal_details.update');
@@ -149,7 +147,7 @@ describe('EntityLegalDetails Service', () => {
     mockPrisma.entity.findUniqueOrThrow.mockResolvedValue(fakeEntity({ status: 'archived' }));
 
     await expect(
-      upsertEntityLegalDetails({ entityId: ENTITY_ID, updatedBy: ACTOR }),
+      upsertEntityLegalDetails({ entityId: ENTITY_ID }, ACTOR),
     ).rejects.toThrow(/archived/);
 
     expect(mockPrisma.entityLegalDetails.upsert).not.toHaveBeenCalled();
@@ -184,8 +182,7 @@ describe('EntityLegalDetails Service', () => {
     await upsertEntityLegalDetails({
       entityId: ENTITY_ID,
       contactEmail: 'new@example.com',
-      updatedBy: ACTOR,
-    });
+    }, ACTOR);
 
     const upsertCall = mockPrisma.entityLegalDetails.upsert.mock.calls[0]![0];
     expect(upsertCall.update).toHaveProperty('contactEmail', 'new@example.com');
@@ -205,8 +202,7 @@ describe('EntityLegalDetails Service', () => {
     await upsertEntityLegalDetails({
       entityId: ENTITY_ID,
       taxId: null,
-      updatedBy: ACTOR,
-    });
+    }, ACTOR);
 
     const upsertCall = mockPrisma.entityLegalDetails.upsert.mock.calls[0]![0];
     expect(upsertCall.update).toHaveProperty('taxId', null);
@@ -231,8 +227,7 @@ describe('EntityLegalDetails Service', () => {
       bankSwift: 'NCBKSAJEXXX',
       contactEmail: 'finance@example.com',
       contactPhone: '+966500000000',
-      updatedBy: ACTOR,
-    });
+    }, ACTOR);
 
     const auditCall = mockAuditLog.mock.calls[0]![0];
     expect(auditCall.afterJson.bankIban).toMatch(/\*+7519$/);

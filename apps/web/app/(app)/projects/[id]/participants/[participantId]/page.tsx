@@ -24,6 +24,7 @@ import {
   ROLES,
   type ParticipantRole as RoleValue,
 } from '@/components/projects/participant-helpers';
+import type { ProjectParticipantWithEntity } from '@fmksa/contracts';
 
 type FormState = {
   role: RoleValue | '';
@@ -153,7 +154,7 @@ export default function EditProjectParticipantPage() {
     );
   }
 
-  const entity = (data as { entity?: { name: string; code: string } }).entity;
+  const entity = (data as ProjectParticipantWithEntity).entity;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

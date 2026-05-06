@@ -10,13 +10,15 @@ const projectParticipantRoleEnum = z.enum([
   'other',
 ]);
 
+// PIC-20: createdBy intentionally absent. The router injects ctx.user.id when
+// calling the service so client code cannot impersonate another user as the
+// record's creator.
 export const CreateProjectParticipantInputSchema = z.object({
   projectId: z.string().uuid(),
   entityId: z.string().uuid(),
   role: projectParticipantRoleEnum,
   isPrime: z.boolean().optional().default(false),
   notes: z.string().nullish(),
-  createdBy: z.string().uuid(),
 });
 export type CreateProjectParticipantInput = z.infer<typeof CreateProjectParticipantInputSchema>;
 

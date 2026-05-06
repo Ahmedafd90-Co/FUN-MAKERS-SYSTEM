@@ -50,7 +50,10 @@ const DELETABLE_STATUSES: IntercompanyContractStatus[] = ['draft', 'cancelled'];
 // Create — validates participation + active status; rejects self-contracts
 // ---------------------------------------------------------------------------
 
-export async function createIntercompanyContract(input: CreateIntercompanyContractInput) {
+export async function createIntercompanyContract(
+  input: CreateIntercompanyContractInput,
+  actorUserId: string,
+) {
   if (input.fromEntityId === input.toEntityId) {
     throw new Error(
       `Cannot create intercompany contract: fromEntityId and toEntityId must be different (got '${input.fromEntityId}').`,
@@ -107,12 +110,12 @@ export async function createIntercompanyContract(input: CreateIntercompanyContra
       signedDate: input.signedDate ? new Date(input.signedDate) : null,
       status: input.status ?? 'draft',
       notes: input.notes ?? null,
-      createdBy: input.createdBy,
+      createdBy: actorUserId,
     },
   });
 
   await auditService.log({
-    actorUserId: input.createdBy,
+    actorUserId: actorUserId,
     actorSource: 'user',
     action: 'intercompany_contract.create',
     resourceType: 'intercompany_contract',

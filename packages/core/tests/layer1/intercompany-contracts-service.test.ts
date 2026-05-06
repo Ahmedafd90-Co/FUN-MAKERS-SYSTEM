@@ -102,7 +102,6 @@ const baseCreateInput = {
   contractCurrency: 'SAR',
   managingDepartment: 'me_contract' as const,
   status: 'draft' as const,
-  createdBy: ACTOR,
 };
 
 function bothActiveEntities() {
@@ -134,7 +133,7 @@ describe('IntercompanyContract Service', () => {
     bothParticipants();
     mockPrisma.intercompanyContract.create.mockResolvedValue(fakeIntercompany());
 
-    const result = await createIntercompanyContract(baseCreateInput);
+    const result = await createIntercompanyContract(baseCreateInput, ACTOR);
 
     expect(result.id).toBe('ic1');
     expect(mockAuditLog.mock.calls[0]![0].action).toBe('intercompany_contract.create');
@@ -142,7 +141,7 @@ describe('IntercompanyContract Service', () => {
 
   it('create: rejects when from === to (service-level, in addition to schema)', async () => {
     await expect(
-      createIntercompanyContract({ ...baseCreateInput, toEntityId: FROM_ENTITY_ID }),
+      createIntercompanyContract({ ...baseCreateInput, toEntityId: FROM_ENTITY_ID }, ACTOR),
     ).rejects.toThrow(/must be different/);
 
     expect(mockPrisma.intercompanyContract.create).not.toHaveBeenCalled();
@@ -153,7 +152,7 @@ describe('IntercompanyContract Service', () => {
     // Only toEntity is a participant
     mockPrisma.projectParticipant.findMany.mockResolvedValue([{ entityId: TO_ENTITY_ID }]);
 
-    await expect(createIntercompanyContract(baseCreateInput)).rejects.toThrow(
+    await expect(createIntercompanyContract(baseCreateInput, ACTOR)).rejects.toThrow(
       /fromEntity .* is not a participant/,
     );
   });
@@ -162,7 +161,7 @@ describe('IntercompanyContract Service', () => {
     bothActiveEntities();
     mockPrisma.projectParticipant.findMany.mockResolvedValue([{ entityId: FROM_ENTITY_ID }]);
 
-    await expect(createIntercompanyContract(baseCreateInput)).rejects.toThrow(
+    await expect(createIntercompanyContract(baseCreateInput, ACTOR)).rejects.toThrow(
       /toEntity .* is not a participant/,
     );
   });
@@ -174,7 +173,7 @@ describe('IntercompanyContract Service', () => {
       ),
     );
 
-    await expect(createIntercompanyContract(baseCreateInput)).rejects.toThrow(
+    await expect(createIntercompanyContract(baseCreateInput, ACTOR)).rejects.toThrow(
       /fromEntity .* is in status 'archived'/,
     );
   });
@@ -186,7 +185,7 @@ describe('IntercompanyContract Service', () => {
       ),
     );
 
-    await expect(createIntercompanyContract(baseCreateInput)).rejects.toThrow(
+    await expect(createIntercompanyContract(baseCreateInput, ACTOR)).rejects.toThrow(
       /toEntity .* is in status 'archived'/,
     );
   });

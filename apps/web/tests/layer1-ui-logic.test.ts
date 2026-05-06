@@ -42,28 +42,15 @@ import {
   type ParticipantRole,
 } from '../components/projects/participant-helpers';
 
-// ---------------------------------------------------------------------------
-// Canonical literal of the service's ALLOWED_TRANSITIONS — the source of truth
-// lives at packages/core/src/layer1/prime-contracts/service.ts.
-// If this literal drifts from the service, the test below will catch it.
-// ---------------------------------------------------------------------------
-
-const ALLOWED_TRANSITIONS_FROM_SERVICE: Record<PrimeContractStatus, PrimeContractStatus[]> = {
-  draft: ['signed', 'cancelled'],
-  signed: ['active', 'cancelled'],
-  active: ['completed', 'terminated', 'cancelled'],
-  completed: [],
-  terminated: [],
-  cancelled: [],
-};
-
-const ACTION_TO_STATUS_FROM_SERVICE: Record<PrimeContractAction, PrimeContractStatus> = {
-  sign: 'signed',
-  activate: 'active',
-  complete: 'completed',
-  terminate: 'terminated',
-  cancel: 'cancelled',
-};
+// PIC-24: import the canonical state machine maps from the service. The
+// previous version of this test duplicated these literals locally with a
+// "keep in sync" comment — but a test that copies the source-of-truth can't
+// fail when the source-of-truth changes. Now if the service map changes,
+// this test breaks (which is the point).
+import {
+  ALLOWED_TRANSITIONS,
+  ACTION_TO_STATUS,
+} from '@fmksa/core/layer1/prime-contracts/service';
 
 // ---------------------------------------------------------------------------
 // Group 1 — State machine map
@@ -71,12 +58,12 @@ const ACTION_TO_STATUS_FROM_SERVICE: Record<PrimeContractAction, PrimeContractSt
 
 describe('PRIME_CONTRACT_STATUS_ACTIONS state machine map', () => {
   it('UI action map produces transitions matching the service ALLOWED_TRANSITIONS', () => {
-    for (const status of Object.keys(ALLOWED_TRANSITIONS_FROM_SERVICE) as PrimeContractStatus[]) {
+    for (const status of Object.keys(ALLOWED_TRANSITIONS) as PrimeContractStatus[]) {
       const uiActions = PRIME_CONTRACT_STATUS_ACTIONS[status];
       const uiTargetStatuses = uiActions
-        .map((a) => ACTION_TO_STATUS_FROM_SERVICE[a.action])
+        .map((a) => ACTION_TO_STATUS[a.action])
         .sort();
-      const expected = [...ALLOWED_TRANSITIONS_FROM_SERVICE[status]].sort();
+      const expected = [...ALLOWED_TRANSITIONS[status]].sort();
       expect(uiTargetStatuses).toEqual(expected);
     }
   });

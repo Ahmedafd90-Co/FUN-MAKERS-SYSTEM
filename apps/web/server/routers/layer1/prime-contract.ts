@@ -57,7 +57,7 @@ export const primeContractRouter = router({
       if (!hasPerm(ctx, 'prime_contract.create'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await createPrimeContract(input);
+        return await createPrimeContract(input, ctx.user.id);
       } catch (err) {
         mapError(err);
       }
