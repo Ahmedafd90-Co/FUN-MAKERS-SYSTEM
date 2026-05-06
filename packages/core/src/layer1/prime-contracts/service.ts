@@ -25,7 +25,10 @@ import { auditService } from '../../audit/service';
 // State machine
 // ---------------------------------------------------------------------------
 
-const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = {
+// PIC-24: exported so the layer1-ui-logic test imports it as the canonical
+// source of truth instead of duplicating the literal locally. If this map
+// changes, the test fails — which is the intended behavior.
+export const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = {
   draft: ['signed', 'cancelled'],
   signed: ['active', 'cancelled'],
   active: ['completed', 'terminated', 'cancelled'],
@@ -34,7 +37,9 @@ const ALLOWED_TRANSITIONS: Record<PrimeContractStatus, PrimeContractStatus[]> = 
   cancelled: [],
 };
 
-const ACTION_TO_STATUS: Record<string, PrimeContractStatus> = {
+// PIC-24: also exported — the test asserts the UI action map produces these
+// target statuses, which requires the action→status mapping too.
+export const ACTION_TO_STATUS: Record<string, PrimeContractStatus> = {
   sign: 'signed',
   activate: 'active',
   complete: 'completed',
