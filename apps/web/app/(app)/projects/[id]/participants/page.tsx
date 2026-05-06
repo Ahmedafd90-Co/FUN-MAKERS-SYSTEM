@@ -21,6 +21,7 @@ import {
   ROLE_LABELS,
   type ParticipantRole,
 } from '@/components/projects/participant-helpers';
+import type { ProjectParticipantWithEntity } from '@fmksa/contracts';
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role as ParticipantRole] ?? role;
@@ -107,8 +108,8 @@ export default function ProjectParticipantsListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((p) => {
-                const entity = (p as { entity?: { name: string; code: string } }).entity;
+              {(data as ProjectParticipantWithEntity[]).map((p) => {
+                const entity = p.entity;
                 return (
                   <TableRow key={p.id} className="hover:bg-muted/50">
                     <TableCell>

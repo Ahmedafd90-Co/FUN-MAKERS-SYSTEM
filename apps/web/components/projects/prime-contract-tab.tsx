@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pencil, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
+import type { PrimeContractWithProject } from '@fmksa/contracts';
 import { Badge } from '@fmksa/ui/components/badge';
 import { Button } from '@fmksa/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@fmksa/ui/components/card';
@@ -563,20 +564,9 @@ function PrimeContractCreatePanel({
 // Display (read-only + edit toggle)
 // ---------------------------------------------------------------------------
 
-type ContractData = {
-  id: string;
-  status: string;
-  contractingEntityId: string;
-  clientName: string;
-  clientReference: string | null;
-  contractValue: unknown;
-  contractCurrency: string;
-  signedDate: string | Date | null;
-  effectiveDate: string | Date | null;
-  expectedCompletionDate: string | Date | null;
-  notes: string | null;
-  contractingEntity?: { id: string; name: string; code: string } | null;
-};
+// PIC-22: PrimeContractWithProject comes from @fmksa/contracts. Replaces the
+// previous inline `ContractData` type that duplicated the joined shape.
+type ContractData = PrimeContractWithProject;
 
 function PrimeContractDisplay({
   projectId,
