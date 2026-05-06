@@ -114,20 +114,22 @@ describe('Seed coverage — every catalog permission must be granted', () => {
     }
   });
 
-  it('every role-permission row resolves to a real permission (no orphans)', async () => {
+  it('every role-permission row resolves to a real role and permission (no orphans)', async () => {
     // Hand-crafted SQL because Prisma's API can't express "rows whose FK
-    // target is missing" cleanly without N+1 queries.
+    // target is missing" cleanly without N+1 queries. Catches BOTH directions
+    // of orphan: dropped permissions AND dropped roles.
     const orphans = await prisma.$queryRaw<Array<{ role_id: string; permission_id: string }>>`
       SELECT rp.role_id, rp.permission_id
       FROM role_permissions rp
+      LEFT JOIN roles r ON r.id = rp.role_id
       LEFT JOIN permissions p ON p.id = rp.permission_id
-      WHERE p.id IS NULL
+      WHERE r.id IS NULL OR p.id IS NULL
     `;
 
     if (orphans.length > 0) {
       expect.fail(
-        `${orphans.length} role_permissions row(s) reference a permission_id that no longer exists in permissions. ` +
-          `This indicates either a dropped permission or a broken seed orchestration. ` +
+        `${orphans.length} role_permissions row(s) reference a role_id or permission_id that no longer exists. ` +
+          `This indicates either a dropped role/permission or a broken seed orchestration. ` +
           `Sample orphan: roleId=${orphans[0]?.role_id}, permissionId=${orphans[0]?.permission_id}.`,
       );
     }
