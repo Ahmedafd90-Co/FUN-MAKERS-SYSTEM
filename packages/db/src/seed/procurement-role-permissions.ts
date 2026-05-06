@@ -6,11 +6,16 @@ function expand(resource: string, actions: string[]): string[] {
 
 const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
   master_admin: [
-    ...expand('vendor', ['view', 'create', 'edit', 'activate', 'suspend', 'blacklist']),
-    ...expand('vendor_contract', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'terminate']),
-    ...expand('framework_agreement', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'terminate']),
-    ...expand('rfq', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate']),
-    ...expand('quotation', ['view', 'create', 'edit', 'review', 'shortlist', 'award', 'reject', 'terminate']),
+    // PIC-27: explicit `delete` grants below — the seed-coverage regression
+    // test surfaced these 5 codes as orphaned in the catalog (declared in
+    // procurement-permissions.ts but no role ever held them). master_admin
+    // owns hard-delete authority across procurement, alongside the soft-delete
+    // `terminate` flow used by other roles.
+    ...expand('vendor', ['view', 'create', 'edit', 'delete', 'activate', 'suspend', 'blacklist']),
+    ...expand('vendor_contract', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
+    ...expand('framework_agreement', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
+    ...expand('rfq', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate']),
+    ...expand('quotation', ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject', 'terminate']),
     ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'issue']),
     ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'prepare_payment']),
     ...expand('expense', ['view', 'create', 'edit', 'submit', 'review', 'approve']),

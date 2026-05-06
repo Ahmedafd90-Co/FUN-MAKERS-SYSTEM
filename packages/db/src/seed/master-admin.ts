@@ -15,6 +15,11 @@ const DEMO_USERS = [
   { email: 'sara.fahad@fmksa.demo', name: 'Sara Al-Fahad', roleCode: 'qs_commercial' },
   { email: 'omar.hassan@fmksa.demo', name: 'Omar Hassan', roleCode: 'procurement' },
   { email: 'fatima.zahrani@fmksa.demo', name: 'Fatima Al-Zahrani', roleCode: 'finance' },
+  // ── QA fixture users (PIC-25) ──
+  // Back the matching `view_only_demo` and `no_perm_demo` roles. Used for
+  // manual smoke tests of permission-gated UI without needing real users.
+  { email: 'view.only@fmksa.demo', name: 'View-Only QA Fixture', roleCode: 'view_only_demo' },
+  { email: 'no.perm@fmksa.demo', name: 'No-Permission QA Fixture', roleCode: 'no_perm_demo' },
 ] as const;
 
 // Project codes where demo users get assigned

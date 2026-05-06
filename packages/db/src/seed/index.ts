@@ -18,6 +18,8 @@ import { seedCommercialWorkflowTemplates } from './commercial-workflow-templates
 import { seedCommercialNotificationTemplates } from './commercial-notification-templates';
 import { seedProcurementPermissions } from './procurement-permissions';
 import { seedLayer1Permissions } from './layer1-permissions';
+import { seedLayer1RolePermissions } from './layer1-role-permissions';
+import { seedQaTestRolePermissions } from './qa-test-role-permissions';
 import { seedProcurementRolePermissions } from './procurement-role-permissions';
 import { seedProcurementWorkflowTemplates } from './procurement-workflow-templates';
 import { seedProcurementNotificationTemplates } from './procurement-notification-templates';
@@ -54,6 +56,10 @@ async function main() {
   await seedProcurementPermissions(prisma);
   await seedProcurementRolePermissions(prisma);
   await seedLayer1Permissions(prisma);
+  await seedLayer1RolePermissions(prisma);
+  // QA test grants run LAST so the view_only_demo runtime query captures every
+  // *.view code added by all preceding domain seeds.
+  await seedQaTestRolePermissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);
   await seedProcurementCategories(prisma);
