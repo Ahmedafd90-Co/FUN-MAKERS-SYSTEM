@@ -122,7 +122,6 @@ const baseCreateInput = {
   contractValue: 1000000,
   contractCurrency: 'SAR',
   status: 'draft' as const,
-  createdBy: ACTOR,
 };
 
 // ---------------------------------------------------------------------------
@@ -144,7 +143,7 @@ describe('PrimeContract Service', () => {
     mockPrisma.primeContract.create.mockResolvedValue(created);
     mockPrisma.project.update.mockResolvedValue({});
 
-    const result = await createPrimeContract(baseCreateInput);
+    const result = await createPrimeContract(baseCreateInput, ACTOR);
 
     expect(result.id).toBe('pc1');
     expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
@@ -160,7 +159,7 @@ describe('PrimeContract Service', () => {
     mockPrisma.primeContract.create.mockResolvedValue(fakePrimeContract());
     mockPrisma.project.update.mockResolvedValue({});
 
-    await createPrimeContract(baseCreateInput);
+    await createPrimeContract(baseCreateInput, ACTOR);
 
     expect(mockPrisma.projectParticipant.create).toHaveBeenCalledTimes(1);
     const ppCreateData = mockPrisma.projectParticipant.create.mock.calls[0][0].data;
@@ -182,7 +181,7 @@ describe('PrimeContract Service', () => {
     mockPrisma.primeContract.create.mockResolvedValue(fakePrimeContract());
     mockPrisma.project.update.mockResolvedValue({});
 
-    await createPrimeContract(baseCreateInput);
+    await createPrimeContract(baseCreateInput, ACTOR);
 
     expect(mockPrisma.projectParticipant.update).toHaveBeenCalledWith({
       where: { id: 'pp1' },
@@ -194,7 +193,7 @@ describe('PrimeContract Service', () => {
   it('create: rejects when contractingEntity is archived', async () => {
     mockPrisma.entity.findUniqueOrThrow.mockResolvedValue(fakeEntity({ status: 'archived' }));
 
-    await expect(createPrimeContract(baseCreateInput)).rejects.toThrow(
+    await expect(createPrimeContract(baseCreateInput, ACTOR)).rejects.toThrow(
       /Only active entities can hold prime contracts/,
     );
 
@@ -209,7 +208,7 @@ describe('PrimeContract Service', () => {
     mockPrisma.primeContract.create.mockResolvedValue(fakePrimeContract());
     mockPrisma.project.update.mockResolvedValue({});
 
-    await createPrimeContract(baseCreateInput);
+    await createPrimeContract(baseCreateInput, ACTOR);
 
     expect(mockPrisma.project.update).toHaveBeenCalledWith({
       where: { id: PROJECT_ID },

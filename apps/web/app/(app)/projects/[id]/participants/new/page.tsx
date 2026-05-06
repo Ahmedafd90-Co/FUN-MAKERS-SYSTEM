@@ -37,7 +37,6 @@ export default function NewProjectParticipantPage() {
   const projectId = params.id;
   const utils = trpc.useUtils();
 
-  const { data: me } = trpc.auth.me.useQuery();
   const { data: userPermissions } = trpc.layer1.projectParticipants.myPermissions.useQuery();
   const { data: entities, isLoading: entitiesLoading } = trpc.entities.list.useQuery({
     includeArchived: false,
@@ -88,18 +87,15 @@ export default function NewProjectParticipantPage() {
       setError('Role is required.');
       return;
     }
-    if (!me?.id) {
-      setError('Unable to identify current user. Please refresh.');
-      return;
-    }
 
+    // PIC-20: createdBy is no longer in the input schema — the router
+    // injects ctx.user.id server-side.
     createMut.mutate({
       projectId,
       entityId: form.entityId,
       role: form.role,
       isPrime: form.isPrime,
       notes: form.notes.trim() || undefined,
-      createdBy: me.id,
     });
   };
 
@@ -209,7 +205,7 @@ export default function NewProjectParticipantPage() {
         </Card>
 
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isPending || !me?.id}>
+          <Button type="submit" disabled={isPending}>
             {isPending ? 'Adding...' : 'Add Participant'}
           </Button>
           <Button

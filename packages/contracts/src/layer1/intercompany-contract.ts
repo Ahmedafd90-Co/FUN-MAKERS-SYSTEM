@@ -22,6 +22,9 @@ const intercompanyContractStatusEnum = z.enum([
   'cancelled',
 ]);
 
+// PIC-20: createdBy intentionally absent. The router injects ctx.user.id when
+// calling the service so client code cannot impersonate another user as the
+// record's creator.
 export const CreateIntercompanyContractInputSchema = z
   .object({
     projectId: z.string().uuid(),
@@ -36,7 +39,6 @@ export const CreateIntercompanyContractInputSchema = z
     signedDate: z.string().datetime().nullish(),
     status: intercompanyContractStatusEnum.optional().default('draft'),
     notes: z.string().nullish(),
-    createdBy: z.string().uuid(),
   })
   .refine((data) => data.fromEntityId !== data.toEntityId, {
     message: 'fromEntityId and toEntityId must be different (no self-contracts).',

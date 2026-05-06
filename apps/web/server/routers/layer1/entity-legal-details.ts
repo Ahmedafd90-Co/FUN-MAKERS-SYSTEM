@@ -37,7 +37,7 @@ export const entityLegalDetailsRouter = router({
       if (!hasPerm(ctx, 'entity_legal_details.edit'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
       try {
-        return await upsertEntityLegalDetails(input);
+        return await upsertEntityLegalDetails(input, ctx.user.id);
       } catch (err) {
         mapError(err);
       }

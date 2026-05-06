@@ -436,7 +436,6 @@ function PrimeContractCreatePanel({
   canCreate: boolean;
 }) {
   const utils = trpc.useUtils();
-  const { data: me } = trpc.auth.me.useQuery();
   const { data: entities, isLoading: entitiesLoading } = trpc.entities.list.useQuery(
     { includeArchived: false },
     { enabled: canCreate },
@@ -502,11 +501,9 @@ function PrimeContractCreatePanel({
       setError(orderingError);
       return;
     }
-    if (!me?.id) {
-      setError('Unable to identify current user. Please refresh.');
-      return;
-    }
 
+    // PIC-20: createdBy is no longer in the input schema — the router
+    // injects ctx.user.id server-side.
     createMut.mutate({
       projectId,
       contractingEntityId: form.contractingEntityId,
@@ -520,7 +517,6 @@ function PrimeContractCreatePanel({
         ? dateInputToISO(form.expectedCompletionDate)
         : null,
       notes: form.notes.trim() || null,
-      createdBy: me.id,
     });
   };
 
@@ -554,7 +550,7 @@ function PrimeContractCreatePanel({
               name: c.name,
             }))}
           />
-          <Button type="submit" disabled={createMut.isPending || !me?.id}>
+          <Button type="submit" disabled={createMut.isPending}>
             {createMut.isPending ? 'Creating...' : 'Create Contract'}
           </Button>
         </form>

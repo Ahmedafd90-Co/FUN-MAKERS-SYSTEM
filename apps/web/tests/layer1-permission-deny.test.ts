@@ -344,7 +344,6 @@ describe('entityLegalDetails router — FORBIDDEN without permission', () => {
     await expectForbidden(() =>
       caller.layer1.entityLegalDetails.upsert({
         entityId: testEntityId,
-        updatedBy: noPermUserId,
       }),
     );
   });
@@ -380,7 +379,6 @@ describe('projectParticipants router — FORBIDDEN without permission', () => {
         entityId: testEntityId,
         role: 'sub_contractor',
         isPrime: false,
-        createdBy: noPermUserId,
       }),
     );
   });
@@ -421,7 +419,6 @@ describe('primeContract router — FORBIDDEN without permission', () => {
         clientName: 'Test',
         contractValue: 1000,
         contractCurrency: 'SAR',
-        createdBy: noPermUserId,
       }),
     );
   });
@@ -481,7 +478,6 @@ describe('intercompanyContract router — FORBIDDEN without permission', () => {
         markupPercent: 0.15,
         contractCurrency: 'SAR',
         managingDepartment: 'me_contract',
-        createdBy: noPermUserId,
       }),
     );
   });

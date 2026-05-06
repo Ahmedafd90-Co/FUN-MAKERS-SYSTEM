@@ -55,7 +55,10 @@ const DELETABLE_STATUSES: PrimeContractStatus[] = ['draft', 'cancelled'];
 // 4. Sync Project.primeContractId + Project.contractValue
 // 5. Audit log (inside transaction via tx)
 
-export async function createPrimeContract(input: CreatePrimeContractInput) {
+export async function createPrimeContract(
+  input: CreatePrimeContractInput,
+  actorUserId: string,
+) {
   return prisma.$transaction(async (tx) => {
     // (1) Entity active check
     const entity = await tx.entity.findUniqueOrThrow({
@@ -81,7 +84,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
           entityId: input.contractingEntityId,
           role: 'prime_contractor',
           isPrime: true,
-          createdBy: input.createdBy,
+          createdBy: actorUserId,
         },
       });
     } else if (!existingParticipant.isPrime) {
@@ -107,7 +110,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
           : null,
         status: input.status ?? 'draft',
         notes: input.notes ?? null,
-        createdBy: input.createdBy,
+        createdBy: actorUserId,
       },
     });
 
@@ -123,7 +126,7 @@ export async function createPrimeContract(input: CreatePrimeContractInput) {
     // (5) Audit log inside transaction
     await auditService.log(
       {
-        actorUserId: input.createdBy,
+        actorUserId: actorUserId,
         actorSource: 'user',
         action: 'prime_contract.create',
         resourceType: 'prime_contract',

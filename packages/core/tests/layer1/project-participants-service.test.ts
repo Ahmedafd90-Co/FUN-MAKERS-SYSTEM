@@ -107,8 +107,7 @@ describe('ProjectParticipant Service', () => {
       entityId: ENTITY_ID,
       role: 'factory',
       isPrime: false,
-      createdBy: ACTOR,
-    });
+    }, ACTOR);
 
     expect(result.role).toBe('factory');
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
@@ -124,8 +123,7 @@ describe('ProjectParticipant Service', () => {
         entityId: ENTITY_ID,
         role: 'sub_contractor',
         isPrime: false,
-        createdBy: ACTOR,
-      }),
+      }, ACTOR),
     ).rejects.toThrow(/active entities can participate/);
 
     expect(mockPrisma.projectParticipant.create).not.toHaveBeenCalled();
@@ -146,8 +144,7 @@ describe('ProjectParticipant Service', () => {
         entityId: ENTITY_ID,
         role: 'sub_contractor',
         isPrime: false,
-        createdBy: ACTOR,
-      }),
+      }, ACTOR),
     ).rejects.toThrow(/already a participant/);
   });
 
