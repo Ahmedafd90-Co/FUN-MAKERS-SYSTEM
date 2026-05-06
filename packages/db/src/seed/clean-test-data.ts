@@ -18,6 +18,9 @@ export async function cleanTestData(prisma: PrismaClient) {
     'sara.fahad@fmksa.demo',
     'omar.hassan@fmksa.demo',
     'fatima.zahrani@fmksa.demo',
+    // PIC-25 QA fixture users.
+    'view.only@fmksa.demo',
+    'no.perm@fmksa.demo',
   ];
 
   const testProjects = await prisma.project.findMany({
