@@ -28,10 +28,15 @@ export function isTestDatabaseUrl(rawUrl: string): boolean {
   }
 }
 
+/** Mask the user:pass segment of a connection string so error messages don't leak credentials. */
+function redactPassword(url: string): string {
+  return url.replace(/:[^:@/]+@/, ':***@');
+}
+
 export function assertTestDb(): void {
   const url = process.env.DATABASE_URL ?? '';
   if (!isTestDatabaseUrl(url)) {
-    const display = url || '(unset)';
+    const display = url ? redactPassword(url) : '(unset)';
     throw new Error(
       `PIC-37 guardrail: refusing to run destructive @fmksa/db test against ` +
         `${display}. Expected DATABASE_URL to point at a *_test database ` +
