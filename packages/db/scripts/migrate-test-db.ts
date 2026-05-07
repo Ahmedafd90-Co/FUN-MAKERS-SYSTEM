@@ -3,7 +3,8 @@
  *
  * Idempotent: prisma migrate deploy is a no-op if migrations are already current.
  * Reads DATABASE_URL_TEST from packages/db/.env and uses it as DATABASE_URL for
- * the migrate command. Refuses to run if the URL doesn't contain `_test`.
+ * the migrate command. Refuses to run if the URL's database name doesn't end
+ * with `_test`.
  *
  * Usage:
  *   pnpm --filter @fmksa/db db:migrate:test
@@ -13,9 +14,26 @@
 
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const TEST_URL_PATTERN = /_test(\b|\?|$)/;
+// ESM-safe __dirname. packages/db/package.json declares "type": "module".
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Returns true iff `rawUrl` parses as a URL whose pathname's last segment
+ * (the database name) ends with `_test`. Inlined here rather than imported
+ * from tests/helpers/ to keep scripts/ free of test-directory dependencies.
+ */
+function isTestDatabaseUrl(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl);
+    const dbName = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+    return dbName.endsWith('_test');
+  } catch {
+    return false;
+  }
+}
 
 function readEnvFile(filePath: string): Record<string, string> {
   if (!existsSync(filePath)) return {};
@@ -58,10 +76,11 @@ if (!testUrl) {
   process.exit(1);
 }
 
-if (!TEST_URL_PATTERN.test(testUrl)) {
+if (!isTestDatabaseUrl(testUrl)) {
   console.error(
     `ERROR: DATABASE_URL_TEST does not point at a *_test database. ` +
-      `Got: ${redactPassword(testUrl)}. Refusing to migrate.`,
+      `Got: ${redactPassword(testUrl)}. ` +
+      `Database name must end with '_test'. Refusing to migrate.`,
   );
   process.exit(1);
 }

@@ -21,9 +21,14 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const TEST_URL_PATTERN = /_test(\b|\?|$)/;
+import { isTestDatabaseUrl } from './helpers/assert-test-db';
+
+// ESM-safe __dirname. packages/db/package.json declares "type": "module";
+// __dirname is not a built-in in native ESM, so derive it from import.meta.url.
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function readEnvFile(filePath: string): Record<string, string> {
   if (!existsSync(filePath)) return {};
@@ -73,12 +78,12 @@ if (!testUrl) {
   );
 }
 
-if (!TEST_URL_PATTERN.test(testUrl)) {
+if (!isTestDatabaseUrl(testUrl)) {
   throw new Error(
     `PIC-37 guardrail: DATABASE_URL_TEST does not point at a *_test database. ` +
       `Got: ${redactPassword(testUrl)}. ` +
       `Refusing to run destructive seed tests against a non-test database. ` +
-      `Expected the URL to contain '_test' (e.g. fmksa_test).`,
+      `Expected the database name (URL pathname) to end with '_test' (e.g. fmksa_test).`,
   );
 }
 
