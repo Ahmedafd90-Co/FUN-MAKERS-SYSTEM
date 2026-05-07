@@ -18,6 +18,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 
+import { assertTestDb } from '../helpers/assert-test-db';
 import { seedCountries } from '../../src/seed/countries';
 import { seedCurrencies } from '../../src/seed/currencies';
 import { seedAppSettings } from '../../src/seed/app-settings';
@@ -61,6 +62,8 @@ async function runPermissionSeeds() {
 }
 
 beforeAll(async () => {
+  // PIC-37: refuse to write seed data against any DB whose URL doesn't contain `_test`.
+  assertTestDb();
   await runPermissionSeeds();
 }, 60_000);
 

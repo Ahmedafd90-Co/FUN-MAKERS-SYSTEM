@@ -16,6 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx src/seed/index.ts",
     "db:seed:qa-fixtures": "SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
+    "db:migrate:test": "tsx scripts/migrate-test-db.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
