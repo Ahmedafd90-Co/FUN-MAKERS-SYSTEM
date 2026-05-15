@@ -4,7 +4,7 @@
  *
  * Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { SupplierInvoiceStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -133,6 +133,8 @@ export async function transitionSupplierInvoice(
   input: TransitionSupplierInvoiceInput,
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = input;
 
   const newStatus = SI_ACTION_TO_STATUS[action];
@@ -273,4 +275,5 @@ export async function transitionSupplierInvoice(
   }
 
   return updated;
+  });
 }

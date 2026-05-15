@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { IpcStatus } from '@fmksa/db';
 import type { CreateIpcInput, UpdateIpcInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -137,6 +137,8 @@ export async function transitionIpc(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown IPC action: '${action}'`);
@@ -283,6 +285,7 @@ export async function transitionIpc(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { VariationStatus } from '@fmksa/db';
 import type { CreateVariationInput, UpdateVariationInput, ListFilterInput } from '@fmksa/contracts';
 import type { VariationListFilter } from '@fmksa/contracts';
@@ -133,6 +133,8 @@ export async function transitionVariation(
   },
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown Variation action: '${action}'`);
@@ -331,6 +333,7 @@ export async function transitionVariation(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

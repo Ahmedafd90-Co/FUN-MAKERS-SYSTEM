@@ -21,7 +21,7 @@
  * Call registerConvergenceHandlers() once during app initialization.
  */
 
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type {
   IpaStatus,
   IpcStatus,
@@ -1906,58 +1906,64 @@ async function handleCreditNoteRejected(payload: WorkflowEventPayload): Promise<
 
 async function onWorkflowApproved(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaApproved(payload);
-  if (payload.recordType === 'ipc') return handleIpcApproved(payload);
-  if (payload.recordType === 'rfq') return handleRfqApproved(payload);
-  if (payload.recordType === 'variation') return handleVariationApproved(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
-  if (payload.recordType === 'purchase_order') return handlePoApproved(payload);
-  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceApproved(payload);
-  if (payload.recordType === 'expense') return handleExpenseApproved(payload);
-  if (payload.recordType === 'cost_proposal') return handleCostProposalApproved(payload);
-  if (payload.recordType === 'tax_invoice') return handleTaxInvoiceApproved(payload);
-  if (payload.recordType === 'vendor_contract') return handleVendorContractApproved(payload);
-  if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementApproved(payload);
-  if (payload.recordType === 'credit_note') return handleCreditNoteApproved(payload);
+  // PIC-35 Step 7: status writes inside convergence handlers are authorized
+  // via runAsWorkflowEngine's AsyncLocalStorage scope. The Prisma extension
+  // blocks direct entity.status writes outside this scope.
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaApproved(payload);
+    if (payload.recordType === 'ipc') return handleIpcApproved(payload);
+    if (payload.recordType === 'rfq') return handleRfqApproved(payload);
+    if (payload.recordType === 'variation') return handleVariationApproved(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
+    if (payload.recordType === 'purchase_order') return handlePoApproved(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceApproved(payload);
+    if (payload.recordType === 'expense') return handleExpenseApproved(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalApproved(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceApproved(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractApproved(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementApproved(payload);
+    if (payload.recordType === 'credit_note') return handleCreditNoteApproved(payload);
+  });
 }
 
 async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaReturned(payload);
-  if (payload.recordType === 'ipc') return handleIpcReturned(payload);
-  if (payload.recordType === 'rfq') return handleRfqReturned(payload);
-  if (payload.recordType === 'variation') return handleVariationReturned(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
-  if (payload.recordType === 'purchase_order') return handlePoReturned(payload);
-  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceReturned(payload);
-  if (payload.recordType === 'expense') return handleExpenseReturned(payload);
-  if (payload.recordType === 'cost_proposal') return handleCostProposalReturned(payload);
-  if (payload.recordType === 'tax_invoice') return handleTaxInvoiceReturned(payload);
-  if (payload.recordType === 'vendor_contract') return handleVendorContractReturned(payload);
-  if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementReturned(payload);
-  // credit_note has no `returned` in its enum — workflow.returned events are
-  // silently ignored at the convergence layer (workflow_instance.status='returned'
-  // still tracks workflow-level state correctly).
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaReturned(payload);
+    if (payload.recordType === 'ipc') return handleIpcReturned(payload);
+    if (payload.recordType === 'rfq') return handleRfqReturned(payload);
+    if (payload.recordType === 'variation') return handleVariationReturned(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
+    if (payload.recordType === 'purchase_order') return handlePoReturned(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceReturned(payload);
+    if (payload.recordType === 'expense') return handleExpenseReturned(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalReturned(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceReturned(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractReturned(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementReturned(payload);
+    // credit_note has no `returned` in its enum — workflow.returned events are
+    // silently ignored at the convergence layer (workflow_instance.status='returned'
+    // still tracks workflow-level state correctly).
+  });
 }
 
 async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaRejected(payload);
-  if (payload.recordType === 'ipc') return handleIpcRejected(payload);
-  if (payload.recordType === 'rfq') return handleRfqRejected(payload);
-  if (payload.recordType === 'variation') return handleVariationRejected(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
-  if (payload.recordType === 'purchase_order') return handlePoRejected(payload);
-  if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceRejected(payload);
-  if (payload.recordType === 'expense') return handleExpenseRejected(payload);
-  if (payload.recordType === 'cost_proposal') return handleCostProposalRejected(payload);
-  if (payload.recordType === 'tax_invoice') return handleTaxInvoiceRejected(payload);
-  if (payload.recordType === 'vendor_contract') return handleVendorContractRejected(payload);
-  if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementRejected(payload);
-  if (payload.recordType === 'credit_note') return handleCreditNoteRejected(payload);
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaRejected(payload);
+    if (payload.recordType === 'ipc') return handleIpcRejected(payload);
+    if (payload.recordType === 'rfq') return handleRfqRejected(payload);
+    if (payload.recordType === 'variation') return handleVariationRejected(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
+    if (payload.recordType === 'purchase_order') return handlePoRejected(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceRejected(payload);
+    if (payload.recordType === 'expense') return handleExpenseRejected(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalRejected(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceRejected(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractRejected(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementRejected(payload);
+    if (payload.recordType === 'credit_note') return handleCreditNoteRejected(payload);
+  });
 }
 
 // ---------------------------------------------------------------------------

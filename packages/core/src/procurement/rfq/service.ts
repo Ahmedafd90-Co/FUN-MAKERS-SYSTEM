@@ -3,7 +3,7 @@
  *
  * Phase 5, Task 5.3 — Module 3 Procurement Engine.
  */
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { RfqStatus } from '@fmksa/db';
 import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -181,6 +181,8 @@ export async function transitionRfq(
   /** Required for 'award' action — the winning quotation to award. */
   quotationId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown RFQ action: '${action}'`);
@@ -365,6 +367,7 @@ export async function transitionRfq(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
  *
  * Module 3 Procurement Engine — Expense lifecycle.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { ExpenseStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -157,6 +157,8 @@ export async function transitionExpense(
   params: { projectId: string; id: string; action: string; comment?: string | undefined },
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = params;
 
   const newStatus = EXPENSE_ACTION_TO_STATUS[action];
@@ -294,4 +296,5 @@ export async function transitionExpense(
   }
 
   return updated;
+  });
 }

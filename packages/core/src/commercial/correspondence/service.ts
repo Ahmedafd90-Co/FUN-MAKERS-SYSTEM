@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CorrespondenceStatus } from '@fmksa/db';
 import type { CreateCorrespondenceInput, UpdateCorrespondenceInput, ListFilterInput } from '@fmksa/contracts';
 import type { CorrespondenceListFilter } from '@fmksa/contracts';
@@ -166,6 +166,8 @@ export async function transitionCorrespondence(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown Correspondence action: '${action}'`);
@@ -343,6 +345,7 @@ export async function transitionCorrespondence(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

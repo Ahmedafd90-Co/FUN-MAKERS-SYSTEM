@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { IpaStatus } from '@fmksa/db';
 import type { CreateIpaInput, UpdateIpaInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -125,6 +125,10 @@ export async function transitionIpa(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle status writes (e.g. issued, paid,
+  // collected) are authorized via runAsWorkflowEngine. Workflow-managed
+  // actions throw above (Step 6); only post-workflow paths reach here.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown IPA action: '${action}'`);
@@ -282,6 +286,7 @@ export async function transitionIpa(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------
