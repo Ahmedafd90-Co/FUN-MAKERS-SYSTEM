@@ -193,21 +193,13 @@ export async function transitionCorrespondence(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
-  // These actions are driven by the workflow step service, not direct transitions.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
   if (CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'correspondence',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this Correspondence — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this Correspondence — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Transitions that require a transaction (posting or ref number)

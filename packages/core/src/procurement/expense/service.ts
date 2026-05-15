@@ -183,23 +183,22 @@ export async function transitionExpense(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when a workflow is
-  // active. These actions are driven by the workflow step service, not direct
-  // transitions. Legacy manual approval is still allowed when no workflow
-  // instance exists (projects without an Expense workflow template configured).
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
+  //
+  // Note: the prior "legacy manual approval when no workflow exists" carve-
+  // out is closed. Step 5 doesn't auto-seed expenses (auto-seed is only for
+  // the 5 manual-start entities); Expense's workflow already auto-starts on
+  // submit via this service's existing path. If a project has no Expense
+  // template configured, the workflow simply never starts and the entity
+  // remains in 'draft' — but manual workflow-managed transitions are still
+  // refused. Post-PIC-35 the rule is: workflow-managed actions go through
+  // the workflow engine or they don't go through at all.
   if (EXPENSE_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'expense',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this expense — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this expense — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   const updated = await prisma.expense.update({

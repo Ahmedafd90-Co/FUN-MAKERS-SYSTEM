@@ -157,21 +157,16 @@ export async function transitionIpa(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
-  // These actions are driven by the workflow step service, not direct transitions.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility (Step 5 auto-seeds workflow on create; Step 4
+  // convergence handlers write entity.status on workflow transitions).
+  // Refuse unconditionally — including the post-workflow-termination case
+  // where the previous active-workflow check would have passed and allowed
+  // a redundant entity write that drifts from the workflow_instance state.
   if (IPA_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'ipa',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this IPA — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this IPA — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Transitions that require a transaction (posting or ref number)
