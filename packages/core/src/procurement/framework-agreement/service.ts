@@ -7,6 +7,12 @@ import { prisma, Prisma } from '@fmksa/db';
 import type { FrameworkAgreementStatus } from '@fmksa/db';
 import type { CreateFrameworkAgreementInput, UpdateFrameworkAgreementInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 import { FRAMEWORK_AGREEMENT_TRANSITIONS, FRAMEWORK_AGREEMENT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextAgreementNumber, EDITABLE_STATUSES } from './validation';
 import { assertEntityScope } from '../../scope-binding';
@@ -84,7 +90,48 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
     afterJson: record as any,
   });
 
+  // PIC-35 Step 5: auto-seed workflow_instance at entity-create. FrameworkAgreement
+  // is entity-scoped, so projectId can be null — workflow_instance requires
+  // projectId, so we skip the auto-seed in that case (the agreement still
+  // exists, just without convergence wiring; entity.status remains the
+  // source of truth for those rows).
+  if (input.projectId) {
+    await autoSeedFrameworkAgreementWorkflow(record.id, input.projectId, actorUserId);
+  }
+
   return record;
+}
+
+async function autoSeedFrameworkAgreementWorkflow(
+  recordId: string,
+  projectId: string,
+  actorUserId: string,
+): Promise<void> {
+  try {
+    const resolution = await resolveTemplate('framework_agreement', projectId);
+    if (!resolution) {
+      console.warn(
+        `[framework-agreement-workflow] No template configured for framework_agreement in project ${projectId}; workflow_instance not seeded for ${recordId}`,
+      );
+      return;
+    }
+    await workflowInstanceService.startInstance({
+      templateCode: resolution.code,
+      recordType: 'framework_agreement',
+      recordId,
+      projectId,
+      startedBy: actorUserId,
+      resolutionSource: resolution.source,
+    });
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+      console.warn(
+        `[framework-agreement-workflow] Skipped workflow auto-seed for FrameworkAgreement ${recordId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
