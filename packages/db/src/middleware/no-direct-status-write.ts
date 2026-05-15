@@ -96,7 +96,10 @@ function isSeedContext(): boolean {
 
 function dataHasStatus(data: unknown): boolean {
   if (typeof data !== 'object' || data === null) return false;
-  return 'status' in (data as Record<string, unknown>);
+  // Treat `{status: undefined}` as "no status write" — Prisma itself skips
+  // undefined values, so flagging them would block legitimate non-status updates.
+  const record = data as Record<string, unknown>;
+  return 'status' in record && record.status !== undefined;
 }
 
 function guardError(model: string, operation: string): Error {

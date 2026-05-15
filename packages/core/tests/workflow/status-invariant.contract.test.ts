@@ -694,6 +694,61 @@ describe('PIC-35 status-invariant contract', () => {
         }),
       ).resolves.toMatchObject({ status: 'under_review' });
     });
+
+    it('updateMany with data.status outside runAsWorkflowEngine also throws', async () => {
+      const recordId = recordIds.get('variation')!;
+      delete process.env.SEED_CONTEXT;
+
+      await expect(
+        prisma.variation.updateMany({
+          where: { id: recordId },
+          data: { status: 'under_review' },
+        }),
+      ).rejects.toThrow(/PIC-35 guardrail/);
+    });
+
+    it('upsert with status in update branch outside runAsWorkflowEngine also throws', async () => {
+      const recordId = recordIds.get('variation')!;
+      delete process.env.SEED_CONTEXT;
+
+      await expect(
+        prisma.variation.upsert({
+          where: { id: recordId },
+          create: {
+            // create branch is never executed (record exists) — left minimal
+            id: recordId,
+            projectId: testProjectId,
+            subtype: 'vo',
+            title: 'unreachable',
+            description: 'unreachable',
+            reason: 'unreachable',
+            currency: 'SAR',
+            createdBy: testUserId,
+          },
+          update: { status: 'under_review' },
+        }),
+      ).rejects.toThrow(/PIC-35 guardrail/);
+    });
+
+    it('dataHasStatus does NOT flag {status: undefined} (Prisma skips undefined values)', async () => {
+      const recordId = recordIds.get('variation')!;
+      delete process.env.SEED_CONTEXT;
+
+      // A non-status update where `status: undefined` slipped in should pass
+      // through. Cast through `any` because exactOptionalPropertyTypes forbids
+      // assigning `undefined` to a required enum field at the type level — but
+      // it's a real shape Prisma callers can produce (e.g. spread with optional
+      // key) and the runtime guard must not block it.
+      const data = { description: 'pic-35 guardrail false-positive probe', status: undefined };
+      await expect(
+        prisma.variation.update({
+          where: { id: recordId },
+          data: data as any,
+        }),
+      ).resolves.toMatchObject({
+        description: 'pic-35 guardrail false-positive probe',
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
