@@ -488,6 +488,13 @@ model WorkflowInstance {
 
   @@index([projectId, status])
   @@index([currentStepId])
+  // PIC-35: every workflow lookup goes through (recordType, recordId) — the
+  // workflow guard query in entity transition services and the convergence
+  // handlers both filter by these. Uniqueness across active instances per
+  // record is enforced at the application level (auto-seed code refuses to
+  // create a second active instance) since Postgres partial uniqueness can't
+  // be expressed cleanly in Prisma schema.
+  @@index([recordType, recordId])
   @@map("workflow_instances")
 }
 

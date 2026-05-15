@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { IpcStatus } from '@fmksa/db';
 import type { CreateIpcInput, UpdateIpcInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -137,6 +137,8 @@ export async function transitionIpc(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown IPC action: '${action}'`);
@@ -161,21 +163,13 @@ export async function transitionIpc(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
-  // These actions are driven by the workflow step service, not direct transitions.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
   if (IPC_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'ipc',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this IPC — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this IPC — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Transitions that require a transaction (posting or ref number)
@@ -291,6 +285,7 @@ export async function transitionIpc(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

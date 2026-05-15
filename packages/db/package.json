@@ -14,9 +14,10 @@
   "scripts": {
     "generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx src/seed/index.ts",
-    "db:seed:qa-fixtures": "SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
+    "db:seed": "SEED_CONTEXT=true tsx src/seed/index.ts",
+    "db:seed:qa-fixtures": "SEED_CONTEXT=true SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
     "db:migrate:test": "tsx scripts/migrate-test-db.ts",
+    "backfill:pic35": "SEED_CONTEXT=true tsx scripts/backfill-manual-start-workflow-instances.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

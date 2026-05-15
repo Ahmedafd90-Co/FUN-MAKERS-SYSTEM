@@ -10,6 +10,16 @@
  * Workflow instances (4 states), PostingEvents (4 origins/types) +
  * PostingException, OverrideLog, Notifications (3 flavors).
  *
+ * PIC-35 Step 8 — seed authoring rule:
+ *   This fixture uses Option B from the seed authoring rule across all
+ *   entity creates. SEED_CONTEXT=true (set by the package.json db:seed
+ *   script) bypasses Step 7's Prisma write guard for direct `status`
+ *   writes. The synthetic workflow_instances created alongside entity
+ *   rows here are flagged with `_seed: true` metadata in their started
+ *   action where applicable, so test queries can distinguish synthetic
+ *   from real workflow runs. Migrate to Option A when an end-to-end
+ *   audit-trail demo requires real transitions per fixture.
+ *
  * Idempotency: the seed's first fixture is a CostProposal with the reserved
  * `referenceNumber` `CP-E2E-001`. We probe for that row before running; a
  * hit means the seed already ran. Reference numbers are a natural hidden-ish

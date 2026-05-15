@@ -3,7 +3,7 @@
  *
  * Phase 5, Task 5.3 — Module 3 Procurement Engine.
  */
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { RfqStatus } from '@fmksa/db';
 import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -181,6 +181,8 @@ export async function transitionRfq(
   /** Required for 'award' action — the winning quotation to award. */
   quotationId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown RFQ action: '${action}'`);
@@ -205,21 +207,13 @@ export async function transitionRfq(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
-  // These actions are driven by the workflow step service, not direct transitions.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
   if (RFQ_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'rfq',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this RFQ — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this RFQ — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // On issued transition: assign referenceNumber in a transaction
@@ -373,6 +367,7 @@ export async function transitionRfq(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

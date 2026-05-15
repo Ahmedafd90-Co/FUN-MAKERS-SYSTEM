@@ -1,3 +1,17 @@
+// PIC-35 Step 8: SEED_CONTEXT must be `true` in the environment when this
+// script runs. It bypasses the Step 7 Prisma extension that blocks direct
+// `data: { status }` writes outside the workflow engine. Seed fixtures use
+// Option B (entity + workflow_instance written directly under SEED_CONTEXT,
+// bypassing the workflow engine) — running real workflow transitions per
+// fixture would inflate seed time without adding value for demo state.
+//
+// SET VIA THE PACKAGE.JSON SCRIPT, not runtime: ESM imports are hoisted to
+// the top of the file, so any `process.env.SEED_CONTEXT = ...` written here
+// would run AFTER all imports — too late if any imported module eagerly
+// constructs a PrismaClient. The canonical invocation is:
+//   pnpm --filter @fmksa/db db:seed
+// which sets SEED_CONTEXT=true before tsx evaluates this file.
+
 import { PrismaClient } from '@prisma/client';
 import { cleanTestData } from './clean-test-data';
 import { seedCountries } from './countries';

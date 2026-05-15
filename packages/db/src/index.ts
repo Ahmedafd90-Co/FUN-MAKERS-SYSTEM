@@ -1,4 +1,8 @@
 export { prisma } from './client';
+// PIC-35 Step 7: authorized-status-write bypass for the workflow engine
+// and post-workflow lifecycle transition services. See
+// packages/db/src/middleware/no-direct-status-write.ts for the contract.
+export { runAsWorkflowEngine } from './middleware/no-direct-status-write';
 export { PrismaClient, Prisma } from '@prisma/client';
 export type {
   IpaStatus,

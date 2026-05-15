@@ -4,7 +4,7 @@
  *
  * Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { SupplierInvoiceStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -133,6 +133,8 @@ export async function transitionSupplierInvoice(
   input: TransitionSupplierInvoiceInput,
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = input;
 
   const newStatus = SI_ACTION_TO_STATUS[action];
@@ -161,23 +163,14 @@ export async function transitionSupplierInvoice(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when a workflow is
-  // active. These actions are driven by the workflow step service, not direct
-  // transitions. Legacy manual approval is still allowed when no workflow
-  // instance exists (projects without an SI workflow template configured).
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. The prior "legacy manual approval when no workflow exists" carve-
+  // out is closed. See ipa/service.ts for the full rationale comment.
   if (SI_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'supplier_invoice',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this supplier invoice — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this supplier invoice — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Update status
@@ -282,4 +275,5 @@ export async function transitionSupplierInvoice(
   }
 
   return updated;
+  });
 }
