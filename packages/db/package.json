@@ -17,6 +17,7 @@
     "db:seed": "tsx src/seed/index.ts",
     "db:seed:qa-fixtures": "SEED_INCLUDE_QA_FIXTURE_USERS=true tsx src/seed/index.ts",
     "db:migrate:test": "tsx scripts/migrate-test-db.ts",
+    "backfill:pic35": "tsx scripts/backfill-manual-start-workflow-instances.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
