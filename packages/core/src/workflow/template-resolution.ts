@@ -5,15 +5,22 @@
  * Resolution order (first match wins):
  *   1. Project override  → project_settings key "workflow_template:{recordType}[:{subtype}]"
  *   2. Entity default    → entity.metadata_json.workflow_templates[recordType[:subtype]]
- *   3. System fallback   → first active template WHERE record_type = recordType [AND code LIKE '{subtype}_%']
+ *   3. Amount-triggered escalation (PIC-41) → project_settings key
+ *      "workflow_template_high_value_threshold:{recordType}" — when set and
+ *      caller-provided amount exceeds it, escalate to "{recordType}_high_value"
+ *      (or fall through if no high_value variant exists)
+ *   4. System fallback   → prefer "{recordType}_standard" (or any code ending in
+ *      "_standard"), then alphabetical-first as last-resort safety net
  *
  * This implements the entity-defaults / project-overrides configuration model:
  *   - Entities define organizational defaults for all their projects
  *   - Projects can override to pick a different template variant
- *   - If neither is configured, the system picks deterministically (alphabetical)
+ *   - Projects can configure an amount threshold to auto-escalate to high-value
+ *   - If neither is configured, the system defaults to the *_standard variant
+ *     (the safe, lowest-authority tier — NEVER *_high_value by default)
  */
 
-import { prisma } from '@fmksa/db';
+import { prisma, Prisma } from '@fmksa/db';
 
 // ---------------------------------------------------------------------------
 // Resolution source — tells the operator why this template was selected
@@ -45,19 +52,29 @@ export async function resolveTemplateCode(
   recordType: string,
   projectId: string,
   subtype?: string,
+  amount?: Prisma.Decimal | string | number,
 ): Promise<string | null> {
-  const result = await resolveTemplate(recordType, projectId, subtype);
+  const result = await resolveTemplate(recordType, projectId, subtype, amount);
   return result?.code ?? null;
 }
 
 /**
  * Full resolution — returns both template code and the resolution source.
  * Used when the caller needs to store provenance (e.g. workflow instance creation).
+ *
+ * `amount` (PIC-41): when provided AND the project has configured a tier
+ * threshold via projectSetting key `workflow_template_high_value_threshold:
+ * {recordType}`, the resolver checks whether amount exceeds the threshold and
+ * if so returns the `{recordType}_high_value` variant. Unconfigured threshold
+ * OR amount within threshold → falls through to the standard default. The
+ * threshold value itself is not hardcoded anywhere; it is a per-project
+ * setting that the PD configures explicitly per Pico Play's DoA matrix.
  */
 export async function resolveTemplate(
   recordType: string,
   projectId: string,
   subtype?: string,
+  amount?: Prisma.Decimal | string | number,
 ): Promise<TemplateResolution> {
   const subtypeQualifier = subtype ? `${recordType}:${subtype}` : null;
 
@@ -102,7 +119,55 @@ export async function resolveTemplate(
     }
   }
 
-  // 3. System fallback — for subtype records, prefer templates whose code starts
+  // 3. Amount-triggered escalation (PIC-41).
+  //
+  // When the caller passes an `amount` AND the project has configured a
+  // tier threshold via `projectSetting` key
+  // `workflow_template_high_value_threshold:{recordType}` (value: SAR amount
+  // as a decimal string), check whether amount exceeds the threshold and
+  // route to `{recordType}_high_value` if so.
+  //
+  // Decimal comparison via Prisma.Decimal — no JS float math. The threshold
+  // value is operator-set per-project (the PD writes Pico Play's DoA matrix
+  // explicitly per project); this resolver only READS it. No threshold value
+  // is hardcoded in code, seed, or test-as-policy anywhere.
+  //
+  // Unconfigured threshold OR amount within threshold OR no high_value
+  // variant exists → falls through to standard-default. This is the safe
+  // direction: misconfigured threshold defaults to LOWER authority (Finance
+  // / Contracts Manager), never escalates to PD by accident.
+  if (amount !== undefined) {
+    const thresholdKey = `workflow_template_high_value_threshold:${recordType}`;
+    const thresholdSetting = await prisma.projectSetting.findUnique({
+      where: { projectId_key: { projectId, key: thresholdKey } },
+    });
+    if (thresholdSetting?.valueJson && typeof thresholdSetting.valueJson === 'string') {
+      // Decimal-safe comparison. Both threshold and amount may arrive as
+      // strings (Prisma Decimal serializes to string), numbers, or Decimal.
+      try {
+        const threshold = new Prisma.Decimal(thresholdSetting.valueJson);
+        const amountDec = new Prisma.Decimal(amount.toString());
+        if (amountDec.greaterThan(threshold)) {
+          const highValue = await prisma.workflowTemplate.findFirst({
+            where: { recordType, isActive: true, code: { endsWith: '_high_value' } },
+            orderBy: { code: 'asc' },
+            select: { code: true },
+          });
+          if (highValue) {
+            return { code: highValue.code, source: 'system_default' };
+          }
+          // No high_value variant exists; fall through to standard.
+        }
+      } catch {
+        // Malformed threshold value (not a valid decimal string). Fall through
+        // to standard. The operator should fix the projectSetting; meanwhile
+        // safe default applies. Intentionally silent — the alternative is
+        // throwing during entity create, which is worse than safe-default.
+      }
+    }
+  }
+
+  // 4. System fallback — for subtype records, prefer templates whose code starts
   //    with the subtype prefix (e.g. "letter_" for subtype "letter").
   if (subtype) {
     const subtypeFallback = await prisma.workflowTemplate.findFirst({
