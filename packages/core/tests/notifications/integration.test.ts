@@ -118,6 +118,7 @@ describe('Task 1.8.12 — Idempotency', () => {
   let userB: { id: string };
 
   beforeAll(async () => {
+    assertTestDb();
     [userA, userB] = await Promise.all([
       prisma.user.create({
         data: {
@@ -241,6 +242,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
   let templatesExist = false;
 
   beforeAll(async () => {
+    assertTestDb();
     // Verify templates are seeded — skip gracefully if not
     const [stepTpl, approvedTpl] = await Promise.all([
       prisma.notificationTemplate.findUnique({

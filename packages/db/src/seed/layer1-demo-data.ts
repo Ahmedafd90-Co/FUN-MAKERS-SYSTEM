@@ -19,6 +19,7 @@
  * EntityType enum).
  */
 import type { PrismaClient, ProjectParticipantRole } from '@prisma/client';
+import { MASTER_ADMIN_EMAIL } from './master-admin';
 
 // ---------------------------------------------------------------------------
 // External entity registry (clients + design consultant)
@@ -58,9 +59,8 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
   console.log('  Seeding Layer 1 demo data (participants + prime contracts)...');
 
   // Resolve the actor for createdBy. Layer 1 FK requires a real user.
-  // Match the master-admin seed (packages/db/src/seed/master-admin.ts MASTER_ADMIN_EMAIL).
   const seedActor = await prisma.user.findFirst({
-    where: { email: 'ahmedafd90@gmail.com' },
+    where: { email: MASTER_ADMIN_EMAIL },
     select: { id: true },
   });
   if (!seedActor) {

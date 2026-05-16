@@ -1,7 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const MASTER_ADMIN_EMAIL = 'ahmedafd90@gmail.com';
+// Exported for cross-seed reuse (PIC-33 layer1-demo-data references this as
+// the createdBy actor). Single source of truth for the master admin email.
+export const MASTER_ADMIN_EMAIL = 'ahmedafd90@gmail.com';
 const MASTER_ADMIN_NAME = 'Ahmed Al-Dossary';
 const DEFAULT_PASSWORD = 'ChangeMe!Demo2026';
 const BCRYPT_ROUNDS = 12;
