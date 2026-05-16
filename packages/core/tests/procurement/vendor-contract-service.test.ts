@@ -30,7 +30,7 @@ const { mockPrisma, mockAuditLog, mockPostingPost, mockPrismaNamespace } = vi.ho
   return { mockPrisma, mockAuditLog, mockPostingPost, mockPrismaNamespace };
 });
 
-vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace }));
+vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace, runAsWorkflowEngine: (fn: any) => fn() }));
 vi.mock('../../src/audit/service', () => ({
   auditService: { log: (...args: unknown[]) => mockAuditLog(...args) },
 }));
