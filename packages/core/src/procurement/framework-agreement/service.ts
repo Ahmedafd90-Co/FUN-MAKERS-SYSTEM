@@ -3,7 +3,7 @@
  *
  * Phase 5, Task 5.2 — Module 3 Procurement Engine.
  */
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { FrameworkAgreementStatus } from '@fmksa/db';
 import type { CreateFrameworkAgreementInput, UpdateFrameworkAgreementInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -209,6 +209,8 @@ export async function transitionFrameworkAgreement(
   comment?: string,
   entityId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown framework agreement action: '${action}'`);
@@ -266,6 +268,7 @@ export async function transitionFrameworkAgreement(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

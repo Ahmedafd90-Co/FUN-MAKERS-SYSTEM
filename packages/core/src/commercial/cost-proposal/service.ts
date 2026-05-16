@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CostProposalStatus } from '@fmksa/db';
 import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -157,6 +157,10 @@ export async function transitionCostProposal(
   },
   projectId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up):
+  // transition writes are engine-driven; wrap function body in
+  // runAsWorkflowEngine() to declare authorization to the guardrail.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown CostProposal action: '${action}'`);
@@ -264,6 +268,7 @@ export async function transitionCostProposal(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -437,8 +437,16 @@ export async function adjustIpa(
     throw new Error('adjustIpa called with no field changes.');
   }
 
-  // 1. Header + fields + Ipa row update in one tx
-  const { batch, updated } = await prisma.$transaction(async (tx) => {
+  // 1. Header + fields + Ipa row update in one tx.
+  // PIC-47 site #7: input.changes accepts `status?: IpaStatus` (see signature L386);
+  // when a caller sets it, dataForUpdate.status is set and tx.ipa.update writes
+  // status. adjustIpa is the canonical writer for imported_historical IPA
+  // corrections (file L144-148 routes live transitions away from this fn).
+  // Wrap the $transaction in runAsWorkflowEngine to declare authorization to
+  // the PIC-35 Step 7 guardrail. Outside-in: AsyncLocalStorage doesn't
+  // propagate across the tx callback boundary (see invoice-collection fix
+  // commit aeabac9 for the verified-by-test failure mode).
+  const { batch, updated } = await runAsWorkflowEngine(() => prisma.$transaction(async (tx) => {
     const header = await tx.ipaAdjustmentBatch.create({
       data: {
         ipaId: input.ipaId,
@@ -483,7 +491,7 @@ export async function adjustIpa(
     );
 
     return { batch: header, updated: upd };
-  });
+  }));
 
   // 2. If any monetary field changed, post ONE IPA_ADJUSTMENT event with deltas
   const hasMonetary = changedFields.some((c) => MONETARY_FIELDS.has(c.field));
