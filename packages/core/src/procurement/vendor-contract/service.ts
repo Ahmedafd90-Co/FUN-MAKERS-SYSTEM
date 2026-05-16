@@ -3,7 +3,7 @@
  *
  * Phase 5, Task 5.1 — Module 3 Procurement Engine.
  */
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { VendorContractStatus } from '@fmksa/db';
 import type { CreateVendorContractInput, UpdateVendorContractInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -178,6 +178,8 @@ export async function transitionVendorContract(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown vendor contract action: '${action}'`);
@@ -252,6 +254,7 @@ export async function transitionVendorContract(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

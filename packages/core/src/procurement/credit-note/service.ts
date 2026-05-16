@@ -3,7 +3,7 @@
  *
  * Module 3 Procurement Engine — Credit Note lifecycle.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CreditNoteStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import {
@@ -148,6 +148,8 @@ export async function transitionCreditNote(
   params: { projectId: string; id: string; action: string; comment?: string | undefined },
   actorUserId: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = params;
 
   const newStatus = CN_ACTION_TO_STATUS[action];
@@ -228,4 +230,5 @@ export async function transitionCreditNote(
   }
 
   return updated;
+  });
 }
