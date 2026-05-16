@@ -119,6 +119,10 @@ const RECORD_TYPE_LABELS: Record<string, string> = {
   tax_invoice: 'Tax Invoice',
   correspondence: 'Correspondence',
   quotation: 'Quotation',
+  purchase_order: 'Purchase Order',
+  supplier_invoice: 'Supplier Invoice',
+  expense: 'Expense',
+  credit_note: 'Credit Note',
 };
 
 // ---------------------------------------------------------------------------

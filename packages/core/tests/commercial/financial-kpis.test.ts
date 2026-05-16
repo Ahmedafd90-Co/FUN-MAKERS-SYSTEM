@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma, Prisma } from '@fmksa/db';
 import { getFinancialKpis } from '../../src/commercial/dashboard/financial-kpis';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   KPI_DEFINITIONS,
   getKpiDefinition,
@@ -23,6 +24,7 @@ let testProject: { id: string };
 let testIpc: { id: string };
 
 beforeAll(async () => {
+  assertTestDb();
   const entity = await prisma.entity.create({
     data: { code: `ENT-KPI-${ts}`, name: 'KPI Test Entity', type: 'parent', status: 'active' },
   });

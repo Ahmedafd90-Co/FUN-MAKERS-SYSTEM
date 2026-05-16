@@ -15,6 +15,14 @@ const ROLES = [
   { code: 'document_controller', name: 'Document Controller', description: 'Manages document library and version control' },
   { code: 'pmo', name: 'PMO', description: 'KPI and reporting visibility, portfolio rollups' },
   { code: 'executive_approver', name: 'Executive Approver', description: 'High-authority approvals as configured' },
+  // ── QA / smoke-test fixtures (PIC-25) ──
+  // These roles exist solely to back the matching `view.only@fmksa.demo` and
+  // `no.perm@fmksa.demo` users. They let manual QA exercise permission-gated
+  // UI without granting view/no-perm rights to a real user. Layer 1 endpoint
+  // calls return 403 for `no_perm_demo`; Layer 1 surfaces are visible but
+  // read-only for `view_only_demo`.
+  { code: 'view_only_demo', name: 'View-Only (Demo QA)', description: 'QA fixture: view-only access across all modules; no mutation rights' },
+  { code: 'no_perm_demo', name: 'No-Permission (Demo QA)', description: 'QA fixture: authenticated only; zero permission grants' },
 ];
 
 export async function seedRoles(prisma: PrismaClient) {

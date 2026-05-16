@@ -79,6 +79,12 @@ type UploadWidgetProps = {
   /** Optional: pre-fill for supersede mode */
   mode?: 'create' | 'supersede';
   documentId?: string;
+  /** Optional: attach the new document to a specific record (polymorphic FK).
+   *  When set in create mode, both fields are forwarded to /api/upload, which
+   *  forwards to documentService.createDocument, which validates the record
+   *  exists and is in the same project. */
+  recordType?: string;
+  recordId?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +97,8 @@ export function UploadWidget({
   onOpenChange,
   mode = 'create',
   documentId,
+  recordType,
+  recordId,
 }: UploadWidgetProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
@@ -210,6 +218,8 @@ export function UploadWidget({
       if (mode === 'create') {
         formData.append('title', title.trim());
         formData.append('category', category);
+        if (recordType) formData.append('recordType', recordType);
+        if (recordId) formData.append('recordId', recordId);
       }
 
       if (mode === 'supersede') {

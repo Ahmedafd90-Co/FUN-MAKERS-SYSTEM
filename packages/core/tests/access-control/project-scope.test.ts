@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   isAssignedToProject,
   getAssignedProjectIds,
@@ -33,6 +34,7 @@ let roleId: string;
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  assertTestDb();
   user = await prisma.user.create({
     data: {
       email: `proj-scope-1-${Date.now()}@test.com`,

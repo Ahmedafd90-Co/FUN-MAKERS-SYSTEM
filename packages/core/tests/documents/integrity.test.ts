@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '@fmksa/db';
 import { documentService } from '../../src/documents/service';
 import { IntegrityError } from '../../src/documents/signatures';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Integrity check test — SHA-256 hash comparison at sign time
@@ -19,6 +20,8 @@ describe.skipIf(!MINIO_AVAILABLE)('Document integrity check', () => {
   const ts = Date.now();
 
   beforeAll(async () => {
+
+    assertTestDb();
 
     testUser = await prisma.user.create({
       data: {

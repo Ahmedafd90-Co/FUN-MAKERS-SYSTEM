@@ -1,7 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const MASTER_ADMIN_EMAIL = 'ahmedafd90@gmail.com';
+// Exported for cross-seed reuse (PIC-33 layer1-demo-data references this as
+// the createdBy actor). Single source of truth for the master admin email.
+export const MASTER_ADMIN_EMAIL = 'ahmedafd90@gmail.com';
 const MASTER_ADMIN_NAME = 'Ahmed Al-Dossary';
 const DEFAULT_PASSWORD = 'ChangeMe!Demo2026';
 const BCRYPT_ROUNDS = 12;
@@ -10,11 +12,28 @@ const BCRYPT_ROUNDS = 12;
 // Demo team — realistic users across different roles
 // ---------------------------------------------------------------------------
 
+// Gate QA fixture users behind an explicit env flag — they share the
+// `DEFAULT_PASSWORD` fallback above, so unconditional seeding is a credential
+// exposure if `tsx src/seed/index.ts` ever runs in a non-isolated environment.
+// The `db:seed` package script sets this flag for local development; deploy
+// pipelines must opt in explicitly.
+const INCLUDE_QA_FIXTURE_USERS =
+  process.env.SEED_INCLUDE_QA_FIXTURE_USERS === 'true';
+
 const DEMO_USERS = [
   { email: 'khalid.rashid@fmksa.demo', name: 'Khalid Al-Rashid', roleCode: 'project_manager' },
   { email: 'sara.fahad@fmksa.demo', name: 'Sara Al-Fahad', roleCode: 'qs_commercial' },
   { email: 'omar.hassan@fmksa.demo', name: 'Omar Hassan', roleCode: 'procurement' },
   { email: 'fatima.zahrani@fmksa.demo', name: 'Fatima Al-Zahrani', roleCode: 'finance' },
+  // ── QA fixture users (PIC-25) ──
+  // Back the matching `view_only_demo` and `no_perm_demo` roles. Used for
+  // manual smoke tests of permission-gated UI without needing real users.
+  ...(INCLUDE_QA_FIXTURE_USERS
+    ? [
+        { email: 'view.only@fmksa.demo', name: 'View-Only QA Fixture', roleCode: 'view_only_demo' },
+        { email: 'no.perm@fmksa.demo', name: 'No-Permission QA Fixture', roleCode: 'no_perm_demo' },
+      ]
+    : []),
 ] as const;
 
 // Project codes where demo users get assigned

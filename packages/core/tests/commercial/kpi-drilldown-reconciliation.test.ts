@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma, Prisma } from '@fmksa/db';
 import { getFinancialKpis } from '../../src/commercial/dashboard/financial-kpis';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getKpiDefinition,
   IPA_APPROVED_PLUS,
@@ -36,6 +37,7 @@ const ts = `recon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 let projectId: string;
 
 beforeAll(async () => {
+  assertTestDb();
   const entity = await prisma.entity.create({
     data: { code: `ENT-RECON-${ts}`, name: 'Reconciliation Test', type: 'parent', status: 'active' },
   });

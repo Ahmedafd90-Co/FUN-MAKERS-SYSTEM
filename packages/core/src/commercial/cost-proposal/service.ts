@@ -1,7 +1,13 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CostProposalStatus } from '@fmksa/db';
 import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 import { generateReferenceNumber } from '../reference-number/service';
 import { COST_PROPOSAL_TRANSITIONS, COST_PROPOSAL_TERMINAL_STATUSES } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
@@ -53,7 +59,46 @@ export async function createCostProposal(input: CreateCostProposalInput, actorUs
     afterJson: cp as any,
   });
 
+  // PIC-35 Step 5: auto-seed workflow_instance at entity-create so the
+  // workflow→entity status convergence has an instance to converge from.
+  // Brings cost_proposal in line with the 8 auto-start entities' "every
+  // workflow-driven entity has a workflow_instance from creation" invariant.
+  // No-op if no template is configured for the project — log warning only.
+  await autoSeedCostProposalWorkflow(cp.id, input.projectId, actorUserId);
+
   return cp;
+}
+
+async function autoSeedCostProposalWorkflow(
+  recordId: string,
+  projectId: string,
+  actorUserId: string,
+): Promise<void> {
+  try {
+    const resolution = await resolveTemplate('cost_proposal', projectId);
+    if (!resolution) {
+      console.warn(
+        `[cost-proposal-workflow] No template configured for cost_proposal in project ${projectId}; workflow_instance not seeded for ${recordId}`,
+      );
+      return;
+    }
+    await workflowInstanceService.startInstance({
+      templateCode: resolution.code,
+      recordType: 'cost_proposal',
+      recordId,
+      projectId,
+      startedBy: actorUserId,
+      resolutionSource: resolution.source,
+    });
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+      console.warn(
+        `[cost-proposal-workflow] Skipped workflow auto-seed for CostProposal ${recordId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +157,10 @@ export async function transitionCostProposal(
   },
   projectId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up):
+  // transition writes are engine-driven; wrap function body in
+  // runAsWorkflowEngine() to declare authorization to the guardrail.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown CostProposal action: '${action}'`);
@@ -219,6 +268,7 @@ export async function transitionCostProposal(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

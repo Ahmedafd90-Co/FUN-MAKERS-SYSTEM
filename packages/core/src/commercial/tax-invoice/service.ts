@@ -1,7 +1,13 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { TaxInvoiceStatus } from '@fmksa/db';
 import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, TaxInvoiceListInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { TAX_INVOICE_TRANSITIONS, TAX_INVOICE_TERMINAL_STATUSES } from './transitions';
@@ -91,7 +97,42 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput, actorUserId
     afterJson: taxInvoice as any,
   });
 
+  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
+  await autoSeedTaxInvoiceWorkflow(taxInvoice.id, input.projectId, actorUserId);
+
   return taxInvoice;
+}
+
+async function autoSeedTaxInvoiceWorkflow(
+  recordId: string,
+  projectId: string,
+  actorUserId: string,
+): Promise<void> {
+  try {
+    const resolution = await resolveTemplate('tax_invoice', projectId);
+    if (!resolution) {
+      console.warn(
+        `[tax-invoice-workflow] No template configured for tax_invoice in project ${projectId}; workflow_instance not seeded for ${recordId}`,
+      );
+      return;
+    }
+    await workflowInstanceService.startInstance({
+      templateCode: resolution.code,
+      recordType: 'tax_invoice',
+      recordId,
+      projectId,
+      startedBy: actorUserId,
+      resolutionSource: resolution.source,
+    });
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+      console.warn(
+        `[tax-invoice-workflow] Skipped workflow auto-seed for TaxInvoice ${recordId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +190,8 @@ export async function transitionTaxInvoice(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown TaxInvoice action: '${action}'`);
@@ -254,6 +297,7 @@ export async function transitionTaxInvoice(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

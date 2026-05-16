@@ -4,14 +4,20 @@
  *
  * Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { SupplierInvoiceStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
-import { SI_TRANSITIONS, SI_TERMINAL_STATUSES, SI_ACTION_TO_STATUS } from './transitions';
+import { SI_TRANSITIONS, SI_TERMINAL_STATUSES, SI_ACTION_TO_STATUS, SI_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { absorbSupplierInvoiceActual } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,6 +133,8 @@ export async function transitionSupplierInvoice(
   input: TransitionSupplierInvoiceInput,
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = input;
 
   const newStatus = SI_ACTION_TO_STATUS[action];
@@ -155,6 +163,16 @@ export async function transitionSupplierInvoice(
     );
   }
 
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. The prior "legacy manual approval when no workflow exists" carve-
+  // out is closed. See ipa/service.ts for the full rationale comment.
+  if (SI_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    throw new Error(
+      `Cannot manually '${action}' this supplier invoice — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
+  }
+
   // Update status
   const updated = await prisma.supplierInvoice.update({
     where: { id },
@@ -174,6 +192,50 @@ export async function transitionSupplierInvoice(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on review (parity with PO/IPA — but triggered when
+  // the SI enters the review phase, since SI has no 'submitted' state)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'supplier_invoice', this is graceful —
+  // the transition still succeeds. Workflows are optional infrastructure;
+  // projects without a template fall back to manual approval.
+  if (newStatus === 'under_review') {
+    try {
+      const resolution = await resolveTemplate('supplier_invoice', existing.projectId);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'supplier_invoice',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[si-workflow] No workflow template configured for supplier_invoice in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[si-workflow] Skipped workflow start for SI ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        // See PO service for full rationale. Short version: the SI's status
+        // is already 'under_review' with its audit log committed. Re-throwing
+        // here strands the SI and re-enables manual approve/reject/dispute
+        // bypass. Log loudly and fall through to the manual path.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[si-workflow] UNEXPECTED error starting workflow for SI ${id} in project ${existing.projectId}. The SI is in 'under_review' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Posting event: SUPPLIER_INVOICE_APPROVED
@@ -213,4 +275,5 @@ export async function transitionSupplierInvoice(
   }
 
   return updated;
+  });
 }

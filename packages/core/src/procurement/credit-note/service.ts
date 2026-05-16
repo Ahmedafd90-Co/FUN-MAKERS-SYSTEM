@@ -3,9 +3,15 @@
  *
  * Module 3 Procurement Engine — Credit Note lifecycle.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CreditNoteStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 import { postingService } from '../../posting/service';
 import { assertProjectScope } from '../../scope-binding';
 import {
@@ -64,7 +70,42 @@ export async function createCreditNote(
     afterJson: record as any,
   });
 
+  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
+  await autoSeedCreditNoteWorkflow(record.id, input.projectId, actorUserId);
+
   return record;
+}
+
+async function autoSeedCreditNoteWorkflow(
+  recordId: string,
+  projectId: string,
+  actorUserId: string,
+): Promise<void> {
+  try {
+    const resolution = await resolveTemplate('credit_note', projectId);
+    if (!resolution) {
+      console.warn(
+        `[credit-note-workflow] No template configured for credit_note in project ${projectId}; workflow_instance not seeded for ${recordId}`,
+      );
+      return;
+    }
+    await workflowInstanceService.startInstance({
+      templateCode: resolution.code,
+      recordType: 'credit_note',
+      recordId,
+      projectId,
+      startedBy: actorUserId,
+      resolutionSource: resolution.source,
+    });
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+      console.warn(
+        `[credit-note-workflow] Skipped workflow auto-seed for CreditNote ${recordId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +148,8 @@ export async function transitionCreditNote(
   params: { projectId: string; id: string; action: string; comment?: string | undefined },
   actorUserId: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = params;
 
   const newStatus = CN_ACTION_TO_STATUS[action];
@@ -187,4 +230,5 @@ export async function transitionCreditNote(
   }
 
   return updated;
+  });
 }

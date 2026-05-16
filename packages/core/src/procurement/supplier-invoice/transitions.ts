@@ -33,3 +33,21 @@ export const SI_APPROVED_PLUS_STATUSES = [
   'paid',
   'closed',
 ];
+
+/**
+ * Actions that are part of the "approval phase" — managed by the workflow
+ * engine when a workflow instance is active for the record.
+ *
+ * When a workflow instance is in_progress or returned for an SI, these manual
+ * actions are BLOCKED at the service layer. The workflow step service
+ * (approve / return / reject) is the only way to drive the approval phase.
+ *
+ * 'dispute' here plays the role that 'return' plays for PO — workflow return
+ * drives the SI to 'disputed' status, which is the existing "needs revision
+ * or has an issue" state. Option A semantics: disputed = workflow-returned OR
+ * operator-flagged; one state, unified meaning.
+ *
+ * Legacy manual approval is still allowed when NO workflow instance exists
+ * (e.g. a project configured without an SI workflow template).
+ */
+export const SI_WORKFLOW_MANAGED_ACTIONS = ['approve', 'reject', 'dispute'];

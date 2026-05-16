@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getPreferences,
   setPreference,
@@ -15,6 +16,7 @@ const ts = `pref-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 let testUser: { id: string };
 
 beforeAll(async () => {
+  assertTestDb();
   testUser = await prisma.user.create({
     data: {
       email: `notif-pref-${ts}@test.com`,

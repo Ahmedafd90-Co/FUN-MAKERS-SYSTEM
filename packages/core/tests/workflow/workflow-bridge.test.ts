@@ -5,6 +5,7 @@ import { workflowInstanceService } from '../../src/workflow/instances';
 import { clearHandlers } from '../../src/workflow/events';
 import { transitionRfq } from '../../src/procurement/rfq/service';
 import { transitionIpa } from '../../src/commercial/ipa/service';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures — unique per test run to avoid cross-file interference
@@ -21,6 +22,7 @@ const rfqTemplateCode = 'rfq-review';
 const ipaTemplateCode = 'ipa-review';
 
 beforeAll(async () => {
+  assertTestDb();
   testUser = await prisma.user.create({
     data: {
       email: `wf-bridge-${ts}@test.com`,

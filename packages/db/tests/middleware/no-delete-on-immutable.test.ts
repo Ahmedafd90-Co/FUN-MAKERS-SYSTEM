@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/client';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   cleanTestData,
   createTestDocumentWithVersion,
@@ -14,6 +15,8 @@ describe('no-delete-on-immutable', () => {
   let entityId: string;
 
   beforeAll(async () => {
+    // PIC-37: cleanTestData TRUNCATEs 16 tables — refuse against non-test DBs.
+    assertTestDb();
     await cleanTestData();
     const user = await createTestUser();
     userId = user.id;

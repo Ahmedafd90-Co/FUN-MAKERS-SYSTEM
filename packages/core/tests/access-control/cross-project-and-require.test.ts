@@ -3,6 +3,7 @@ import { prisma } from '@fmksa/db';
 import { canReadAcrossProjects } from '../../src/access-control/cross-project';
 import { requirePermission } from '../../src/access-control/service';
 import { PermissionDeniedError } from '../../src/access-control/errors';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,6 +23,7 @@ let regularUser: { id: string };
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  assertTestDb();
   masterAdminUser = await prisma.user.create({
     data: {
       email: `cross-proj-admin-${Date.now()}@test.com`,

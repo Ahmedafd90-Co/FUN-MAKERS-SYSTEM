@@ -20,6 +20,8 @@ import {
   documentService,
   accessControlService,
   assertProjectScope,
+  UnsupportedRecordTypeError,
+  ScopeMismatchError,
 } from '@fmksa/core';
 import { NextResponse } from 'next/server';
 
@@ -107,6 +109,8 @@ export async function POST(request: NextRequest) {
       mimeType: file.type || 'application/octet-stream',
       title: formData.get('title') as string | null,
       category: formData.get('category') as string | null,
+      recordType: formData.get('recordType') as string | null,
+      recordId: formData.get('recordId') as string | null,
     });
   } catch (error) {
     console.error('[upload] Unexpected error:', error);
@@ -129,9 +133,20 @@ async function handleCreate(params: {
   mimeType: string;
   title: string | null;
   category: string | null;
+  recordType: string | null;
+  recordId: string | null;
 }) {
-  const { userId, projectId, fileBuffer, fileName, mimeType, title, category } =
-    params;
+  const {
+    userId,
+    projectId,
+    fileBuffer,
+    fileName,
+    mimeType,
+    title,
+    category,
+    recordType,
+    recordId,
+  } = params;
 
   // Validate required fields
   if (!title || title.trim().length === 0) {
@@ -171,13 +186,55 @@ async function handleCreate(params: {
     );
   }
 
-  // Create the document
-  const document = await documentService.createDocument({
-    projectId,
-    title: title.trim(),
-    category,
-    createdBy: userId,
-  });
+  // Atomic-pair check on the polymorphic FK fields. The service layer
+  // also enforces this, but doing it here returns a precise 400 instead
+  // of letting the service's plain Error fall through to the outer 500
+  // catch. Defense-in-depth — service still validates as the source
+  // of truth.
+  const hasRecordType = typeof recordType === 'string' && recordType !== '';
+  const hasRecordId = typeof recordId === 'string' && recordId !== '';
+  if (hasRecordType !== hasRecordId) {
+    return NextResponse.json(
+      { error: 'recordType and recordId must be provided together.' },
+      { status: 400 },
+    );
+  }
+
+  // Create the document. recordType + recordId are passed only when both
+  // are non-empty strings; the service then validates the target record
+  // exists and is in the same project (UnsupportedRecordTypeError /
+  // ScopeMismatchError thrown on failure).
+  let document;
+  try {
+    document = await documentService.createDocument({
+      projectId,
+      title: title.trim(),
+      category,
+      createdBy: userId,
+      ...(typeof recordType === 'string' && recordType !== ''
+        ? { recordType }
+        : {}),
+      ...(typeof recordId === 'string' && recordId !== '' ? { recordId } : {}),
+    });
+  } catch (err) {
+    if (err instanceof UnsupportedRecordTypeError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    if (err instanceof ScopeMismatchError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    // Prisma findUniqueOrThrow on a missing record throws
+    // PrismaClientKnownRequestError with code P2025. Detect via property
+    // access to avoid pulling Prisma's runtime types into the route bundle.
+    if ((err as { code?: unknown })?.code === 'P2025') {
+      return NextResponse.json(
+        { error: 'Linked record not found.' },
+        { status: 404 },
+      );
+    }
+    // Unexpected — bubble to outer catch as 500.
+    throw err;
+  }
 
   // Upload the first version
   const version = await documentService.uploadVersion({

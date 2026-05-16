@@ -3,7 +3,7 @@
  *
  * Module 3 Procurement Engine — Expense lifecycle.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { ExpenseStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
@@ -12,8 +12,15 @@ import {
   EXPENSE_TRANSITIONS,
   EXPENSE_TERMINAL_STATUSES,
   EXPENSE_ACTION_TO_STATUS,
+  EXPENSE_WORKFLOW_MANAGED_ACTIONS,
 } from './transitions';
 import { absorbExpenseActual } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Create (status: draft)
@@ -150,6 +157,8 @@ export async function transitionExpense(
   params: { projectId: string; id: string; action: string; comment?: string | undefined },
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = params;
 
   const newStatus = EXPENSE_ACTION_TO_STATUS[action];
@@ -176,6 +185,24 @@ export async function transitionExpense(
     );
   }
 
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
+  //
+  // Note: the prior "legacy manual approval when no workflow exists" carve-
+  // out is closed. Step 5 doesn't auto-seed expenses (auto-seed is only for
+  // the 5 manual-start entities); Expense's workflow already auto-starts on
+  // submit via this service's existing path. If a project has no Expense
+  // template configured, the workflow simply never starts and the entity
+  // remains in 'draft' — but manual workflow-managed transitions are still
+  // refused. Post-PIC-35 the rule is: workflow-managed actions go through
+  // the workflow engine or they don't go through at all.
+  if (EXPENSE_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    throw new Error(
+      `Cannot manually '${action}' this expense — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
+  }
+
   const updated = await prisma.expense.update({
     where: { id },
     data: { status: newStatus as ExpenseStatus },
@@ -193,6 +220,51 @@ export async function transitionExpense(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on submit (parity with PO / IPA pattern)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'expense', this is graceful — the
+  // transition still succeeds. Workflows are optional infrastructure;
+  // projects without a template fall back to manual approval.
+  if (newStatus === 'submitted') {
+    try {
+      // PIC-41: pass amount so the resolver can apply the configured
+      // high-value threshold (if any). Unconfigured → standard default.
+      const resolution = await resolveTemplate('expense', existing.projectId, undefined, existing.amount);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'expense',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[expense-workflow] No workflow template configured for expense in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[expense-workflow] Skipped workflow start for expense ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        // See PO service for full rationale. Short version: the Expense's
+        // status is already 'submitted' with its audit log committed.
+        // Re-throwing here strands the expense and re-enables manual
+        // approve/reject/return bypass. Log loudly and fall through.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[expense-workflow] UNEXPECTED error starting workflow for expense ${id} in project ${existing.projectId}. The expense is in 'submitted' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
+      }
+    }
+  }
 
   // Budget absorption: Expense approved → actualAmount++
   if (newStatus === 'approved') {
@@ -226,4 +298,5 @@ export async function transitionExpense(
   }
 
   return updated;
+  });
 }

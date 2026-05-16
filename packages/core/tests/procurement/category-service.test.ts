@@ -19,7 +19,7 @@ const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
   return { mockPrisma, mockAuditLog };
 });
 
-vi.mock('@fmksa/db', () => ({ prisma: mockPrisma }));
+vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, runAsWorkflowEngine: (fn: any) => fn() }));
 vi.mock('../../src/audit/service', () => ({
   auditService: { log: (...args: unknown[]) => mockAuditLog(...args) },
 }));

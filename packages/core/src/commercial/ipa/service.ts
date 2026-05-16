@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { IpaStatus } from '@fmksa/db';
 import type { CreateIpaInput, UpdateIpaInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
@@ -125,6 +125,10 @@ export async function transitionIpa(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle status writes (e.g. issued, paid,
+  // collected) are authorized via runAsWorkflowEngine. Workflow-managed
+  // actions throw above (Step 6); only post-workflow paths reach here.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown IPA action: '${action}'`);
@@ -157,21 +161,16 @@ export async function transitionIpa(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
-  // These actions are driven by the workflow step service, not direct transitions.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility (Step 5 auto-seeds workflow on create; Step 4
+  // convergence handlers write entity.status on workflow transitions).
+  // Refuse unconditionally — including the post-workflow-termination case
+  // where the previous active-workflow check would have passed and allowed
+  // a redundant entity write that drifts from the workflow_instance state.
   if (IPA_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'ipa',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this IPA — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this IPA — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Transitions that require a transaction (posting or ref number)
@@ -287,6 +286,7 @@ export async function transitionIpa(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -437,8 +437,16 @@ export async function adjustIpa(
     throw new Error('adjustIpa called with no field changes.');
   }
 
-  // 1. Header + fields + Ipa row update in one tx
-  const { batch, updated } = await prisma.$transaction(async (tx) => {
+  // 1. Header + fields + Ipa row update in one tx.
+  // PIC-47 site #7: input.changes accepts `status?: IpaStatus` (see signature L386);
+  // when a caller sets it, dataForUpdate.status is set and tx.ipa.update writes
+  // status. adjustIpa is the canonical writer for imported_historical IPA
+  // corrections (file L144-148 routes live transitions away from this fn).
+  // Wrap the $transaction in runAsWorkflowEngine to declare authorization to
+  // the PIC-35 Step 7 guardrail. Outside-in: AsyncLocalStorage doesn't
+  // propagate across the tx callback boundary (see invoice-collection fix
+  // commit aeabac9 for the verified-by-test failure mode).
+  const { batch, updated } = await runAsWorkflowEngine(() => prisma.$transaction(async (tx) => {
     const header = await tx.ipaAdjustmentBatch.create({
       data: {
         ipaId: input.ipaId,
@@ -483,7 +491,7 @@ export async function adjustIpa(
     );
 
     return { batch: header, updated: upd };
-  });
+  }));
 
   // 2. If any monetary field changed, post ONE IPA_ADJUSTMENT event with deltas
   const hasMonetary = changedFields.some((c) => MONETARY_FIELDS.has(c.field));

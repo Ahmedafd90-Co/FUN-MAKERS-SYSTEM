@@ -4,14 +4,20 @@
  *
  * Module 3 Procurement Engine.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { PurchaseOrderStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
-import { PO_TRANSITIONS, PO_TERMINAL_STATUSES, PO_ACTION_TO_STATUS, PO_APPROVED_PLUS_STATUSES } from './transitions';
+import { PO_TRANSITIONS, PO_TERMINAL_STATUSES, PO_ACTION_TO_STATUS, PO_APPROVED_PLUS_STATUSES, PO_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { absorbPoCommitment, reversePoCommitment } from '../../budget/absorption';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,6 +171,8 @@ export async function transitionPurchaseOrder(
   input: TransitionPurchaseOrderInput,
   actorUserId: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const { projectId, id, action, comment } = input;
 
   const newStatus = PO_ACTION_TO_STATUS[action];
@@ -193,6 +201,16 @@ export async function transitionPurchaseOrder(
     );
   }
 
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. The prior "legacy manual approval when no workflow exists" carve-
+  // out is closed. See ipa/service.ts for the full rationale comment.
+  if (PO_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
+    throw new Error(
+      `Cannot manually '${action}' this PO — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
+  }
+
   // Update status
   const updated = await prisma.purchaseOrder.update({
     where: { id },
@@ -212,6 +230,59 @@ export async function transitionPurchaseOrder(
     afterJson: updated as any,
     reason: comment ?? null,
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-start workflow on submit (parity with IPA / IPC / Correspondence)
+  // ---------------------------------------------------------------------------
+  // If no active template exists for 'purchase_order', this is graceful — the
+  // transition still succeeds. Workflows are optional infrastructure; projects
+  // without a template fall back to manual approval.
+  if (newStatus === 'submitted') {
+    try {
+      // PIC-41: pass totalAmount so the resolver can apply the configured
+      // high-value threshold (if any). Unconfigured → standard default.
+      const resolution = await resolveTemplate('purchase_order', existing.projectId, undefined, existing.totalAmount);
+      if (resolution) {
+        await workflowInstanceService.startInstance({
+          templateCode: resolution.code,
+          recordType: 'purchase_order',
+          recordId: id,
+          projectId: existing.projectId,
+          startedBy: actorUserId,
+          resolutionSource: resolution.source,
+        });
+      } else {
+        console.warn(
+          `[po-workflow] No workflow template configured for purchase_order in project ${existing.projectId}`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+        console.warn(
+          `[po-workflow] Skipped workflow start for PO ${id}: ${(err as Error).message}`,
+        );
+      } else {
+        // The record's status has already been committed to 'submitted' along
+        // with its audit log. If we re-throw here, the caller sees an error
+        // but the record is stranded with no active workflow — the manual
+        // approve/reject/return path becomes re-enabled because the guard
+        // only fires when an active workflow exists. That is the exact
+        // bypass Lane 1 exists to prevent.
+        //
+        // Workflow infrastructure is optional by design. If the engine can't
+        // start for any reason, we log loudly for investigation and fall
+        // through to the manual approval path. An admin can manually kick
+        // the workflow later, or approve via the manual path which is now
+        // correctly available given no workflow exists.
+        // Format string is a compile-time constant; %s tokens in err.message render as literal text in Node's console, not as substitutions. No injection surface.
+        // nosemgrep
+        console.error(
+          `[po-workflow] UNEXPECTED error starting workflow for PO ${id} in project ${existing.projectId}. The PO is in 'submitted' state with no active workflow; manual approval path is available. Error: ${(err as Error).message}`,
+          err,
+        );
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Posting events
@@ -324,4 +395,5 @@ export async function transitionPurchaseOrder(
   }
 
   return updated;
+  });
 }

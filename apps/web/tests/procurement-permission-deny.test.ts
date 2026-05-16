@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { assertTestDb } from './helpers/assert-test-db';
 import {
   unauthenticatedCaller,
   authenticatedCaller,
@@ -37,6 +38,7 @@ function pastDate(days: number): Date {
 }
 
 beforeAll(async () => {
+  assertTestDb();
   // ── Role A: zero procurement permissions ──
   const role = await prisma.role.create({
     data: {

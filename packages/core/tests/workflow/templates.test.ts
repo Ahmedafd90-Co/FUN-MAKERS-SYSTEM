@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   workflowTemplateService,
   DuplicateTemplateCodeError,
@@ -14,6 +15,7 @@ let testUser: { id: string };
 const ts = `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 beforeAll(async () => {
+  assertTestDb();
   await (prisma as any).$executeRaw`TRUNCATE TABLE audit_logs CASCADE`;
 
   testUser = await prisma.user.create({

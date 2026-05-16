@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { assertTestDb } from '../helpers/assert-test-db';
 import { seedCountries } from '../../src/seed/countries';
 import { seedCurrencies } from '../../src/seed/currencies';
 import { seedAppSettings } from '../../src/seed/app-settings';
@@ -92,6 +93,8 @@ describe('seed idempotency', () => {
   let secondRunCounts: Awaited<ReturnType<typeof snapshotCounts>>;
 
   beforeAll(async () => {
+    // PIC-37: refuse to TRUNCATE against any DB whose URL doesn't contain `_test`.
+    assertTestDb();
     // Clean slate: truncate every table the seed touches so earlier test
     // runs or manual inserts don't skew the counts.
     await prisma.$executeRaw`

@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   notify,
   markAsRead,
@@ -37,6 +38,7 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
   let notificationId: string;
 
   beforeAll(async () => {
+    assertTestDb();
     user = await prisma.user.create({
       data: {
         email: `lifecycle-${ts}@test.com`,
@@ -116,6 +118,7 @@ describe('Task 1.8.12 — Idempotency', () => {
   let userB: { id: string };
 
   beforeAll(async () => {
+    assertTestDb();
     [userA, userB] = await Promise.all([
       prisma.user.create({
         data: {
@@ -239,6 +242,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
   let templatesExist = false;
 
   beforeAll(async () => {
+    assertTestDb();
     // Verify templates are seeded — skip gracefully if not
     const [stepTpl, approvedTpl] = await Promise.all([
       prisma.notificationTemplate.findUnique({

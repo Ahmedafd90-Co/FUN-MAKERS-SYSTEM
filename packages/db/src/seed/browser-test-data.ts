@@ -336,7 +336,7 @@ async function upsertTemplate(
   code: string,
   name: string,
   recordType: string,
-  steps: Array<{ orderIndex: number; name: string; approverRule: Record<string, unknown> }>,
+  steps: Array<{ orderIndex: number; name: string; approverRule: Prisma.InputJsonValue }>,
 ) {
   // Delete existing steps and template if they exist (to handle re-runs cleanly)
   const existing = await prisma.workflowTemplate.findUnique({ where: { code } });

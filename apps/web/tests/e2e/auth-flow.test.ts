@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   authService,
   hashPassword,
@@ -45,6 +46,7 @@ function pastDate(days: number): Date {
 }
 
 beforeAll(async () => {
+  assertTestDb();
   // Look up a role to assign (need at least one for the AuthUser shape)
   const role = await prisma.role.findUniqueOrThrow({
     where: { code: 'project_manager' },

@@ -4,6 +4,7 @@ import { projectsService } from '../../src/projects/service';
 import { projectSettingsService } from '../../src/projects/settings';
 import { projectAssignmentsService } from '../../src/projects/assignments';
 import { PROJECT_SETTINGS_DEFAULTS } from '../../src/projects/project-settings-defaults';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -17,6 +18,7 @@ let testRole: { id: string };
 const ts = Date.now();
 
 beforeAll(async () => {
+  assertTestDb();
   // Clean up stale test data
   await (prisma as any).$executeRaw`TRUNCATE TABLE audit_logs CASCADE`;
 

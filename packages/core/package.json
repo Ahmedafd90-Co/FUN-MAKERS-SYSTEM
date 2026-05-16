@@ -10,8 +10,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./notifications/delivery": "./src/notifications/delivery.ts",
+    "./notifications/event-handlers": "./src/notifications/event-handlers.ts",
     "./notifications/templates": "./src/notifications/templates.ts",
-    "./commercial/dashboard/kpi-definitions": "./src/commercial/dashboard/kpi-definitions.ts"
+    "./commercial/dashboard/kpi-definitions": "./src/commercial/dashboard/kpi-definitions.ts",
+    "./layer1/prime-contracts/service": "./src/layer1/prime-contracts/service.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

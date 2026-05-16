@@ -64,6 +64,8 @@ export const ListDocumentsSchema = z.object({
   category: DocumentCategorySchema.optional(),
   status: DocumentStatusSchema.optional(),
   search: z.string().optional(),
+  recordType: z.string().optional(),
+  recordId: z.string().uuid().optional(),
   skip: z.number().int().min(0).default(0),
   take: z.number().int().min(1).max(100).default(20),
 });

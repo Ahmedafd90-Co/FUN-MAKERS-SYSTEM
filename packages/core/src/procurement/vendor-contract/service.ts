@@ -3,10 +3,16 @@
  *
  * Phase 5, Task 5.1 — Module 3 Procurement Engine.
  */
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { VendorContractStatus } from '@fmksa/db';
 import type { CreateVendorContractInput, UpdateVendorContractInput, ProcurementListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import {
+  workflowInstanceService,
+  TemplateNotActiveError,
+  DuplicateInstanceError,
+  resolveTemplate,
+} from '../../workflow';
 import { postingService } from '../../posting/service';
 import { VENDOR_CONTRACT_TRANSITIONS, VENDOR_CONTRACT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextContractNumber, EDITABLE_STATUSES } from './validation';
@@ -74,7 +80,44 @@ export async function createVendorContract(input: CreateVendorContractInput, act
     afterJson: record as any,
   });
 
+  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
+  if (input.projectId) {
+    await autoSeedVendorContractWorkflow(record.id, input.projectId, actorUserId);
+  }
+
   return record;
+}
+
+async function autoSeedVendorContractWorkflow(
+  recordId: string,
+  projectId: string,
+  actorUserId: string,
+): Promise<void> {
+  try {
+    const resolution = await resolveTemplate('vendor_contract', projectId);
+    if (!resolution) {
+      console.warn(
+        `[vendor-contract-workflow] No template configured for vendor_contract in project ${projectId}; workflow_instance not seeded for ${recordId}`,
+      );
+      return;
+    }
+    await workflowInstanceService.startInstance({
+      templateCode: resolution.code,
+      recordType: 'vendor_contract',
+      recordId,
+      projectId,
+      startedBy: actorUserId,
+      resolutionSource: resolution.source,
+    });
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
+      console.warn(
+        `[vendor-contract-workflow] Skipped workflow auto-seed for VendorContract ${recordId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +178,8 @@ export async function transitionVendorContract(
   comment?: string,
   projectId?: string,
 ) {
+  // PIC-35 Step 7 wrap (missed in original Step 7 pass — PIC-47 follow-up).
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown vendor contract action: '${action}'`);
@@ -209,6 +254,7 @@ export async function transitionVendorContract(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { signedImmutabilityExtension } from './middleware/signed-immutability';
 import { noDeleteOnImmutableExtension } from './middleware/no-delete-on-immutable';
+import { noDirectStatusWriteExtension } from './middleware/no-direct-status-write';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ReturnType<typeof createPrismaClient> | undefined;
@@ -14,7 +15,8 @@ function createPrismaClient() {
         : ['error'],
   })
     .$extends(signedImmutabilityExtension)
-    .$extends(noDeleteOnImmutableExtension);
+    .$extends(noDeleteOnImmutableExtension)
+    .$extends(noDirectStatusWriteExtension);
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

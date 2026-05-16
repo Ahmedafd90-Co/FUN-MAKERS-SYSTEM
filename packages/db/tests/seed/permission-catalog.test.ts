@@ -9,8 +9,9 @@
  * class of bugs by catching mismatches at CI time.
  *
  * HOW: Reads router source files as text, extracts all strings passed to
- * `permissions.includes('xxx')` and `entityPermissions.includes('xxx')`,
- * then asserts each exists in PERMISSION_CATALOG.
+ * `permissions.includes('xxx')` (legacy direct-check pattern) and
+ * `hasPerm(ctx, 'xxx')` (current helper-based pattern, used by Layer 1 and
+ * later routers), then asserts each exists in PERMISSION_CATALOG.
  *
  * Created 2026-04-12 — System Integrity Pass.
  */
@@ -22,6 +23,7 @@ import { PERMISSION_CATALOG } from '../../src/seed/permission-catalog';
 import { PERMISSIONS } from '../../src/seed/permissions';
 import { COMMERCIAL_PERMISSIONS } from '../../src/seed/commercial-permissions';
 import { PROCUREMENT_PERMISSIONS } from '../../src/seed/procurement-permissions';
+import { LAYER1_PERMISSIONS } from '../../src/seed/layer1-permissions';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,23 +43,37 @@ function collectTsFiles(dir: string, acc: string[] = []): string[] {
 }
 
 /**
- * Extract permission codes from source text.
- * Matches patterns like:
- *   ctx.user.permissions.includes('ipa.view')
- *   ctx.entityPermissions.includes('rfq.edit')
- *   permissions.includes('system.admin')
+ * Patterns used to find permission code references in router source text.
+ * Each pattern captures the literal code into group 1.
+ *
+ * Coverage:
+ *   - {namespace.}permissions.includes('X') — covers permissions and entityPermissions
+ *     (e.g., ctx.user.permissions.includes(...), ctx.entityPermissions.includes(...))
+ *   - hasPerm(ctx, 'X') — current canonical pattern; first arg constrained to a
+ *     bare or dotted identifier (ctx, this.ctx) to avoid matching function
+ *     declarations like `function hasPerm(ctx: { user: ... }, perm)` or letting an
+ *     unbounded lazy quantifier slide into nearby JSDoc/code below — both of which
+ *     produced false positives during the initial PIC-15 fix attempt.
+ *
+ * Case-insensitivity on the first pattern is what lets `\w*permissions` match
+ * both `permissions` and `entityPermissions` (the capital P in the latter
+ * would otherwise prevent the literal match).
+ *
+ * Any reference reaching a code that isn't in PERMISSION_CATALOG would
+ * silently fail closed in production — this scan catches the drift at CI time.
  */
+const PERMISSION_REFERENCE_PATTERNS: RegExp[] = [
+  /\b(?:\w+\.)*\w*permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/gi,
+  /\bhasPerm\(\s*\w+(?:\.\w+)*\s*,\s*['"]([^'"]+)['"]\s*\)/g,
+];
+
 function extractPermissionChecks(source: string, filePath: string): { code: string; line: number; file: string }[] {
   const results: { code: string; line: number; file: string }[] = [];
-  const regex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
-  const lines = source.split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    let match: RegExpExecArray | null;
-    // Reset regex for each line
-    const lineRegex = /permissions\.includes\(\s*['"]([^'"]+)['"]\s*\)/g;
-    while ((match = lineRegex.exec(lines[i]!)) !== null) {
-      results.push({ code: match[1]!, line: i + 1, file: filePath });
+  for (const pattern of PERMISSION_REFERENCE_PATTERNS) {
+    for (const match of source.matchAll(pattern)) {
+      const idx = match.index ?? 0;
+      const line = source.slice(0, idx).split('\n').length;
+      results.push({ code: match[1]!, line, file: filePath });
     }
   }
   return results;
@@ -86,6 +102,11 @@ describe('Permission Catalog Guardrail', () => {
     expect(PERMISSION_CATALOG.has('ipc.list')).toBe(false);
     expect(PERMISSION_CATALOG.has('variation.list')).toBe(false);
 
+    // Retired: *.transition was replaced by granular mapping in apps/web/server/routers/commercial/transition-permissions.ts.
+    expect(PERMISSION_CATALOG.has('ipa.transition')).toBe(false);
+    expect(PERMISSION_CATALOG.has('ipc.transition')).toBe(false);
+    expect(PERMISSION_CATALOG.has('variation.transition')).toBe(false);
+
     // These DO exist in the catalog
     expect(PERMISSION_CATALOG.has('ipa.view')).toBe(true);
     expect(PERMISSION_CATALOG.has('ipc.view')).toBe(true);
@@ -95,11 +116,8 @@ describe('Permission Catalog Guardrail', () => {
   it('should include the newly-added commercial actions', () => {
     // Added during System Integrity Pass to match existing router checks
     expect(PERMISSION_CATALOG.has('ipa.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('ipa.transition')).toBe(true);
     expect(PERMISSION_CATALOG.has('ipc.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('ipc.transition')).toBe(true);
     expect(PERMISSION_CATALOG.has('variation.delete')).toBe(true);
-    expect(PERMISSION_CATALOG.has('variation.transition')).toBe(true);
   });
 
   it('every permission checked in tRPC routers must exist in the catalog', () => {
@@ -127,7 +145,7 @@ describe('Permission Catalog Guardrail', () => {
         ...violations,
         '',
         'Fix: add the missing code to the appropriate seed file',
-        '  (permissions.ts, commercial-permissions.ts, or procurement-permissions.ts)',
+        '  (permissions.ts, commercial-permissions.ts, procurement-permissions.ts, or layer1-permissions.ts)',
         '  then re-run this test.',
       ].join('\n');
       expect.fail(msg);
@@ -139,6 +157,7 @@ describe('Permission Catalog Guardrail', () => {
       ...PERMISSIONS.map(p => p.code),
       ...COMMERCIAL_PERMISSIONS.map(p => p.code),
       ...PROCUREMENT_PERMISSIONS.map(p => p.code),
+      ...LAYER1_PERMISSIONS.map(p => p.code),
     ];
 
     const seen = new Set<string>();

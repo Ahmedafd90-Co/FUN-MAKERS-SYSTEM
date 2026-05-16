@@ -16,6 +16,17 @@
  *   Revised Contract Value:     27,500,000.00
  *   Submitted Variation Impact:  2,500,000.00
  *   Approved Variation Impact:   1,200,000.00
+ *
+ * PIC-35 Step 8 — seed authoring rule:
+ *   This fixture uses Option B from the seed authoring rule. It writes
+ *   `status` directly on entity rows (and matching workflow_instance rows
+ *   where applicable) under SEED_CONTEXT=true, bypassing the workflow
+ *   engine and Step 7's Prisma write guard. Rationale: re-walking the full
+ *   workflow per fixture (Option A) would inflate seed time substantially
+ *   while producing the same end-state. The synthetic audit trail produced
+ *   here is acceptable for demo-render purposes; if a future flow requires
+ *   a real audit trail for these fixtures (e.g., PIC-28 audit trail
+ *   surfacing), revisit and migrate to Option A then.
  */
 import type { PrismaClient } from '@prisma/client';
 

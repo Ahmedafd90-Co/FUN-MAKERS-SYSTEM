@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { VariationStatus } from '@fmksa/db';
 import type { CreateVariationInput, UpdateVariationInput, ListFilterInput } from '@fmksa/contracts';
 import type { VariationListFilter } from '@fmksa/contracts';
@@ -133,6 +133,8 @@ export async function transitionVariation(
   },
   projectId?: string,
 ) {
+  // PIC-35 Step 7: post-workflow lifecycle authorized via runAsWorkflowEngine.
+  return runAsWorkflowEngine(async () => {
   const newStatus = ACTION_TO_STATUS[action];
   if (!newStatus) {
     throw new Error(`Unknown Variation action: '${action}'`);
@@ -158,20 +160,13 @@ export async function transitionVariation(
     );
   }
 
-  // Workflow guard: block manual approval-phase actions when workflow is active.
+  // PIC-35 Step 6: workflow-managed actions are exclusively the workflow
+  // engine's responsibility. Refuse unconditionally to prevent dual-write
+  // drift. See ipa/service.ts for the full rationale comment.
   if (VARIATION_WORKFLOW_MANAGED_ACTIONS.includes(action)) {
-    const activeWorkflow = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType: 'variation',
-        recordId: id,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (activeWorkflow) {
-      throw new Error(
-        `Cannot manually '${action}' this Variation — the approval phase is managed by workflow instance ${activeWorkflow.id}. Use the workflow approval actions instead.`,
-      );
-    }
+    throw new Error(
+      `Cannot manually '${action}' this Variation — workflow-managed actions are exclusively the workflow engine's responsibility. Use the workflow approval actions instead.`,
+    );
   }
 
   // Transitions that require a transaction (posting, ref number, or assessment data)
@@ -338,6 +333,7 @@ export async function transitionVariation(
   }
 
   return updated;
+  });
 }
 
 // ---------------------------------------------------------------------------

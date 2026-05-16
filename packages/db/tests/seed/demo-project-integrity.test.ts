@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/index';
+import { assertTestDb } from '../helpers/assert-test-db';
 import { seedCommercialDemoData } from '../../src/seed/commercial-demo-data';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,9 @@ let testProjectId: string;
 let originalProjectCode: string | null = null;
 
 beforeAll(async () => {
+  // PIC-37: this test renames the real FMKSA-2026-001 project mid-run and
+  // crashes silently fail to revert it. Refuse against non-test databases.
+  assertTestDb();
   const entity = await prisma.entity.create({
     data: { code: `ENT-DEMO-${ts}`, name: 'Demo Test Entity', type: 'parent', status: 'active' },
   });

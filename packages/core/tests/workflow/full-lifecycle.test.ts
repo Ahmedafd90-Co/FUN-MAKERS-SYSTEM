@@ -14,6 +14,7 @@ import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow/instances';
 import { workflowStepService } from '../../src/workflow/steps';
 import { clearHandlers, on } from '../../src/workflow/events';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -27,6 +28,7 @@ let threeStepCode: string;
 const ts = `lifecycle-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 beforeAll(async () => {
+  assertTestDb();
   testUser = await prisma.user.create({
     data: {
       email: `wf-lifecycle-${ts}@test.com`,

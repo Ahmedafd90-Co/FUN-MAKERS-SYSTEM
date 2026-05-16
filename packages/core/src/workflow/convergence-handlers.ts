@@ -15,23 +15,57 @@
  *   - actorSource = 'system'
  *   - workflow instance ID, template code, step name, action context
  *
- * Supported record types: 'ipa', 'ipc', 'rfq', 'variation', 'correspondence'.
+ * Supported record types: 'ipa', 'ipc', 'rfq', 'variation', 'correspondence',
+ * 'purchase_order', 'supplier_invoice', 'expense'.
  *
  * Call registerConvergenceHandlers() once during app initialization.
  */
 
-import { prisma } from '@fmksa/db';
-import type { IpaStatus, IpcStatus, CorrespondenceStatus } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine } from '@fmksa/db';
+import type {
+  IpaStatus,
+  IpcStatus,
+  CorrespondenceStatus,
+  PurchaseOrderStatus,
+  SupplierInvoiceStatus,
+  ExpenseStatus,
+  CostProposalStatus,
+  TaxInvoiceStatus,
+  VendorContractStatus,
+  FrameworkAgreementStatus,
+  CreditNoteStatus,
+} from '@fmksa/db';
 import type { WorkflowEventPayload } from '@fmksa/contracts';
 import * as workflowEvents from './events';
 import { auditService } from '../audit/service';
 import { postingService } from '../posting/service';
+import { absorbPoCommitment, absorbSupplierInvoiceActual, absorbExpenseActual } from '../budget/absorption';
 
 // ---------------------------------------------------------------------------
 // Type registry — which record types have convergence wired
 // ---------------------------------------------------------------------------
 
-const CONVERGENCE_RECORD_TYPES = ['ipa', 'ipc', 'rfq', 'variation', 'correspondence'] as const;
+// PIC-35 Step 4: 5 manual-start entities added — cost_proposal, tax_invoice,
+// vendor_contract, framework_agreement, credit_note. These previously had
+// workflow templates but no convergence wiring; entity.status never updated
+// on workflow.approved / .rejected / .returned. See per-section comments
+// below for status-mapping divergences (tax_invoice and credit_note lack
+// some workflow-canonical statuses in their enums).
+const CONVERGENCE_RECORD_TYPES = [
+  'ipa',
+  'ipc',
+  'rfq',
+  'variation',
+  'correspondence',
+  'purchase_order',
+  'supplier_invoice',
+  'expense',
+  'cost_proposal',
+  'tax_invoice',
+  'vendor_contract',
+  'framework_agreement',
+  'credit_note',
+] as const;
 
 function isConvergenceWired(recordType: string): boolean {
   return (CONVERGENCE_RECORD_TYPES as readonly string[]).includes(recordType);
@@ -739,37 +773,1197 @@ async function handleCorrespondenceRejected(payload: WorkflowEventPayload): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Purchase Order convergence
+// ---------------------------------------------------------------------------
+//
+// When the workflow for a PO completes (approved / returned / rejected), we
+// drive the PO's status to match. On approval, we also run budget absorption
+// and fire the PO_COMMITTED posting event — the same side effects the manual
+// transition path has.
+//
+// KNOWN LIMITATION: If budget absorption fails with a blocking reason (e.g.
+// no budget line, no category mapping), the manual transition path reverts
+// the status. In the convergence path, by the time we get here the workflow
+// is already complete, so we leave the PO in 'approved' state and rely on
+// the recorded absorption exception to surface the problem to an admin.
+// A follow-up should pre-validate budget mapping before the final workflow
+// step can complete, so the error never lands post-approval.
+
+async function handlePoApproved(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({
+    where: { id: payload.recordId },
+    include: { project: true },
+  });
+  if (!po) return;
+  if (po.status === 'approved') return; // already converged (idempotent)
+
+  const beforeStatus = po.status;
+
+  // Update record status
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved' as PurchaseOrderStatus },
+  });
+
+  // Audit with workflow provenance
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_approved',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  // Budget absorption — same as the manual transition path. An absorption
+  // exception is recorded in the DB regardless of outcome; the block-and-
+  // revert behavior of the manual path is intentionally NOT replicated here
+  // (see file header comment above).
+  const absorption = await absorbPoCommitment(po.projectId, po.id, payload.actorUserId);
+  if (!absorption.absorbed) {
+    console.warn(
+      `[convergence] PO ${po.id}: budget absorption failed (${absorption.reasonCode}) — ${absorption.message}. Exception: ${absorption.exceptionId}. PO remains in 'approved' state; admin must resolve the absorption exception.`,
+    );
+  }
+
+  // Posting event: PO_COMMITTED — parity with manual transition path.
+  await postingService.post({
+    eventType: 'PO_COMMITTED',
+    sourceService: 'procurement',
+    sourceRecordType: 'purchase_order',
+    sourceRecordId: po.id,
+    projectId: po.projectId,
+    entityId: po.project.entityId,
+    idempotencyKey: `po-committed-${po.id}`,
+    payload: {
+      purchaseOrderId: po.id,
+      poNumber: po.poNumber,
+      vendorId: po.vendorId,
+      totalAmount: String(po.totalAmount),
+      currency: po.currency,
+      categoryId: po.categoryId,
+      projectId: po.projectId,
+      entityId: po.project.entityId,
+    },
+    actorUserId: payload.actorUserId,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → approved (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handlePoReturned(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: payload.recordId } });
+  if (!po) return;
+  if (po.status === 'returned') return; // idempotent
+
+  const beforeStatus = po.status;
+
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as PurchaseOrderStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_returned',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handlePoRejected(payload: WorkflowEventPayload): Promise<void> {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id: payload.recordId } });
+  if (!po) return;
+  if (po.status === 'rejected') return; // idempotent
+
+  const beforeStatus = po.status;
+
+  await prisma.purchaseOrder.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as PurchaseOrderStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'purchase_order.transition.workflow_rejected',
+    resourceType: 'purchase_order',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] PO ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Supplier Invoice convergence
+// ---------------------------------------------------------------------------
+//
+// When the workflow for an SI completes (approved / returned / rejected), we
+// drive the SI's status to match. On approval, we also run budget absorption
+// (SI approved → actualAmount++) and fire the SUPPLIER_INVOICE_APPROVED posting
+// event — the same side effects the manual transition path has.
+//
+// Option A semantics: workflow-returned SIs land in 'disputed' state (the
+// same state operators use for manual dispute). One state, unified meaning
+// — "this invoice has an issue that needs resolution".
+//
+// KNOWN LIMITATION: Same as PO — if budget absorption fails during workflow
+// approval, the SI stays at 'approved' and the absorption exception is
+// recorded for admin resolution. Follow-up: pre-validate budget mapping
+// before the final workflow step can complete.
+
+async function handleSupplierInvoiceApproved(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({
+    where: { id: payload.recordId },
+    include: { project: true },
+  });
+  if (!si) return;
+  if (si.status === 'approved') return; // already converged (idempotent)
+
+  const beforeStatus = si.status;
+
+  // Update record status
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved' as SupplierInvoiceStatus },
+  });
+
+  // Audit with workflow provenance
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_approved',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  // Budget absorption — SI approved → actualAmount++. Parity with manual path.
+  const absorption = await absorbSupplierInvoiceActual(si.projectId, si.id, payload.actorUserId);
+  if (!absorption.absorbed) {
+    console.warn(
+      `[convergence] SI ${si.id}: budget absorption failed (${absorption.reasonCode}) — ${absorption.message}. Exception: ${absorption.exceptionId}. SI remains in 'approved' state; admin must resolve the absorption exception.`,
+    );
+  }
+
+  // Posting event: SUPPLIER_INVOICE_APPROVED — same idempotency key as manual
+  // path, so duplicate events from both paths deduplicate at the posting service.
+  await postingService.post({
+    eventType: 'SUPPLIER_INVOICE_APPROVED',
+    sourceService: 'procurement',
+    sourceRecordType: 'supplier_invoice',
+    sourceRecordId: si.id,
+    projectId: si.projectId,
+    entityId: si.project.entityId,
+    idempotencyKey: `si-approved-${si.id}`,
+    payload: {
+      supplierInvoiceId: si.id,
+      invoiceNumber: si.invoiceNumber,
+      vendorId: si.vendorId,
+      purchaseOrderId: si.purchaseOrderId,
+      grossAmount: String(si.grossAmount),
+      vatAmount: String(si.vatAmount),
+      totalAmount: String(si.totalAmount),
+      currency: si.currency,
+      projectId: si.projectId,
+      entityId: si.project.entityId,
+    },
+    actorUserId: payload.actorUserId,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → approved (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleSupplierInvoiceReturned(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!si) return;
+  if (si.status === 'disputed') return; // idempotent
+
+  const beforeStatus = si.status;
+
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'disputed' as SupplierInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_returned',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'disputed',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → disputed (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleSupplierInvoiceRejected(payload: WorkflowEventPayload): Promise<void> {
+  const si = await prisma.supplierInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!si) return;
+  if (si.status === 'rejected') return; // idempotent
+
+  const beforeStatus = si.status;
+
+  await prisma.supplierInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as SupplierInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'supplier_invoice.transition.workflow_rejected',
+    resourceType: 'supplier_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] SI ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Expense convergence
+// ---------------------------------------------------------------------------
+//
+// When the workflow for an Expense completes (approved / returned / rejected),
+// we drive the Expense's status to match. On approval, we also run budget
+// absorption (Expense approved → actualAmount++) and fire the EXPENSE_APPROVED
+// posting event — the same side effects the manual transition path has.
+//
+// Uses a dedicated 'returned' state (introduced in this lane) rather than
+// overloading an existing state — matches the PO pattern, differs from SI's
+// 'disputed' reuse (SI's disputed had pre-existing operator semantics worth
+// preserving; Expense has no such state).
+//
+// KNOWN LIMITATION: Same as PO/SI — if budget absorption fails during
+// workflow approval, the expense stays at 'approved' and the absorption
+// exception is recorded for admin resolution. Follow-up: pre-validate
+// budget mapping before the final workflow step can complete.
+
+async function handleExpenseApproved(payload: WorkflowEventPayload): Promise<void> {
+  const expense = await prisma.expense.findUnique({
+    where: { id: payload.recordId },
+    include: { project: true },
+  });
+  if (!expense) return;
+  if (expense.status === 'approved') return; // already converged (idempotent)
+
+  const beforeStatus = expense.status;
+
+  await prisma.expense.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved' as ExpenseStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'expense.transition.workflow_approved',
+    resourceType: 'expense',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  const absorption = await absorbExpenseActual(expense.projectId, expense.id, payload.actorUserId);
+  if (!absorption.absorbed) {
+    console.warn(
+      `[convergence] Expense ${expense.id}: budget absorption failed (${absorption.reasonCode}) — ${absorption.message}. Exception: ${absorption.exceptionId}. Expense remains in 'approved' state; admin must resolve the absorption exception.`,
+    );
+  }
+
+  await postingService.post({
+    eventType: 'EXPENSE_APPROVED',
+    sourceService: 'procurement',
+    sourceRecordType: 'expense',
+    sourceRecordId: expense.id,
+    projectId: expense.projectId,
+    entityId: expense.project.entityId,
+    idempotencyKey: `expense-approved-${expense.id}`,
+    payload: {
+      expenseId: expense.id,
+      subtype: expense.subtype,
+      amount: String(expense.amount),
+      currency: expense.currency,
+      categoryId: expense.categoryId,
+      projectId: expense.projectId,
+      entityId: expense.project.entityId,
+    },
+    actorUserId: payload.actorUserId,
+  });
+
+  console.log(
+    `[convergence] Expense ${payload.recordId}: ${beforeStatus} → approved (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleExpenseReturned(payload: WorkflowEventPayload): Promise<void> {
+  const expense = await prisma.expense.findUnique({ where: { id: payload.recordId } });
+  if (!expense) return;
+  if (expense.status === 'returned') return;
+
+  const beforeStatus = expense.status;
+
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.expense.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as ExpenseStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'expense.transition.workflow_returned',
+    resourceType: 'expense',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] Expense ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleExpenseRejected(payload: WorkflowEventPayload): Promise<void> {
+  const expense = await prisma.expense.findUnique({ where: { id: payload.recordId } });
+  if (!expense) return;
+  if (expense.status === 'rejected') return;
+
+  const beforeStatus = expense.status;
+
+  await prisma.expense.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as ExpenseStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'expense.transition.workflow_rejected',
+    resourceType: 'expense',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] Expense ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CostProposal convergence (PIC-35 Step 4)
+//
+// All workflow outcomes map cleanly to enum values:
+//   approved  → 'approved_internal'
+//   returned  → 'returned'
+//   rejected  → 'rejected'
+// ---------------------------------------------------------------------------
+
+async function handleCostProposalApproved(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.costProposal.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'approved_internal') return; // idempotent
+
+  const beforeStatus = record.status;
+  await prisma.costProposal.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved_internal' as CostProposalStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'cost_proposal.transition.workflow_approved',
+    resourceType: 'cost_proposal',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved_internal',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] CostProposal ${payload.recordId}: ${beforeStatus} → approved_internal (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleCostProposalReturned(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.costProposal.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'returned') return; // idempotent
+
+  const beforeStatus = record.status;
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.costProposal.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as CostProposalStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'cost_proposal.transition.workflow_returned',
+    resourceType: 'cost_proposal',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] CostProposal ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleCostProposalRejected(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.costProposal.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'rejected') return; // idempotent
+
+  const beforeStatus = record.status;
+  await prisma.costProposal.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as CostProposalStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'cost_proposal.transition.workflow_rejected',
+    resourceType: 'cost_proposal',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] CostProposal ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TaxInvoice convergence (PIC-35 Step 4)
+//
+// Divergence note: TaxInvoiceStatus enum has NO `rejected` value. Workflow
+// rejection maps to `cancelled` (the closest negative-outcome terminal state).
+// If a future schema migration adds `rejected` to the enum, switch the target
+// here. The audit trail records the workflow-rejected event regardless, so
+// the provenance is preserved.
+// ---------------------------------------------------------------------------
+
+async function handleTaxInvoiceApproved(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.taxInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'approved_internal') return; // idempotent
+
+  const beforeStatus = record.status;
+  await prisma.taxInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved_internal' as TaxInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'tax_invoice.transition.workflow_approved',
+    resourceType: 'tax_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved_internal',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] TaxInvoice ${payload.recordId}: ${beforeStatus} → approved_internal (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleTaxInvoiceReturned(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.taxInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'returned') return; // idempotent
+
+  const beforeStatus = record.status;
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.taxInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as TaxInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'tax_invoice.transition.workflow_returned',
+    resourceType: 'tax_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] TaxInvoice ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleTaxInvoiceRejected(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.taxInvoice.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'cancelled') return; // idempotent
+
+  const beforeStatus = record.status;
+  // TaxInvoiceStatus has no `rejected` — map to `cancelled` (closest negative outcome).
+  await prisma.taxInvoice.update({
+    where: { id: payload.recordId },
+    data: { status: 'cancelled' as TaxInvoiceStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'tax_invoice.transition.workflow_rejected',
+    resourceType: 'tax_invoice',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'cancelled',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+        statusMappingNote: 'TaxInvoiceStatus has no `rejected`; mapped to `cancelled`.',
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" → tax_invoice.status='cancelled' (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] TaxInvoice ${payload.recordId}: ${beforeStatus} → cancelled [workflow rejected; no 'rejected' in enum] (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VendorContract convergence (PIC-35 Step 4)
+// ---------------------------------------------------------------------------
+
+async function handleVendorContractApproved(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.vendorContract.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'approved_internal') return;
+
+  const beforeStatus = record.status;
+  await prisma.vendorContract.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved_internal' as VendorContractStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'vendor_contract.transition.workflow_approved',
+    resourceType: 'vendor_contract',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved_internal',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] VendorContract ${payload.recordId}: ${beforeStatus} → approved_internal (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleVendorContractReturned(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.vendorContract.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'returned') return;
+
+  const beforeStatus = record.status;
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.vendorContract.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as VendorContractStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'vendor_contract.transition.workflow_returned',
+    resourceType: 'vendor_contract',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] VendorContract ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleVendorContractRejected(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.vendorContract.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'rejected') return;
+
+  const beforeStatus = record.status;
+  await prisma.vendorContract.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as VendorContractStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'vendor_contract.transition.workflow_rejected',
+    resourceType: 'vendor_contract',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] VendorContract ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FrameworkAgreement convergence (PIC-35 Step 4)
+// ---------------------------------------------------------------------------
+
+async function handleFrameworkAgreementApproved(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.frameworkAgreement.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'approved_internal') return;
+
+  const beforeStatus = record.status;
+  await prisma.frameworkAgreement.update({
+    where: { id: payload.recordId },
+    data: { status: 'approved_internal' as FrameworkAgreementStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'framework_agreement.transition.workflow_approved',
+    resourceType: 'framework_agreement',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'approved_internal',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] FrameworkAgreement ${payload.recordId}: ${beforeStatus} → approved_internal (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleFrameworkAgreementReturned(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.frameworkAgreement.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'returned') return;
+
+  const beforeStatus = record.status;
+  const instance = await loadInstanceContext(payload.instanceId);
+  const returnToStep = instance?.currentStepId
+    ? instance.template.steps.find((s) => s.id === instance.currentStepId)
+    : null;
+
+  await prisma.frameworkAgreement.update({
+    where: { id: payload.recordId },
+    data: { status: 'returned' as FrameworkAgreementStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'framework_agreement.transition.workflow_returned',
+    resourceType: 'framework_agreement',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'returned',
+      _convergence: {
+        trigger: 'workflow.returned',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        returnedByStep: payload.stepName ?? null,
+        returnedToStep: returnToStep?.name ?? null,
+        returnedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow returned at step "${payload.stepName}" → "${returnToStep?.name ?? 'unknown'}" (instance: ${payload.instanceId})`,
+  });
+
+  console.log(
+    `[convergence] FrameworkAgreement ${payload.recordId}: ${beforeStatus} → returned (step "${payload.stepName}" → "${returnToStep?.name}")`,
+  );
+}
+
+async function handleFrameworkAgreementRejected(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.frameworkAgreement.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'rejected') return;
+
+  const beforeStatus = record.status;
+  await prisma.frameworkAgreement.update({
+    where: { id: payload.recordId },
+    data: { status: 'rejected' as FrameworkAgreementStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'framework_agreement.transition.workflow_rejected',
+    resourceType: 'framework_agreement',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'rejected',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] FrameworkAgreement ${payload.recordId}: ${beforeStatus} → rejected (step "${payload.stepName}")`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CreditNote convergence (PIC-35 Step 4)
+//
+// Divergence note: CreditNoteStatus enum is a verification lifecycle
+// (received → verified → applied → closed), not an approval lifecycle.
+//   approved  → 'verified' (workflow verifies the credit note)
+//   returned  → SKIPPED (no `returned` in enum; workflow_instance.status='returned'
+//                still correctly tracks the workflow state — entity stays at
+//                current status until the next workflow transition fires)
+//   rejected  → 'cancelled' (closest negative-outcome state)
+// If a future schema migration adds `returned` and `rejected`, add a handler
+// for `returned` and switch the rejected target.
+// ---------------------------------------------------------------------------
+
+async function handleCreditNoteApproved(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.creditNote.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'verified') return;
+
+  const beforeStatus = record.status;
+  await prisma.creditNote.update({
+    where: { id: payload.recordId },
+    data: { status: 'verified' as CreditNoteStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'credit_note.transition.workflow_approved',
+    resourceType: 'credit_note',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'verified',
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+        statusMappingNote: 'CreditNote uses verification lifecycle; approved → verified.',
+      },
+    },
+    reason: `Workflow approval complete → credit_note.status='verified' (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] CreditNote ${payload.recordId}: ${beforeStatus} → verified (workflow ${payload.instanceId})`,
+  );
+}
+
+async function handleCreditNoteRejected(payload: WorkflowEventPayload): Promise<void> {
+  const record = await prisma.creditNote.findUnique({ where: { id: payload.recordId } });
+  if (!record) return;
+  if (record.status === 'cancelled') return;
+
+  const beforeStatus = record.status;
+  // CreditNoteStatus has no `rejected` — map to `cancelled`.
+  await prisma.creditNote.update({
+    where: { id: payload.recordId },
+    data: { status: 'cancelled' as CreditNoteStatus },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'credit_note.transition.workflow_rejected',
+    resourceType: 'credit_note',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus },
+    afterJson: {
+      status: 'cancelled',
+      _convergence: {
+        trigger: 'workflow.rejected',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        rejectedAtStep: payload.stepName ?? null,
+        rejectedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+        statusMappingNote: 'CreditNoteStatus has no `rejected`; mapped to `cancelled`.',
+      },
+    },
+    reason: `Workflow rejected at step "${payload.stepName}" → credit_note.status='cancelled' (instance: ${payload.instanceId}): ${payload.comment ?? 'no comment'}`,
+  });
+
+  console.log(
+    `[convergence] CreditNote ${payload.recordId}: ${beforeStatus} → cancelled [workflow rejected; no 'rejected' in enum] (step "${payload.stepName}")`,
+  );
+}
+
+// Note: No handleCreditNoteReturned — CreditNoteStatus has no `returned`.
+// Workflow.returned events for credit_note are silently ignored; the
+// workflow_instance.status='returned' remains the source of truth for
+// workflow-level state. See section comment above.
+
+// ---------------------------------------------------------------------------
 // Event dispatchers
 // ---------------------------------------------------------------------------
 
 async function onWorkflowApproved(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaApproved(payload);
-  if (payload.recordType === 'ipc') return handleIpcApproved(payload);
-  if (payload.recordType === 'rfq') return handleRfqApproved(payload);
-  if (payload.recordType === 'variation') return handleVariationApproved(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
+  // PIC-35 Step 7: status writes inside convergence handlers are authorized
+  // via runAsWorkflowEngine's AsyncLocalStorage scope. The Prisma extension
+  // blocks direct entity.status writes outside this scope.
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaApproved(payload);
+    if (payload.recordType === 'ipc') return handleIpcApproved(payload);
+    if (payload.recordType === 'rfq') return handleRfqApproved(payload);
+    if (payload.recordType === 'variation') return handleVariationApproved(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceApproved(payload);
+    if (payload.recordType === 'purchase_order') return handlePoApproved(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceApproved(payload);
+    if (payload.recordType === 'expense') return handleExpenseApproved(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalApproved(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceApproved(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractApproved(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementApproved(payload);
+    if (payload.recordType === 'credit_note') return handleCreditNoteApproved(payload);
+  });
 }
 
 async function onWorkflowReturned(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaReturned(payload);
-  if (payload.recordType === 'ipc') return handleIpcReturned(payload);
-  if (payload.recordType === 'rfq') return handleRfqReturned(payload);
-  if (payload.recordType === 'variation') return handleVariationReturned(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaReturned(payload);
+    if (payload.recordType === 'ipc') return handleIpcReturned(payload);
+    if (payload.recordType === 'rfq') return handleRfqReturned(payload);
+    if (payload.recordType === 'variation') return handleVariationReturned(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceReturned(payload);
+    if (payload.recordType === 'purchase_order') return handlePoReturned(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceReturned(payload);
+    if (payload.recordType === 'expense') return handleExpenseReturned(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalReturned(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceReturned(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractReturned(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementReturned(payload);
+    // credit_note has no `returned` in its enum — workflow.returned events are
+    // silently ignored at the convergence layer (workflow_instance.status='returned'
+    // still tracks workflow-level state correctly).
+  });
 }
 
 async function onWorkflowRejected(payload: WorkflowEventPayload): Promise<void> {
   if (!isConvergenceWired(payload.recordType)) return;
-
-  if (payload.recordType === 'ipa') return handleIpaRejected(payload);
-  if (payload.recordType === 'ipc') return handleIpcRejected(payload);
-  if (payload.recordType === 'rfq') return handleRfqRejected(payload);
-  if (payload.recordType === 'variation') return handleVariationRejected(payload);
-  if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
+  await runAsWorkflowEngine(async () => {
+    if (payload.recordType === 'ipa') return handleIpaRejected(payload);
+    if (payload.recordType === 'ipc') return handleIpcRejected(payload);
+    if (payload.recordType === 'rfq') return handleRfqRejected(payload);
+    if (payload.recordType === 'variation') return handleVariationRejected(payload);
+    if (payload.recordType === 'correspondence') return handleCorrespondenceRejected(payload);
+    if (payload.recordType === 'purchase_order') return handlePoRejected(payload);
+    if (payload.recordType === 'supplier_invoice') return handleSupplierInvoiceRejected(payload);
+    if (payload.recordType === 'expense') return handleExpenseRejected(payload);
+    if (payload.recordType === 'cost_proposal') return handleCostProposalRejected(payload);
+    if (payload.recordType === 'tax_invoice') return handleTaxInvoiceRejected(payload);
+    if (payload.recordType === 'vendor_contract') return handleVendorContractRejected(payload);
+    if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementRejected(payload);
+    if (payload.recordType === 'credit_note') return handleCreditNoteRejected(payload);
+  });
 }
 
 // ---------------------------------------------------------------------------

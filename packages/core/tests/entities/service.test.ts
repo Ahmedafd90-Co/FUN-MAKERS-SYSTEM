@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { entitiesService } from '../../src/entities/service';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getAncestors,
   getDescendants,
@@ -15,6 +16,7 @@ let testUser: { id: string };
 const ts = Date.now();
 
 beforeAll(async () => {
+  assertTestDb();
   await (prisma as any).$executeRaw`TRUNCATE TABLE audit_logs CASCADE`;
 
   testUser = await prisma.user.create({

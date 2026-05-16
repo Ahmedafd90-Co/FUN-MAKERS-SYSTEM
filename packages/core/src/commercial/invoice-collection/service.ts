@@ -9,7 +9,7 @@
  * All arithmetic uses Prisma Decimal (Decimal.js) — no JS float math.
  */
 
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { RecordCollectionInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 
@@ -81,8 +81,17 @@ export async function recordCollection(input: RecordCollectionInput, actorUserId
     newStatus = 'partially_collected';
   }
 
-  // Record collection and update invoice status in a single transaction
-  const result = await prisma.$transaction(async (tx) => {
+  // Record collection and update invoice status in a single transaction.
+  // PIC-47: recordCollection is the canonical writer for the `partially_collected`
+  // / `collected` sub-lifecycle of TaxInvoiceStatus. It's not a workflow transition
+  // (no workflow_instance involvement) — it's a downstream financial-recording
+  // event. Wrap the whole $transaction in runAsWorkflowEngine to declare
+  // authorization to the PIC-35 Step 7 guardrail. (The wrap must be OUTSIDE
+  // the $transaction: AsyncLocalStorage doesn't propagate across Prisma's
+  // transactional client boundary when set inside the tx callback — verified
+  // against the working pattern in correspondence/service.ts:170 which wraps
+  // before the $transaction.)
+  const result = await runAsWorkflowEngine(() => prisma.$transaction(async (tx) => {
     const collection = await tx.invoiceCollection.create({
       data: {
         taxInvoiceId: input.taxInvoiceId,
@@ -148,7 +157,7 @@ export async function recordCollection(input: RecordCollectionInput, actorUserId
     }
 
     return { collection, invoice: updatedInvoice, statusChanged };
-  });
+  }));
 
   return result;
 }

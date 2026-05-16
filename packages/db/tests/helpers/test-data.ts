@@ -1,4 +1,5 @@
 import { prisma } from '../../src/client';
+import { assertTestDb } from './assert-test-db';
 
 export async function createTestUser(
   overrides?: Partial<{
@@ -81,8 +82,13 @@ export async function createTestDocumentWithVersion(
  * Clean all test data. Uses raw TRUNCATE to avoid both FK ordering headaches
  * and the no-delete-on-immutable middleware. TRUNCATE ... CASCADE handles
  * dependencies automatically.
+ *
+ * PIC-37: assertTestDb() at the top is the inline guardrail — even if the
+ * vitest setup file is bypassed, this function refuses to TRUNCATE against
+ * any database whose URL doesn't contain `_test`.
  */
 export async function cleanTestData() {
+  assertTestDb();
   // Use a single raw statement with TRUNCATE CASCADE for all test tables.
   // This is the most reliable approach for test cleanup.
   await (prisma as any).$executeRaw`

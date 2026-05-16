@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getEffectiveRoles,
   getPermissionCodes,
@@ -36,6 +37,7 @@ let masterAdminRoleId: string;
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  assertTestDb();
   // Create test users
   testUser = await prisma.user.create({
     data: {

@@ -11,13 +11,22 @@ export async function cleanTestData(prisma: PrismaClient) {
   console.log('  Cleaning orphaned test data...');
 
   const SEED_PROJECT_CODES = ['FMKSA-2026-001', 'FMKSA-2026-002', 'FMKSA-2026-003', 'FMKSA-DEMO-001'];
-  const SEED_ENTITY_CODES = ['PICOPLAY-KSA', 'FMKSA-OPS', 'FMKSA-RUH', 'FMKSA-JED'];
+  const SEED_ENTITY_CODES = [
+    // Internal corporate structure (sample-entity.ts)
+    'PICOPLAY-KSA', 'FMKSA-OPS', 'FMKSA-RUH', 'FMKSA-JED',
+    // PIC-33 Layer 1 demo data — external client entities + shared consultant + sub
+    'CLIENT-RCU', 'CLIENT-GEA', 'CLIENT-JDC', 'CLIENT-DEMO',
+    'CONSULT-DAR', 'SUB-AVENG',
+  ];
   const SEED_USER_EMAILS = [
     'ahmedafd90@gmail.com',
     'khalid.rashid@fmksa.demo',
     'sara.fahad@fmksa.demo',
     'omar.hassan@fmksa.demo',
     'fatima.zahrani@fmksa.demo',
+    // PIC-25 QA fixture users.
+    'view.only@fmksa.demo',
+    'no.perm@fmksa.demo',
   ];
 
   const testProjects = await prisma.project.findMany({
