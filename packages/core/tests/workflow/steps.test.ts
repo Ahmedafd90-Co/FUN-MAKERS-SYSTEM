@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow/instances';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   workflowStepService,
   StepMismatchError,
@@ -26,6 +27,7 @@ let threeStepCode: string;
 const ts = `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 beforeAll(async () => {
+  assertTestDb();
   testUser = await prisma.user.create({
     data: {
       email: `wf-step-1-${ts}@test.com`,

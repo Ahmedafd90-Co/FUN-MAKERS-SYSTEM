@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { assertTestDb } from './helpers/assert-test-db';
 import {
   unauthenticatedCaller,
   masterAdminCaller,
@@ -30,6 +31,7 @@ let nonAdminUserId: string;
 let testRoleId: string;
 
 beforeAll(async () => {
+  assertTestDb();
   const user = await prisma.user.create({
     data: {
       email: `permdeny-${ts}@test.com`,

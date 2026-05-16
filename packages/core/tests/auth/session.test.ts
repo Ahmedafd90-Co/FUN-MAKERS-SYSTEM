@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { hashPassword } from '../../src/auth/password';
 import { sessionService } from '../../src/auth/session';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   InvalidCredentialsError,
   AccountLockedError,
@@ -15,6 +16,7 @@ const TEST_UA = 'vitest/1.0';
 let testUserId: string;
 
 beforeAll(async () => {
+  assertTestDb();
   // Clean up any previous test user and related data
   const existingUser = await prisma.user.findUnique({
     where: { email: TEST_EMAIL },

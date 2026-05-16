@@ -43,6 +43,7 @@ import * as workflowEvents from '../../src/workflow/events';
 import type { WorkflowEventPayload, WorkflowEventName } from '@fmksa/contracts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Convergence mapping table — the canonical PIC-35 contract per entity.
@@ -258,6 +259,7 @@ describe('PIC-35 status-invariant contract', () => {
   const recordIds = new Map<string, string>();
 
   beforeAll(async () => {
+    assertTestDb();
     // Register handlers so workflow events fire the convergence chain
     workflowEvents.clearHandlers();
     registerConvergenceHandlers();

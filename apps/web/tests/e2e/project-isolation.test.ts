@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   router,
   createCallerFactory,
@@ -63,6 +64,7 @@ function pastDate(days: number): Date {
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  assertTestDb();
   // Entity
   const entity = await prisma.entity.create({
     data: {

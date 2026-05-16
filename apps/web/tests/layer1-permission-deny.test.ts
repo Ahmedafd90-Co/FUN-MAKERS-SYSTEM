@@ -17,6 +17,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
+import { assertTestDb } from './helpers/assert-test-db';
 import {
   unauthenticatedCaller,
   authenticatedCaller,
@@ -151,6 +152,7 @@ async function makeUserWithRole(opts: {
 }
 
 beforeAll(async () => {
+  assertTestDb();
   // ── Shared entity + project ──
   // Always create — never findFirst. Earlier this used findFirst() which on a
   // fully-seeded dev DB returned a mismatched entity↔project pair (the project

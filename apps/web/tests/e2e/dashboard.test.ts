@@ -7,7 +7,7 @@
  *   - Non-admin user gets empty recentActivity
  *   - Unauthenticated caller is rejected
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import {
   unauthenticatedCaller,
@@ -15,8 +15,13 @@ import {
   authenticatedCaller,
 } from '../helpers/auth-test-callers';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 describe('dashboard.summary', () => {
+  beforeAll(() => {
+    assertTestDb();
+  });
+
   it('rejects unauthenticated caller', async () => {
     const caller = await unauthenticatedCaller();
     await expect(caller.dashboard.summary()).rejects.toThrow(TRPCError);

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { getScreenPermissions } from '../../src/access-control/screen-permissions';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,6 +25,7 @@ let screenPermIds: string[] = [];
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  assertTestDb();
   user = await prisma.user.create({
     data: {
       email: `screen-perm-${Date.now()}@test.com`,

@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { auditService } from '../../src/audit/service';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 describe('auditService.log', () => {
   beforeEach(async () => {
+    assertTestDb();
     // Clean audit_logs before each test (use raw query since delete is
     // blocked by the no-delete-on-immutable middleware).
     await (prisma as any).$executeRaw`TRUNCATE TABLE audit_logs CASCADE`;

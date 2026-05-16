@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { documentService } from '../../src/documents/service';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Document service integration tests
@@ -18,6 +19,8 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
   const ts = Date.now();
 
   beforeAll(async () => {
+
+    assertTestDb();
 
     testUser = await prisma.user.create({
       data: {

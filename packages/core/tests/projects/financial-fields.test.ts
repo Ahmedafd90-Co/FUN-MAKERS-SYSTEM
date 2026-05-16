@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { projectsService } from '../../src/projects/service';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -11,6 +12,7 @@ let testEntity: { id: string };
 let testUser: { id: string };
 
 beforeAll(async () => {
+  assertTestDb();
   testEntity = await prisma.entity.create({
     data: { code: `ENT-FIN-${ts}`, name: 'Financial Fields Test Entity', type: 'parent', status: 'active' },
   });

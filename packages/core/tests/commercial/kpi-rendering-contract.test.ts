@@ -19,6 +19,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { getFinancialKpis, type KpiValue } from '../../src/commercial/dashboard/financial-kpis';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getKpiDefinition,
   getSupportedKpis,
@@ -37,6 +38,7 @@ let projectWithBudgetId: string;
 let projectWithoutBudgetId: string;
 
 beforeAll(async () => {
+  assertTestDb();
   const entity = await prisma.entity.create({
     data: { code: `ENT-RENDER-${ts}`, name: 'Render Test', type: 'parent', status: 'active' },
   });

@@ -1,0 +1,48 @@
+/**
+ * PIC-38 — defense-in-depth guardrail for destructive @fmksa/core tests.
+ *
+ * Mirrors packages/db/tests/helpers/assert-test-db.ts (PIC-37). The vitest setup
+ * file (packages/core/tests/setup-test-db.ts) is the primary line of defense:
+ * it re-routes DATABASE_URL to DATABASE_URL_TEST before any test file imports
+ * `prisma`. This helper is the secondary defense — call it from `beforeAll` in
+ * any test that TRUNCATEs, seeds, or otherwise destructively writes. If someone
+ * skips the setup file (e.g. by running `vitest run` with a different config),
+ * the inline assertion still aborts the run.
+ *
+ * Fail-loud by design: throws on any URL whose database NAME doesn't end in
+ * `_test`. The check parses the URL and inspects the pathname's last segment,
+ * so `_test` appearing in username, host, or query string does not falsely pass.
+ */
+
+/**
+ * Returns true iff `rawUrl` parses as a URL whose pathname's last segment
+ * (the database name in postgres connection strings) ends with `_test`.
+ * Returns false on any parse error or any non-test database.
+ */
+export function isTestDatabaseUrl(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl);
+    const dbName = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+    return dbName.endsWith('_test');
+  } catch {
+    return false;
+  }
+}
+
+/** Mask the user:pass segment of a connection string so error messages don't leak credentials. */
+function redactPassword(url: string): string {
+  return url.replace(/:[^:@/]+@/, ':***@');
+}
+
+export function assertTestDb(): void {
+  const url = process.env.DATABASE_URL ?? '';
+  if (!isTestDatabaseUrl(url)) {
+    const display = url ? redactPassword(url) : '(unset)';
+    throw new Error(
+      `PIC-38 guardrail: refusing to run destructive @fmksa/core test against ` +
+        `${display}. Expected DATABASE_URL to point at a *_test database ` +
+        `(database name ending in _test). ` +
+        `Check vitest setup wiring at packages/core/tests/setup-test-db.ts.`,
+    );
+  }
+}

@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from './helpers/assert-test-db';
 import {
   masterAdminCaller,
   unauthenticatedCaller,
@@ -29,6 +30,7 @@ let inactiveUserId: string;
 const bulkUserIds: string[] = [];
 
 beforeAll(async () => {
+  assertTestDb();
   // Create an active user with a unique, searchable name
   const activeUser = await prisma.user.create({
     data: {

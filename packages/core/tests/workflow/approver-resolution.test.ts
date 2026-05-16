@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   resolveApprovers,
   isValidApprover,
@@ -20,6 +21,8 @@ let testProject: { id: string };
 const ts = `apr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 beforeAll(async () => {
+
+  assertTestDb();
 
   testUser1 = await prisma.user.create({
     data: {
