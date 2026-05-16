@@ -41,6 +41,7 @@ import { seedProcurementCategories } from './procurement-categories';
 import { seedCommercialDemoData } from './commercial-demo-data';
 import { seedBudgetCategories } from './budget-categories';
 import { seedE2eDemo } from './e2e-demo';
+import { seedLayer1DemoData } from './layer1-demo-data';
 
 const prisma = new PrismaClient();
 
@@ -80,6 +81,10 @@ async function main() {
   await seedBudgetCategories(prisma);
   await seedCommercialDemoData(prisma);
   await seedE2eDemo(prisma);
+  // PIC-33: populate ProjectParticipants + PrimeContracts for the 4 demo
+  // projects. Must run after sample-project (projects exist), sample-entity
+  // (FMKSA-OPS exists), and master-admin (createdBy actor exists).
+  await seedLayer1DemoData(prisma);
 
   console.log('✅ Seeding complete.');
 }
