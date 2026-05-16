@@ -165,7 +165,7 @@ describe('Supplier Invoice Workflow Convergence Proof', () => {
     vendorId: testVendor.id,
     invoiceDate: new Date().toISOString(),
     grossAmount: 50000,
-    vatRate: 15,
+    vatRate: 0.15,
     vatAmount: 7500,
     totalAmount: 57500,
     currency: 'SAR',

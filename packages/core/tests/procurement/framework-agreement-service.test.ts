@@ -22,6 +22,14 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
     purchaseOrder: {
       aggregate: vi.fn(),
     },
+    // PIC-43 D3-A: PR-W2A Step 5's auto-seed wiring calls resolveTemplate on
+    // the create path, which touches these 4 models. Null returns make
+    // resolveTemplate yield "no template configured" → autoSeed logs a
+    // warning and exits gracefully (no throw). See template-resolution.ts.
+    projectSetting: { findUnique: vi.fn().mockResolvedValue(null) },
+    project: { findUnique: vi.fn().mockResolvedValue(null) },
+    entity: { findUnique: vi.fn().mockResolvedValue(null) },
+    workflowTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   mockPrisma.$transaction = vi.fn().mockImplementation((cbOrArr: any) => {
     if (typeof cbOrArr === 'function') return cbOrArr(mockPrisma);
@@ -38,7 +46,7 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
   return { mockPrisma, mockAuditLog, mockPrismaNamespace };
 });
 
-vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace }));
+vi.mock('@fmksa/db', () => ({ prisma: mockPrisma, Prisma: mockPrismaNamespace, runAsWorkflowEngine: (fn: any) => fn() }));
 vi.mock('../../src/audit/service', () => ({
   auditService: { log: (...args: unknown[]) => mockAuditLog(...args) },
 }));
