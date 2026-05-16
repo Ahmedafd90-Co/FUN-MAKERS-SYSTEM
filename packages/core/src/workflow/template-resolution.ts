@@ -113,7 +113,52 @@ export async function resolveTemplate(
     if (subtypeFallback) return { code: subtypeFallback.code, source: 'system_default' };
   }
 
-  // Generic fallback — first active template matching the record type
+  // Generic fallback — PIC-41 governance fix.
+  //
+  // Convention: the `*_standard` template for each record type is the safe
+  // default. Higher-authority variants (e.g. `*_high_value` escalating to PD)
+  // exist alongside and require explicit configuration to select.
+  //
+  // Before this fix, the fallback did `orderBy: { code: 'asc' }` and returned
+  // the alphabetically-first match. For Expense/PO, `'h' < 's'` meant
+  // `*_high_value` ALWAYS won, routing 100% of Expenses and POs to PD
+  // approval by accident. The Finance and Contracts-Manager approval tiers
+  // were dead code. The threshold-based escalation to PD authority was never
+  // formally defined as policy — it just happened by alphabetical accident.
+  // See PIC-41 for the governance finding.
+  //
+  // The conventional default `${recordType}_standard` is checked first. If
+  // exact-prefix doesn't match, fall through to any `_standard`-suffixed
+  // template for this recordType (covers the legacy `po_standard` /
+  // recordType=`purchase_order` naming inconsistency without forcing a
+  // seed-data rename). If neither, fall through to the original alphabetical-
+  // first behaviour as a safety net for record types where no `_standard`
+  // variant has been established yet.
+  //
+  // Record types that should escalate to a higher-authority variant per
+  // amount (e.g. `*_high_value`) must configure the escalation via the
+  // projectSetting mechanism at tier-1, not here. This generic fallback is
+  // the safe, lowest-authority default — never the escalation path.
+  const standardDefault = await prisma.workflowTemplate.findFirst({
+    where: { recordType, isActive: true, code: `${recordType}_standard` },
+    select: { code: true },
+  });
+  if (standardDefault) {
+    return { code: standardDefault.code, source: 'system_default' };
+  }
+
+  const standardSuffix = await prisma.workflowTemplate.findFirst({
+    where: { recordType, isActive: true, code: { endsWith: '_standard' } },
+    orderBy: { code: 'asc' },
+    select: { code: true },
+  });
+  if (standardSuffix) {
+    return { code: standardSuffix.code, source: 'system_default' };
+  }
+
+  // Final fall-through for record types without ANY `*_standard` variant.
+  // Still alphabetical-first; preserved to avoid breaking record types where
+  // no standard convention has been established yet.
   const fallback = await prisma.workflowTemplate.findFirst({
     where: { recordType, isActive: true },
     orderBy: { code: 'asc' },
