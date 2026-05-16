@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   notify,
   markAsRead,
@@ -19,6 +20,7 @@ let testUser: { id: string };
 let otherUser: { id: string };
 
 beforeAll(async () => {
+  assertTestDb();
   [testUser, otherUser] = await Promise.all([
     prisma.user.create({
       data: {

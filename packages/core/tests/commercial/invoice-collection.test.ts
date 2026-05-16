@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma, Prisma } from '@fmksa/db';
 import { recordCollection, listCollections, getOutstandingAmount } from '../../src/commercial/invoice-collection/service';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -37,6 +38,7 @@ async function createCollectableInvoice(totalAmount = 10000) {
 }
 
 beforeAll(async () => {
+  assertTestDb();
   const entity = await prisma.entity.create({
     data: { code: `ENT-COLL-${ts}`, name: 'Collection Test Entity', type: 'parent', status: 'active' },
   });

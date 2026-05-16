@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 import {
   verifyRecordInProject,
   UnsupportedRecordTypeError,
@@ -17,6 +18,7 @@ describe('verifyRecordInProject', () => {
   let cnId: string;
 
   beforeAll(async () => {
+    assertTestDb();
     const ts = Date.now();
 
     // Entity (shared by both projects + the vendor)

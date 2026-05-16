@@ -15,6 +15,7 @@ import {
   authenticatedCaller,
 } from '../helpers/auth-test-callers';
 import { prisma } from '@fmksa/db';
+import { assertTestDb } from '../helpers/assert-test-db';
 
 describe('dashboard.summary', () => {
   it('rejects unauthenticated caller', async () => {
@@ -47,6 +48,7 @@ describe('dashboard.summary', () => {
   });
 
   it('non-admin gets empty recentActivity', async () => {
+    assertTestDb();
     // Create a regular user with no admin permissions
     const ts = Date.now();
     const user = await prisma.user.create({
