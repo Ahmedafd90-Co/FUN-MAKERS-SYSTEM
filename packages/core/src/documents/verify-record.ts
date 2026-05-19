@@ -1,23 +1,61 @@
 import { prisma } from '@fmksa/db';
+import { RECORD_TYPES_FOR_DOCUMENTS, type DocumentRecordType } from '@fmksa/contracts';
 import { assertProjectScope } from '../scope-binding';
 
 /**
- * Record types that can have documents attached via the polymorphic FK on Document.
- * Adding a new type here is the only change needed to support attachments for that
- * record family — the upload flow, list filter, and detail-page card all work generically.
+ * Document attachment recordType registry — verification side.
  *
- * The schema layer (CreateDocumentSchema.recordType) is intentionally loose (z.string().optional())
- * to preserve the polymorphic-by-design contract. This allowlist enforces validity at runtime
- * with fail-fast errors and clear messages.
+ * The canonical source of registered recordTypes lives in `@fmksa/contracts`
+ * (`RECORD_TYPES_FOR_DOCUMENTS`) so the Zod schemas there can declare
+ * `recordType` as an enum at compile time. This file holds the runtime
+ * verification: a switch statement that calls `prisma.<model>.findUniqueOrThrow`
+ * per registered type and then asserts the record belongs to the caller's
+ * project scope.
+ *
+ * # Convention for adding a new recordType (PIC-51)
+ *
+ * To add a new recordType for Document attachment, do ALL THREE atomically in
+ * ONE PR:
+ *
+ *   1. PUSH the new value to `RECORD_TYPES_FOR_DOCUMENTS` in
+ *      `packages/contracts/src/documents.ts` (the canonical source). The Zod
+ *      enum `DocumentRecordTypeSchema` derives from it; the API boundary
+ *      `CreateDocumentSchema.recordType` then rejects unregistered types at
+ *      parse time.
+ *
+ *   2. ADD a switch case in `verifyRecordInProject` (below) that does:
+ *        case 'X':
+ *          record = await prisma.x.findUniqueOrThrow({
+ *            where: { id: recordId },
+ *            select: { projectId: true },
+ *          });
+ *          break;
+ *      The case falls through to the shared `assertProjectScope` call at the
+ *      end — do not duplicate the scope check inside the case.
+ *
+ *   3. SHIP them together as one atomic change. The parity-guard test at
+ *      `packages/core/tests/documents/verify-record-parity.test.ts` WILL fail
+ *      if (1) was done without (2). This is intentional — drift between the
+ *      const and the switch is the PIC-50 class of silent-mis-resolution at
+ *      this layer (registered type with no handler = runtime
+ *      UnsupportedRecordTypeError even though the API accepted it), and we
+ *      catch it structurally rather than by human discipline.
+ *
+ * # Failure modes the parity-guard catches
+ *
+ *   - Const entry without a switch case → for that registered type, the
+ *     switch falls through to `default` and throws
+ *     `UnsupportedRecordTypeError` at runtime. The parity test detects this
+ *     by calling `verifyRecordInProject` with each registered type and a
+ *     fake UUID; it expects EITHER a Prisma not-found error (case exists)
+ *     OR no error, but never `UnsupportedRecordTypeError`.
+ *
+ *   - Switch case without a const entry → the API-boundary Zod enum
+ *     rejects the type before it reaches the switch, so the case is dead
+ *     code. Not load-bearing but should be removed for hygiene; the parity
+ *     test's symmetric direction (Zod-schema-accepts-every-const-value)
+ *     catches it.
  */
-export const RECORD_TYPES_FOR_DOCUMENTS = [
-  'expense',
-  'purchase_order',
-  'supplier_invoice',
-  'credit_note',
-] as const;
-
-export type DocumentRecordType = (typeof RECORD_TYPES_FOR_DOCUMENTS)[number];
 
 export class UnsupportedRecordTypeError extends Error {
   constructor(recordType: string) {
@@ -31,9 +69,9 @@ export class UnsupportedRecordTypeError extends Error {
 
 /**
  * Verify that the record (recordType, recordId) exists and belongs to projectId.
- * Throws on miss or mismatch. Used by createDocument when both recordType and recordId
- * are provided — protects against unconstrained polymorphic FK attaching to records
- * the user doesn't have access to.
+ * Throws on miss or mismatch. Used by createDocument when both recordType and
+ * recordId are provided — protects against unconstrained polymorphic FK
+ * attaching to records the user doesn't have access to.
  */
 export async function verifyRecordInProject(
   recordType: string,
@@ -73,3 +111,8 @@ export async function verifyRecordInProject(
 
   assertProjectScope(record, projectId, recordType, recordId);
 }
+
+// Re-export the canonical source from @fmksa/contracts so existing
+// `import { RECORD_TYPES_FOR_DOCUMENTS } from '@fmksa/core'` call sites
+// continue to work without changes.
+export { RECORD_TYPES_FOR_DOCUMENTS, type DocumentRecordType };
