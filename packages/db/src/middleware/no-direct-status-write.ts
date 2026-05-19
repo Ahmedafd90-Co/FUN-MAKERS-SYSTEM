@@ -41,8 +41,15 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 /**
  * The 13 workflow-driven entity models (Prisma model names, Pascal case).
  * Status writes on these tables go through `runAsWorkflowEngine` or fail.
+ *
+ * Exported (PIC-50) so the template-registry parity test in `@fmksa/core`
+ * can assert that every workflow-managed model has a matching entry in
+ * `WORKFLOW_TEMPLATE_REGISTRY` (declared in `@fmksa/contracts`). Drift
+ * between the two — a new entity added here but missing from the
+ * registry, or vice versa — is exactly the silent-mis-resolution class
+ * PIC-50 exists to prevent.
  */
-const WORKFLOW_DRIVEN_MODELS = [
+export const WORKFLOW_DRIVEN_MODELS = [
   // 8 auto-start (workflow.start fires on entity submit)
   'Ipa',
   'Ipc',
