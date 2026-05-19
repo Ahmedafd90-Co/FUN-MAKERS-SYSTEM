@@ -105,6 +105,19 @@ export async function verifyRecordInProject(
         select: { projectId: true },
       });
       break;
+    case 'drawing_revision':
+      // PIC-52: Drawing revisions attach their drawing file as a Document via
+      // this polymorphic FK. Project scope is derived via `drawing.projectId`
+      // because DrawingRevision itself doesn't carry projectId (it inherits
+      // from its parent Drawing — one less denormalised field to keep in sync).
+      {
+        const rev = await prisma.drawingRevision.findUniqueOrThrow({
+          where: { id: recordId },
+          select: { drawing: { select: { projectId: true } } },
+        });
+        record = { projectId: rev.drawing.projectId };
+      }
+      break;
     default:
       throw new UnsupportedRecordTypeError(recordType);
   }

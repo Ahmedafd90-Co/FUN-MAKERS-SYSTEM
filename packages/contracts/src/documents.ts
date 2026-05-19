@@ -58,6 +58,10 @@ export const RECORD_TYPES_FOR_DOCUMENTS = [
   'purchase_order',
   'supplier_invoice',
   'credit_note',
+  // PIC-52 — Drawing Register: each DrawingRevision attaches its drawing file
+  // as a Document via this polymorphic FK. The Drawing header entity itself
+  // does NOT attach a Document; only the per-revision file does.
+  'drawing_revision',
 ] as const;
 
 export type DocumentRecordType = (typeof RECORD_TYPES_FOR_DOCUMENTS)[number];
