@@ -6,13 +6,21 @@
  * Drag-and-drop file upload dialog for documents.
  * Supports "create" (new document) and "supersede" (new version) modes.
  *
- * - Drag-and-drop zone or click-to-pick
- * - Shows file name, size, MIME type
+ * - File picking via the shared FileUploadField component (PIC-51)
  * - Title input + category dropdown (create mode)
  * - Reason field (supersede mode)
- * - 50 MB client-side size limit
+ * - 50 MB client-side size limit (enforced by FileUploadField)
  * - Loading spinner on submit
  * - Toast on success/error + redirect to document viewer on create
+ *
+ * Refactored for PIC-51:
+ *   - File-picker UI extracted to <FileUploadField> (apps/web/components/forms/)
+ *     so Layer 2.5 entity forms (Drawing Register, DCM, Material Lifecycle)
+ *     can embed the same primitive inline rather than reaching for a Dialog.
+ *   - Upload submission extracted to `submitDocumentUpload` (apps/web/lib/)
+ *     so the Dialog and inline forms share ONE upload path.
+ *   - This file is now a thin Dialog wrapper composing those two pieces;
+ *     external UX is unchanged.
  */
 
 import { Button } from '@fmksa/ui/components/button';
@@ -33,18 +41,18 @@ import {
   SelectValue,
 } from '@fmksa/ui/components/select';
 import { Textarea } from '@fmksa/ui/components/textarea';
-import { FileUp, Loader2, Upload, X } from 'lucide-react';
+import { FileUp, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useRef, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { FileUploadField } from '@/components/forms/file-upload-field';
+import { submitDocumentUpload } from '@/lib/document-upload';
 import { trpc } from '@/lib/trpc-client';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 const CATEGORIES = [
   { value: 'shop_drawing', label: 'Shop Drawing' },
@@ -57,16 +65,6 @@ const CATEGORIES = [
   { value: 'specification', label: 'Specification' },
   { value: 'general', label: 'General' },
 ] as const;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,7 +100,6 @@ export function UploadWidget({
 }: UploadWidgetProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [file, setFile] = useState<File | null>(null);
@@ -110,73 +107,30 @@ export function UploadWidget({
   const [category, setCategory] = useState('');
   const [reason, setReason] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
 
   // Reset form when dialog closes
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
       setFile(null);
       setTitle('');
       setCategory('');
       setReason('');
       setUploading(false);
-      setDragOver(false);
     }
-    onOpenChange(open);
+    onOpenChange(next);
   };
 
-  // ---------------------------------------------------------------------------
-  // File selection handlers
-  // ---------------------------------------------------------------------------
-
-  const handleFileSelect = useCallback((selectedFile: File) => {
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      toast.error(
-        `File size (${formatFileSize(selectedFile.size)}) exceeds the 50 MB limit.`,
-      );
-      return;
-    }
-    setFile(selectedFile);
-
-    // Auto-fill title from filename (strip extension) if empty
-    if (!title) {
-      const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, '');
+  // Auto-fill title from filename (strip extension) when a file is picked.
+  const handleFileChange = (picked: File | null) => {
+    setFile(picked);
+    if (picked && !title) {
+      const nameWithoutExt = picked.name.replace(/\.[^/.]+$/, '');
       setTitle(nameWithoutExt);
     }
-  }, [title]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) handleFileSelect(selected);
-  };
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const dropped = e.dataTransfer.files[0];
-      if (dropped) handleFileSelect(dropped);
-    },
-    [handleFileSelect],
-  );
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const removeFile = () => {
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // ---------------------------------------------------------------------------
-  // Upload submission
+  // Upload submission (routes through the shared submitDocumentUpload helper)
   // ---------------------------------------------------------------------------
 
   const handleSubmit = async () => {
@@ -210,35 +164,26 @@ export function UploadWidget({
     setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('projectId', projectId);
-      formData.append('mode', mode);
+      const result =
+        mode === 'create'
+          ? await submitDocumentUpload({
+              mode: 'create',
+              file,
+              projectId,
+              title: title.trim(),
+              category,
+              ...(recordType ? { recordType } : {}),
+              ...(recordId ? { recordId } : {}),
+            })
+          : await submitDocumentUpload({
+              mode: 'supersede',
+              file,
+              projectId,
+              documentId: documentId!,
+              reason: reason.trim(),
+            });
 
-      if (mode === 'create') {
-        formData.append('title', title.trim());
-        formData.append('category', category);
-        if (recordType) formData.append('recordType', recordType);
-        if (recordId) formData.append('recordId', recordId);
-      }
-
-      if (mode === 'supersede') {
-        formData.append('documentId', documentId!);
-        formData.append('reason', reason.trim());
-      }
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed.');
-      }
-
-      toast.success(result.message || 'Upload successful.');
+      toast.success(result.message ?? 'Upload successful.');
 
       // Invalidate document queries
       utils.documents.list.invalidate();
@@ -248,16 +193,13 @@ export function UploadWidget({
 
       // Navigate to the document viewer on create
       if (mode === 'create' && result.document?.id) {
-        router.push(
-          `/projects/${projectId}/documents/${result.document.id}`,
-        );
+        router.push(`/projects/${projectId}/documents/${result.document.id}`);
       } else if (mode === 'supersede') {
         // Refresh the current page (viewer will refetch)
         router.refresh();
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'An unexpected error occurred.';
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
       toast.error(message);
     } finally {
       setUploading(false);
@@ -283,66 +225,8 @@ export function UploadWidget({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Drag-and-drop zone */}
-          {!file ? (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  fileInputRef.current?.click();
-                }
-              }}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              className={`
-                flex flex-col items-center justify-center gap-2
-                rounded-lg border-2 border-dashed p-8 cursor-pointer
-                transition-colors
-                ${
-                  dragOver
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-                }
-              `}
-            >
-              <Upload className="h-8 w-8 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">
-                Drag and drop a file here, or click to browse
-              </p>
-              <p className="text-xs text-muted-foreground/70">
-                Maximum file size: 50 MB
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleInputChange}
-              />
-            </div>
-          ) : (
-            // File preview
-            <div className="flex items-center gap-3 rounded-lg border p-3">
-              <FileUp className="h-8 w-8 text-muted-foreground/50 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatFileSize(file.size)} -- {file.type || 'Unknown type'}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 shrink-0"
-                onClick={removeFile}
-                disabled={uploading}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          {/* File picker — shared component reused by Layer 2.5 entity forms */}
+          <FileUploadField value={file} onChange={handleFileChange} disabled={uploading} />
 
           {/* Create mode: title + category */}
           {mode === 'create' && (
@@ -359,11 +243,7 @@ export function UploadWidget({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="doc-category">Category</Label>
-                <Select
-                  value={category}
-                  onValueChange={setCategory}
-                  disabled={uploading}
-                >
+                <Select value={category} onValueChange={setCategory} disabled={uploading}>
                   <SelectTrigger id="doc-category">
                     <SelectValue placeholder="Select a category..." />
                   </SelectTrigger>
@@ -397,11 +277,7 @@ export function UploadWidget({
           )}
 
           {/* Submit button */}
-          <Button
-            className="w-full"
-            onClick={handleSubmit}
-            disabled={uploading || !file}
-          >
+          <Button className="w-full" onClick={handleSubmit} disabled={uploading || !file}>
             {uploading ? (
               <>
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
