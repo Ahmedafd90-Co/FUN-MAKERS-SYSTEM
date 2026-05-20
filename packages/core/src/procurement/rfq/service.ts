@@ -293,10 +293,11 @@ export async function transitionRfq(
         data: { status: 'rejected' },
       });
 
-      // 3. Set RFQ to awarded
+      // 3. Set RFQ to awarded — populate the new awardedQuotationId FK
+      //    (PIC-53: first-class column for the winner, supplements the audit-log capture).
       return (tx as any).rFQ.update({
         where: { id },
-        data: { status: 'awarded' as RfqStatus },
+        data: { status: 'awarded' as RfqStatus, awardedQuotationId: quotationId },
         include: { project: true },
       });
     });
