@@ -71,6 +71,26 @@ const ROLE_LAYER1_PERMISSIONS: Record<string, string[]> = {
   // Procurement: only entity-legal-details visibility (KYC / vendor-side
   // compliance need); other Layer 1 surfaces are project-internal.
   procurement: ['entity_legal_details.view'],
+
+  // PIC-59 audit D3.04 (Layer 1 contract operations were master-admin-only
+  // entirely; contracts_manager role existed but had zero Layer 1 grants).
+  // Operational discipline: contracts_manager runs the contract workflow
+  // (drafting, editing, signing) for client + intercompany contracts.
+  // Lifecycle verbs (activate / complete / terminate / cancel / close / delete)
+  // stay master_admin-only per audit recommendation — those are PD-level
+  // operations beyond contracts_manager's typical workflow scope.
+  contracts_manager: [
+    'project_participant.view',
+    'prime_contract.view',
+    'prime_contract.create',
+    'prime_contract.edit',
+    'prime_contract.sign',
+    'intercompany_contract.view',
+    'intercompany_contract.create',
+    'intercompany_contract.edit',
+    'intercompany_contract.sign',
+    'entity_legal_details.view',
+  ],
 };
 
 export async function seedLayer1RolePermissions(prisma: PrismaClient) {
