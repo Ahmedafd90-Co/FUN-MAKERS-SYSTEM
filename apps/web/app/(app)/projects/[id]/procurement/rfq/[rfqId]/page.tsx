@@ -18,6 +18,7 @@ import { ProcurementStatusBadge } from '@/components/procurement/procurement-sta
 import { ProcurementTransitionActions } from '@/components/procurement/procurement-transition-actions';
 import { RfqItemsTable } from '@/components/procurement/rfq-items-table';
 import { RfqVendorsList } from '@/components/procurement/rfq-vendors-list';
+import { RfqMaterialiseAwardCard } from '@/components/procurement/rfq-materialise-award-card';
 import { WorkflowStatusCard } from '@/components/workflow/workflow-status-card';
 import { WorkflowStatusHint } from '@/components/workflow/workflow-status-hint';
 
@@ -63,6 +64,13 @@ export default function RfqDetailPage() {
     projectId: params.id,
     id: params.rfqId,
   });
+
+  // PIC-53: only relevant once the RFQ is awarded — the card itself early-returns
+  // for any other status, but we also gate the query to avoid an unnecessary call.
+  const { data: materialisationLink } = trpc.procurement.rfq.getMaterialisationLink.useQuery(
+    { projectId: params.id, rfqId: params.rfqId },
+    { enabled: data?.status === 'awarded' },
+  );
 
   const transitionMut = trpc.procurement.rfq.transition.useMutation({
     onSuccess: () => {
@@ -203,6 +211,18 @@ export default function RfqDetailPage() {
       </div>
 
       <Separator />
+
+      {/* PIC-53: Materialise Award affordance — only on awarded RFQs.
+          Surfaces the explicit-action design (the award decided the winner;
+          PO/Subcontract creation is user-explicit, not auto). Placed above
+          all detail cards so it is impossible to miss on an awarded RFQ. */}
+      <RfqMaterialiseAwardCard
+        projectId={params.id}
+        rfqId={params.rfqId}
+        rfqStatus={data.status}
+        existingPoId={materialisationLink?.purchaseOrderId ?? null}
+        existingVendorContractId={materialisationLink?.vendorContractId ?? null}
+      />
 
       {/* Award section — shown only when RFQ is in evaluation and has shortlisted quotations */}
       {shortlistedQuotations.length > 0 && (
