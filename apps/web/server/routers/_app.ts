@@ -10,6 +10,7 @@ import { entitiesRouter } from './entities';
 import { referenceDataRouter } from './reference-data';
 import { workflowRouter } from './workflow';
 import { documentsRouter } from './documents';
+import { drawingsRouter } from './drawings';
 import { postingRouter } from './posting';
 import { notificationsRouter } from './notifications';
 import { dashboardRouter } from './dashboard';
@@ -30,6 +31,7 @@ export const appRouter = router({
   referenceData: referenceDataRouter,
   workflow: workflowRouter,
   documents: documentsRouter,
+  drawings: drawingsRouter,
   posting: postingRouter,
   notifications: notificationsRouter,
   dashboard: dashboardRouter,

@@ -37,6 +37,9 @@ export type {
   IntercompanyPricingType,
   IntercompanyManagingDepartment,
   IntercompanyContractStatus,
+  // Layer 2.5 — Drawing Register (PIC-52)
+  DrawingDiscipline,
+  DrawingRevisionStatus,
 } from '@prisma/client';
 
 // Seed data exports — for structural testing (H8)

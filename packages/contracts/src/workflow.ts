@@ -297,6 +297,13 @@ export const WORKFLOW_TEMPLATE_REGISTRY = {
   framework_agreement: { mode: 'standard-default', prefix: 'framework_agreement' },
   credit_note: { mode: 'standard-default', prefix: 'credit_note' },
 
+  // PIC-52 — Drawing Register (Layer 2.5 PR-3). DrawingRevision is the
+  // workflow-managed entity; Drawing is a header/metadata entity NOT in
+  // WORKFLOW_DRIVEN_MODELS. Each revision goes through its own approval
+  // cycle (For Information → For Approval → For Construction → Superseded).
+  // Standard prefix matches recordType — no abbreviation.
+  drawing_revision: { mode: 'standard-default', prefix: 'drawing_revision' },
+
   // Correspondence is subtype-driven by design — templates are `${subtype}_*`
   // (`letter_standard`, `claim_standard`, `notice_standard`, `back_charge_standard`,
   // plus the override variants). There is NO `correspondence_standard` in seed.

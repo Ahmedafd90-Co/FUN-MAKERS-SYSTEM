@@ -260,6 +260,8 @@ model Entity {
   intercompanyContractsFrom IntercompanyContract[] @relation("IntercompanyContractFrom")
   intercompanyContractsTo   IntercompanyContract[] @relation("IntercompanyContractTo")
   vendorAliases             Vendor[]               @relation("VendorInternalEntity")
+  // Layer 2.5 — Drawing Register originator (PIC-52)
+  drawingsOriginated        Drawing[]              @relation("DrawingOriginator")
 
   @@map("entities")
 }
@@ -338,6 +340,8 @@ model Project {
   primeContract              PrimeContract?              @relation("ProjectPrimeContract")
   primeContractRef           PrimeContract?              @relation("ProjectPrimeContractRef", fields: [primeContractId], references: [id], onDelete: Restrict)
   intercompanyContracts      IntercompanyContract[]      @relation("ProjectIntercompanyContracts")
+  // Layer 2.5 — Drawing Register (PIC-52)
+  drawings                   Drawing[]
 
   @@index([entityId])
   @@map("projects")
@@ -2499,4 +2503,109 @@ model EntityLegalDetails {
   updater User   @relation("EntityLegalDetailsUpdater", fields: [updatedBy], references: [id], onDelete: Restrict)
 
   @@map("entity_legal_details")
+}
+
+// ---------------------------------------------------------------------------
+// 15. Drawing Register — Layer 2.5 PR-3 (PIC-52)
+//
+// Design drawings (architectural / structural / MEP / theming / FF&E /
+// rockwork / ride_systems / show_control / scenic) with revision events as
+// first-class records, status flow (For Information → For Approval →
+// For Construction → Superseded), and approval routing through the
+// existing workflow engine.
+//
+// DrawingRevision is the workflow-managed entity (joins
+// WORKFLOW_DRIVEN_MODELS). Drawing is a header/metadata entity NOT directly
+// workflow-managed — Drawing.currentRevisionId is updated by the workflow
+// convergence handler when a DrawingRevision reaches for_construction.
+// That update is a workflow-driven write on a non-workflow-managed entity
+// (a PIC-47-class blind spot of the PIC-49 structural guard, which only
+// covers WORKFLOW_DRIVEN_MODELS — caller-compliance discipline applies:
+// the write MUST be runAsWorkflowEngine-scoped, asserted in tests).
+//
+// Document attachment: each DrawingRevision attaches a file via the
+// PIC-51 polymorphic recordType registry (recordType='drawing_revision').
+// ---------------------------------------------------------------------------
+
+enum DrawingDiscipline {
+  architectural @map("architectural")
+  structural    @map("structural")
+  mep           @map("mep")
+  theming       @map("theming")
+  ff_and_e      @map("ff_and_e")
+  rockwork      @map("rockwork")
+  ride_systems  @map("ride_systems")
+  show_control  @map("show_control")
+  scenic        @map("scenic")
+
+  @@map("drawing_discipline")
+}
+
+enum DrawingRevisionStatus {
+  for_information  @map("for_information")
+  for_approval     @map("for_approval")
+  for_construction @map("for_construction")
+  superseded       @map("superseded")
+
+  @@map("drawing_revision_status")
+}
+
+model Drawing {
+  id                 String            @id @default(uuid()) @map("id")
+  projectId          String            @map("project_id")
+  drawingNumber      String            @map("drawing_number")
+  title              String            @map("title")
+  discipline         DrawingDiscipline @map("discipline")
+  originatorEntityId String?           @map("originator_entity_id")
+  currentRevisionId  String?           @unique @map("current_revision_id")
+  createdBy          String            @map("created_by")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  originatorEntity Entity?           @relation("DrawingOriginator", fields: [originatorEntityId], references: [id], onDelete: Restrict)
+  currentRevision  DrawingRevision?  @relation("DrawingCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions        DrawingRevision[] @relation("DrawingRevisions")
+
+  @@unique([projectId, drawingNumber])
+  @@index([projectId, discipline])
+  @@index([projectId, createdAt])
+  @@map("drawings")
+}
+
+model DrawingRevision {
+  id               String                @id @default(uuid()) @map("id")
+  drawingId        String                @map("drawing_id")
+  revisionLabel    String                @map("revision_label")
+  status           DrawingRevisionStatus @default(for_information) @map("status")
+  whatChanged      String                @map("what_changed") @db.Text
+  distributionList Json                  @default("[]") @map("distribution_list")
+  issuedBy         String?               @map("issued_by")
+  issuedAt         DateTime?             @map("issued_at")
+  createdBy        String                @map("created_by")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  drawing          Drawing                          @relation("DrawingRevisions", fields: [drawingId], references: [id], onDelete: Restrict)
+  drawingHead      Drawing?                         @relation("DrawingCurrentRevision")
+  acknowledgements DrawingRevisionAcknowledgement[]
+
+  @@unique([drawingId, revisionLabel])
+  @@index([drawingId, status])
+  @@index([drawingId, createdAt])
+  @@map("drawing_revisions")
+}
+
+model DrawingRevisionAcknowledgement {
+  id             String   @id @default(uuid()) @map("id")
+  revisionId     String   @map("revision_id")
+  userId         String   @map("user_id")
+  acknowledgedAt DateTime @default(now()) @map("acknowledged_at")
+
+  revision DrawingRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  @@unique([revisionId, userId])
+  @@index([revisionId])
+  @@index([userId])
+  @@map("drawing_revision_acknowledgements")
 }

@@ -36,6 +36,7 @@ import { seedLayer1RolePermissions } from './layer1-role-permissions';
 import { seedQaTestRolePermissions } from './qa-test-role-permissions';
 import { seedProcurementRolePermissions } from './procurement-role-permissions';
 import { seedProcurementWorkflowTemplates } from './procurement-workflow-templates';
+import { seedDocumentsWorkflowTemplates } from './documents-workflow-templates';
 import { seedProcurementNotificationTemplates } from './procurement-notification-templates';
 import { seedProcurementCategories } from './procurement-categories';
 import { seedCommercialDemoData } from './commercial-demo-data';
@@ -76,6 +77,7 @@ async function main() {
   // *.view code added by all preceding domain seeds.
   await seedQaTestRolePermissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
+  await seedDocumentsWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);
   await seedProcurementCategories(prisma);
   await seedBudgetCategories(prisma);

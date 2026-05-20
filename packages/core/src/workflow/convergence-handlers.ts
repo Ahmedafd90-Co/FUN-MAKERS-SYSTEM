@@ -65,6 +65,18 @@ const CONVERGENCE_RECORD_TYPES = [
   'vendor_contract',
   'framework_agreement',
   'credit_note',
+  // PIC-52 — Drawing Register (Layer 2.5 PR-3). On workflow.approved, the
+  // handler atomically writes DrawingRevision.status='for_construction' AND
+  // Drawing.currentRevisionId AND supersedes any previous current revision.
+  // ALL writes happen inside the dispatcher's runAsWorkflowEngine wrap (PIC-47
+  // pattern) — including the Drawing.currentRevisionId write, which is a
+  // workflow-driven write on a non-workflow-managed entity (Drawing is NOT in
+  // WORKFLOW_DRIVEN_MODELS, so the structural guard does NOT cover it;
+  // caller-compliance discipline applies and is asserted in tests).
+  // Returned / rejected are silently ignored at convergence — same pattern as
+  // tax_invoice / credit_note; workflow_instance.status tracks workflow-level
+  // state, and the team responds by creating a new revision.
+  'drawing_revision',
 ] as const;
 
 function isConvergenceWired(recordType: string): boolean {
@@ -1901,6 +1913,79 @@ async function handleCreditNoteRejected(payload: WorkflowEventPayload): Promise<
 // workflow-level state. See section comment above.
 
 // ---------------------------------------------------------------------------
+// DrawingRevision convergence (PIC-52)
+// ---------------------------------------------------------------------------
+
+async function handleDrawingRevisionApproved(payload: WorkflowEventPayload): Promise<void> {
+  const rev = await prisma.drawingRevision.findUnique({
+    where: { id: payload.recordId },
+    include: { drawing: true },
+  });
+  if (!rev) return;
+  if (rev.status === 'for_construction') return; // already converged (idempotent)
+
+  const beforeStatus = rev.status;
+  const drawing = rev.drawing;
+  const previousCurrentRevisionId = drawing.currentRevisionId;
+
+  // (1) Write this revision → for_construction. DrawingRevision is in
+  //     WORKFLOW_DRIVEN_MODELS so this status write is gated by the
+  //     no-direct-status-write extension; the surrounding runAsWorkflowEngine
+  //     scope (from the dispatcher below) authorises it.
+  const updated = await prisma.drawingRevision.update({
+    where: { id: payload.recordId },
+    data: { status: 'for_construction' },
+  });
+
+  // (2) Supersede the previous current revision (if any). Also a
+  //     DrawingRevision status write — same engine-scoping discipline.
+  if (previousCurrentRevisionId && previousCurrentRevisionId !== updated.id) {
+    await prisma.drawingRevision.update({
+      where: { id: previousCurrentRevisionId },
+      data: { status: 'superseded' },
+    });
+  }
+
+  // (3) Point the Drawing header at this revision. Drawing is NOT in
+  //     WORKFLOW_DRIVEN_MODELS — the extension does NOT structurally
+  //     guard this write. Caller-compliance discipline applies: the
+  //     surrounding runAsWorkflowEngine scope still makes this a
+  //     workflow-engine-authored write, just not a structurally-required
+  //     one. Asserted by test (see tests/documents/drawings/).
+  await prisma.drawing.update({
+    where: { id: drawing.id },
+    data: { currentRevisionId: updated.id },
+  });
+
+  await auditService.log({
+    actorUserId: payload.actorUserId,
+    actorSource: 'system',
+    action: 'drawing_revision.transition.workflow_approved',
+    resourceType: 'drawing_revision',
+    resourceId: payload.recordId,
+    projectId: payload.projectId,
+    beforeJson: { status: beforeStatus, drawingCurrentRevisionId: previousCurrentRevisionId },
+    afterJson: {
+      status: 'for_construction',
+      drawingCurrentRevisionId: updated.id,
+      supersededPreviousRevisionId: previousCurrentRevisionId ?? null,
+      _convergence: {
+        trigger: 'workflow.approved',
+        workflowInstanceId: payload.instanceId,
+        templateCode: payload.templateCode,
+        finalStepApprovedBy: payload.actorUserId,
+        comment: payload.comment ?? null,
+      },
+    },
+    reason: `Workflow approval complete (instance: ${payload.instanceId}, template: ${payload.templateCode})`,
+  });
+
+  console.log(
+    `[convergence] DrawingRevision ${payload.recordId}: ${beforeStatus} → for_construction (workflow ${payload.instanceId}); Drawing ${drawing.id}.currentRevisionId updated${previousCurrentRevisionId ? `; previous revision ${previousCurrentRevisionId} → superseded` : ''}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Event dispatchers
 // ---------------------------------------------------------------------------
 
@@ -1923,6 +2008,11 @@ async function onWorkflowApproved(payload: WorkflowEventPayload): Promise<void> 
     if (payload.recordType === 'vendor_contract') return handleVendorContractApproved(payload);
     if (payload.recordType === 'framework_agreement') return handleFrameworkAgreementApproved(payload);
     if (payload.recordType === 'credit_note') return handleCreditNoteApproved(payload);
+    // PIC-52 — Drawing Register. Returned / rejected events for
+    // drawing_revision are silently ignored at convergence (entity stays in
+    // for_approval; workflow_instance.status carries the workflow-level
+    // outcome; team responds by creating a new revision).
+    if (payload.recordType === 'drawing_revision') return handleDrawingRevisionApproved(payload);
   });
 }
 

@@ -71,6 +71,7 @@ const MODEL_TO_RECORD_TYPE: Record<(typeof WORKFLOW_DRIVEN_MODELS)[number], stri
   PurchaseOrder: 'purchase_order',
   RFQ: 'rfq',
   SupplierInvoice: 'supplier_invoice',
+  DrawingRevision: 'drawing_revision', // PIC-52
   CostProposal: 'cost_proposal',
   TaxInvoice: 'tax_invoice',
   VendorContract: 'vendor_contract',
@@ -123,10 +124,13 @@ describe('PIC-50 — WORKFLOW_TEMPLATE_REGISTRY parity guard', () => {
       expect(orphans).toEqual([]);
     });
 
-    it('counts match (13 == 13 == 13)', () => {
-      expect(WORKFLOW_DRIVEN_MODELS.length).toBe(13);
-      expect(Object.keys(MODEL_TO_RECORD_TYPE).length).toBe(13);
-      expect(REGISTRY_RECORD_TYPES.length).toBe(13);
+    it('counts match (14 == 14 == 14)', () => {
+      // PIC-52 added DrawingRevision atomically (model + registry entry +
+      // MODEL_TO_RECORD_TYPE entry + seed template), advancing the count
+      // from 13 to 14. Future entity-adding PRs bump this in lockstep.
+      expect(WORKFLOW_DRIVEN_MODELS.length).toBe(14);
+      expect(Object.keys(MODEL_TO_RECORD_TYPE).length).toBe(14);
+      expect(REGISTRY_RECORD_TYPES.length).toBe(14);
     });
   });
 
