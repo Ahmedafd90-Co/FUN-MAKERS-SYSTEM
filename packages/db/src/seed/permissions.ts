@@ -50,6 +50,12 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'document.sign', description: 'Apply internal digital signature to authorized documents', resource: 'document', action: 'sign' },
   { code: 'document.supersede', description: 'Supersede a current document version with a new version', resource: 'document', action: 'supersede' },
 
+  // --- Drawing Register (PIC-52, Layer 2.5 PR-3) ---
+  { code: 'drawing.view', description: 'View drawings and revisions in the project drawing register', resource: 'drawing', action: 'view' },
+  { code: 'drawing.create', description: 'Create new drawings and initial revisions in the drawing register', resource: 'drawing', action: 'create' },
+  { code: 'drawing.revise', description: 'Submit new revisions of existing drawings for approval', resource: 'drawing', action: 'revise' },
+  { code: 'drawing.acknowledge', description: 'Acknowledge receipt of a drawing revision (distribution-list recipient)', resource: 'drawing', action: 'acknowledge' },
+
   // --- Workflow ---
   { code: 'workflow.view', description: 'View workflow templates, instances, and actions', resource: 'workflow', action: 'view' },
   { code: 'workflow.start', description: 'Start workflow instances on records', resource: 'workflow', action: 'start' },
