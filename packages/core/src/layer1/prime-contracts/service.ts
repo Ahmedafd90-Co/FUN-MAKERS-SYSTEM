@@ -64,6 +64,14 @@ export async function createPrimeContract(
   input: CreatePrimeContractInput,
   actorUserId: string,
 ) {
+  // PIC-60 audit D2.04: resolve currency from Project.currencyCode (NOT NULL in
+  // schema). Loaded outside the transaction — read-only, stable value, and keeps
+  // the existing test mocks (which mock a narrow `tx` subset) unchanged.
+  const projectForCurrency = await prisma.project.findUniqueOrThrow({
+    where: { id: input.projectId },
+    select: { currencyCode: true },
+  });
+
   return prisma.$transaction(async (tx) => {
     // (1) Entity active check
     const entity = await tx.entity.findUniqueOrThrow({
@@ -99,7 +107,7 @@ export async function createPrimeContract(
       });
     }
 
-    // (3) Create PrimeContract
+    // (3) Create PrimeContract.
     const primeContract = await tx.primeContract.create({
       data: {
         projectId: input.projectId,
@@ -107,7 +115,7 @@ export async function createPrimeContract(
         clientName: input.clientName,
         clientReference: input.clientReference ?? null,
         contractValue: input.contractValue,
-        contractCurrency: input.contractCurrency ?? 'SAR',
+        contractCurrency: input.contractCurrency ?? projectForCurrency.currencyCode,
         signedDate: input.signedDate ? new Date(input.signedDate) : null,
         effectiveDate: input.effectiveDate ? new Date(input.effectiveDate) : null,
         expectedCompletionDate: input.expectedCompletionDate

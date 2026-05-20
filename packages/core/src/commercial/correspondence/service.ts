@@ -257,7 +257,8 @@ export async function transitionCorrespondence(
           claimType: existing.claimType ?? 'unknown',
           claimedAmount: existing.claimedAmount?.toString() ?? '0',
           claimedTimeDays: existing.claimedTimeDays ?? null,
-          currency: existing.currency ?? 'SAR',
+          // PIC-60 audit D2.04: resolve from Project.currencyCode (NOT NULL in schema), not hardcoded 'SAR'.
+          currency: existing.currency ?? existing.project.currencyCode,
           projectId: existing.projectId,
         },
         actorUserId,
@@ -279,7 +280,8 @@ export async function transitionCorrespondence(
           targetName: existing.targetName ?? 'unknown',
           category: existing.category ?? 'other',
           chargedAmount: existing.chargedAmount?.toString() ?? '0',
-          currency: existing.currency ?? 'SAR',
+          // PIC-60 audit D2.04: resolve from Project.currencyCode (NOT NULL in schema), not hardcoded 'SAR'.
+          currency: existing.currency ?? existing.project.currencyCode,
           projectId: existing.projectId,
         },
         actorUserId,

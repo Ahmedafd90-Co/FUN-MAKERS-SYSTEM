@@ -96,6 +96,13 @@ export async function createIntercompanyContract(
     );
   }
 
+  // PIC-60 audit D2.04: resolve currency from Project, not hardcoded 'SAR'.
+  // Project.currencyCode is NOT NULL in schema so this is always defined.
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: input.projectId },
+    select: { currencyCode: true },
+  });
+
   const record = await prisma.intercompanyContract.create({
     data: {
       projectId: input.projectId,
@@ -105,7 +112,7 @@ export async function createIntercompanyContract(
       pricingType: input.pricingType,
       markupPercent: input.markupPercent,
       contractValue: input.contractValue ?? null,
-      contractCurrency: input.contractCurrency ?? 'SAR',
+      contractCurrency: input.contractCurrency ?? project.currencyCode,
       managingDepartment: input.managingDepartment,
       signedDate: input.signedDate ? new Date(input.signedDate) : null,
       status: input.status ?? 'draft',
