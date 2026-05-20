@@ -37,7 +37,8 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     // PD picks PO vs Subcontract per the materialise card UX. Granting here.
     ...expand('rfq', ['view', 'approve', 'materialise', 'terminate']),
     ...expand('quotation', ['view']),
-    ...expand('purchase_order', ['view', 'approve', 'sign']),
+    // PIC-59 audit D3.05: purchase_order.issue was master_admin-only — PD issues POs in practice.
+    ...expand('purchase_order', ['view', 'approve', 'sign', 'issue']),
     ...expand('supplier_invoice', ['view', 'approve']),
     ...expand('expense', ['view', 'approve']),
     ...expand('credit_note', ['view']),
@@ -92,7 +93,8 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     // the materialise card on awarded RFQs; PD has materialise too (line 32).
     ...expand('rfq', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate']),
     ...expand('quotation', ['view', 'create', 'edit', 'review', 'shortlist', 'award', 'reject', 'terminate']),
-    ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review']),
+    // PIC-59 audit D3.05: purchase_order.issue was master_admin-only — procurement issues POs in practice.
+    ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review', 'issue']),
     ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit']),
     ...expand('expense', ['view', 'create', 'edit', 'submit']),
     ...expand('credit_note', ['view', 'create', 'edit']),
