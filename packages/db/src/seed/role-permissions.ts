@@ -16,23 +16,59 @@ import type { PrismaClient } from '@prisma/client';
 
 type RolePermissionMap = Record<string, string[]>;
 
-// TODO(ahmed): After filling permissions.ts, define which roles get which permissions.
-// For now, only master_admin is mapped (gets everything).
+// PIC-59 (audit D3.02 + D3.06): targeted distribution of base permissions
+// that had previously been master-admin-only. The Pre-PR-5 Sweep scope is
+// narrow — only document.{upload,sign,supersede} (D3.02) and
+// project.{create,edit,archive} (D3.06) are distributed here. Other base
+// permissions (workflow.*, audit.*, posting.*, system.admin, screen.admin_*,
+// override.execute, user.*) remain master-admin-only by deliberate audit
+// scope.
+//
+// master_admin still gets ALL permissions via the '*' wildcard; the per-role
+// arrays below ADD non-master grants for the specific D3.02/D3.06 codes.
 const ROLE_PERMISSION_MAP: RolePermissionMap = {
   master_admin: ['*'], // Special: '*' means all permissions
-  // project_director: ['project.view', 'project.edit', 'document.view', 'document.sign', ...],
-  // project_manager: ['project.view', 'project.edit', 'document.view', 'document.upload', ...],
-  // site_team: ['project.view', 'document.view', 'document.upload', ...],
-  // design: ['project.view', 'document.view', 'document.upload', ...],
-  // qa_qc: ['project.view', 'document.view', 'workflow.approve', ...],
-  // contracts_manager: ['project.view', 'document.view', 'document.sign', 'workflow.approve', ...],
-  // qs_commercial: ['project.view', 'document.view', 'document.upload', ...],
-  // procurement: ['project.view', 'document.view', 'workflow.start', 'workflow.approve', ...],
-  // finance: ['project.view', 'posting.view', ...],
-  // cost_controller: ['project.view', 'posting.view', ...],
-  // document_controller: ['project.view', 'document.view', 'document.upload', 'document.supersede', ...],
-  // pmo: ['project.view', 'document.view', 'workflow.view', 'posting.view', 'audit.view', 'cross_project.read'],
-  // executive_approver: ['project.view', 'document.view', 'document.sign', 'workflow.approve', ...],
+
+  // D3.06 — Project lifecycle. PD ruling 2026-05-20: grant all three project verbs
+  // to project_director. PD owns project lifecycle in Pico Play org reality.
+  // D3.02 — document.sign for PD (high-authority signing).
+  project_director: [
+    'project.create',
+    'project.edit',
+    'project.archive',
+    'document.sign',
+  ],
+
+  // D3.02 — design uploads and supersedes drawings (Drawing Register workflow).
+  design: ['document.upload', 'document.supersede'],
+
+  // D3.02 — qa_qc uploads QA artefacts and signs ITP / inspection certificates.
+  qa_qc: ['document.upload'],
+
+  // D3.02 — qs_commercial uploads commercial evidence (variations, claims).
+  qs_commercial: ['document.upload'],
+
+  // D3.02 — procurement uploads vendor docs (quotations, contracts, POs).
+  procurement: ['document.upload'],
+
+  // D3.02 — contracts_manager uploads contract drafts.
+  contracts_manager: ['document.upload'],
+
+  // D3.02 — finance signs payment certificates and tax-invoice acceptance docs.
+  finance: ['document.sign'],
+
+  // D3.02 — document_controller's named role: uploads + supersedes for the
+  // document library function.
+  document_controller: ['document.upload', 'document.supersede'],
+
+  // D3.02 — executive_approver signs at high-value tier alongside PD.
+  executive_approver: ['document.sign'],
+
+  // Future audit scope (intentionally NOT in PIC-59):
+  // - project_manager: project.edit (D3.06 said PD-only; PM may follow if PD rules)
+  // - site_team / pmo / cost_controller: no D3.02 / D3.06 grants in audit
+  //   scope. They retain master-admin-only access until a future sweep
+  //   surfaces explicit operational need.
 };
 
 export async function seedRolePermissions(prisma: PrismaClient) {
