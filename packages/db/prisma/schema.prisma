@@ -1565,6 +1565,12 @@ model VendorContract {
   terms            String?
   signedDate       DateTime?            @map("signed_date")
   parentContractId String?              @map("parent_contract_id")
+  // PIC-53: optional FK to the RFQ that materialised this contract (when the
+  // contract was created via materialiseAward with materialiseAs='subcontract').
+  // Nullable — a VendorContract may also be created standalone (no RFQ origin).
+  // Used by the materialisation idempotency check (refuse a second materialise
+  // if a VendorContract with this rfqId already exists).
+  rfqId            String?              @map("rfq_id")
   status           VendorContractStatus @default(draft)
   referenceNumber  String?              @unique @map("reference_number")
   createdBy        String               @map("created_by")
@@ -1575,11 +1581,14 @@ model VendorContract {
   vendor         Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   parentContract VendorContract?  @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
   childContracts VendorContract[] @relation("ContractAmendment")
+  // PIC-53 — Subcontract materialisation origin (nullable FK to RFQ)
+  rfq            RFQ?             @relation("VendorContractFromRfq", fields: [rfqId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
   @@index([parentContractId])
+  @@index([rfqId])
   @@map("vendor_contracts")
 }
 
@@ -1634,26 +1643,34 @@ model FrameworkAgreementItem {
 }
 
 model RFQ {
-  id              String    @id @default(uuid())
-  projectId       String    @map("project_id")
-  rfqNumber       String    @unique @map("rfq_number")
-  title           String
-  description     String?
-  requiredByDate  DateTime? @map("required_by_date")
-  categoryId      String?   @map("category_id")
-  currency        String
-  estimatedBudget Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
-  status          RfqStatus @default(draft)
-  referenceNumber String?   @unique @map("reference_number")
-  createdBy       String    @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  projectId          String    @map("project_id")
+  rfqNumber          String    @unique @map("rfq_number")
+  title              String
+  description        String?
+  requiredByDate     DateTime? @map("required_by_date")
+  categoryId         String?   @map("category_id")
+  currency           String
+  estimatedBudget    Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
+  status             RfqStatus @default(draft)
+  referenceNumber    String?   @unique @map("reference_number")
+  // PIC-53: first-class FK to the winning quotation (promotes the value that
+  // previously lived only in audit-log afterJson). Nullable; set when RFQ
+  // transitions to awarded. Enables efficient "find me the winning quotation"
+  // queries plus the materialisation-idempotency check.
+  awardedQuotationId String?   @unique @map("awarded_quotation_id")
+  createdBy          String    @map("created_by")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  project    Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  category   ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  items      RFQItem[]
-  rfqVendors RFQVendor[]
-  quotations Quotation[]
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  category         ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  awardedQuotation Quotation?           @relation("RfqAwardedQuotation", fields: [awardedQuotationId], references: [id], onDelete: Restrict)
+  items            RFQItem[]
+  rfqVendors       RFQVendor[]
+  quotations       Quotation[]          @relation("QuotationRfq")
+  // PIC-53 — Subcontract materialisation back-relation
+  vendorContracts  VendorContract[]     @relation("VendorContractFromRfq")
 
   @@index([projectId, status])
   @@index([projectId, createdAt])
@@ -1685,6 +1702,10 @@ model RFQVendor {
   rfqId          String    @map("rfq_id")
   vendorId       String    @map("vendor_id")
   sentAt         DateTime? @map("sent_at")
+  // PIC-53: timestamp at which this vendor responded to the RFQ. The pair
+  // (sentAt, respondedAt) is the input to the time-to-respond SLA computation.
+  // Nullable: a vendor may decline or never respond.
+  respondedAt    DateTime? @map("responded_at")
   responseStatus String?   @map("response_status")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -1713,15 +1734,56 @@ model Quotation {
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 
-  rfq       RFQ                 @relation(fields: [rfqId], references: [id], onDelete: Restrict)
-  vendor    Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  lineItems QuotationLineItem[]
+  rfq         RFQ                  @relation("QuotationRfq", fields: [rfqId], references: [id], onDelete: Restrict)
+  vendor      Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lineItems   QuotationLineItem[]
+  // PIC-53: 1:1 with QuotationEvaluation. Optional — not every quotation gets scored.
+  evaluation  QuotationEvaluation?
+  // PIC-53: inverse of RFQ.awardedQuotationId (winning quotation pointer)
+  rfqAsWinner RFQ?                 @relation("RfqAwardedQuotation")
 
   // Identity enforced at application level (status-aware: one ACTIVE quotation per vendor per RFQ).
   // DB-level partial unique index in migration handles the hard constraint.
   @@index([rfqId, vendorId])
   @@index([rfqId, status])
   @@map("quotations")
+}
+
+// ---------------------------------------------------------------------------
+// PIC-53 — Bid evaluation scoring (Layer 2.5 PR-4)
+//
+// One QuotationEvaluation per Quotation (1:1). Five PD-decided scoring
+// criteria, each 0-100 NUMERIC(5,2). compositeScore is computed at write time
+// from per-project weights stored in projectSetting (keys
+// `rfq_evaluation_weight_{criterion}`). No weight values hardcoded anywhere
+// (code/seed/fixture) — per the PIC-41 governance discipline.
+//
+// composite = Σ(criterion × weight). Formula explicit in the service layer
+// and audit-log payload; weight values used are also recorded in audit
+// so a future read can reconstruct exactly how a score was computed.
+// ---------------------------------------------------------------------------
+
+model QuotationEvaluation {
+  id                                 String   @id @default(uuid())
+  quotationId                        String   @unique @map("quotation_id")
+  // Five Pico Play scoring criteria (PD ruling 2026-05-20).
+  technicalScore                     Decimal  @map("technical_score") @db.Decimal(5, 2)
+  commercialScore                    Decimal  @map("commercial_score") @db.Decimal(5, 2)
+  genericExperienceScore             Decimal  @map("generic_experience_score") @db.Decimal(5, 2)
+  themedEntertainmentExperienceScore Decimal  @map("themed_entertainment_experience_score") @db.Decimal(5, 2)
+  creativeAestheticCapabilityScore   Decimal  @map("creative_aesthetic_capability_score") @db.Decimal(5, 2)
+  // Composite is computed at write time from the five scores + project-scoped weights.
+  // 7,4 fits 0.0000 - 100.0000 with margin for weight rounding.
+  compositeScore                     Decimal  @map("composite_score") @db.Decimal(7, 4)
+  evaluationNotes                    String?  @map("evaluation_notes") @db.Text
+  evaluatedBy                        String   @map("evaluated_by")
+  evaluatedAt                        DateTime @default(now()) @map("evaluated_at")
+  createdAt                          DateTime @default(now()) @map("created_at")
+  updatedAt                          DateTime @updatedAt @map("updated_at")
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  @@map("quotation_evaluations")
 }
 
 model QuotationLineItem {
