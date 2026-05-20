@@ -14,7 +14,10 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     ...expand('vendor', ['view', 'create', 'edit', 'delete', 'activate', 'suspend', 'blacklist']),
     ...expand('vendor_contract', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
     ...expand('framework_agreement', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
-    ...expand('rfq', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate']),
+    // PIC-59: 'materialise' was added to the rfq actions catalog in PIC-53
+    // but never added to master_admin grants — PIC-27 seed-coverage test was
+    // failing on main because of this exact gap. Adding here closes the loop.
+    ...expand('rfq', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate']),
     ...expand('quotation', ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject', 'terminate']),
     ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'issue']),
     ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'prepare_payment']),
@@ -29,7 +32,10 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     ...expand('vendor', ['view']),
     ...expand('vendor_contract', ['view', 'approve', 'sign']),
     ...expand('framework_agreement', ['view', 'approve', 'sign']),
-    ...expand('rfq', ['view', 'approve', 'terminate']),
+    // PIC-59 (PIC-53 closing-observation): 'materialise' was master_admin-only post-PIC-53.
+    // Audit D3.03 recommended procurement + project_director per the deal-shape decision —
+    // PD picks PO vs Subcontract per the materialise card UX. Granting here.
+    ...expand('rfq', ['view', 'approve', 'materialise', 'terminate']),
     ...expand('quotation', ['view']),
     ...expand('purchase_order', ['view', 'approve', 'sign']),
     ...expand('supplier_invoice', ['view', 'approve']),
@@ -81,7 +87,10 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     ...expand('vendor', ['view', 'create', 'edit', 'activate', 'suspend', 'blacklist']),
     ...expand('vendor_contract', ['view', 'create', 'edit', 'submit']),
     ...expand('framework_agreement', ['view', 'create', 'edit', 'submit']),
-    ...expand('rfq', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate']),
+    // PIC-59 (PIC-53 closing-observation): 'materialise' was master_admin-only post-PIC-53.
+    // Audit D3.03 recommended procurement + project_director — procurement operates
+    // the materialise card on awarded RFQs; PD has materialise too (line 32).
+    ...expand('rfq', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate']),
     ...expand('quotation', ['view', 'create', 'edit', 'review', 'shortlist', 'award', 'reject', 'terminate']),
     ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review']),
     ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit']),
