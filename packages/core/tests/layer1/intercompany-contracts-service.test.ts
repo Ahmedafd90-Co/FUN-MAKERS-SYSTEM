@@ -20,6 +20,10 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    // PIC-60: createIntercompanyContract loads Project for currencyCode resolution.
+    project: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ currencyCode: 'SAR' }),
+    },
   };
   class PrismaClientKnownRequestError extends Error {
     code: string;
