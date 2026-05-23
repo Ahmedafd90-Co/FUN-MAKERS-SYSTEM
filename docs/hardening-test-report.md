@@ -1,5 +1,7 @@
 # Hardening Test Report
 
+> **Branch reference updated 2026-05-22 per PIC-74 (Stage 4):** This doc references `feature/module-3-procurement-engine` as an active development branch. That branch was retired when PIC-74 migrated all procurement-engine work into `main` (squash commit `b8e0a88`). Treat any `feature/module-3-procurement-engine` reference below as historical — current state lives on `main`. Linear: https://linear.app/pico-play-ksa/issue/PIC-74
+
 **Date:** 2026-04-11
 **Branch:** `feature/module-3-procurement-engine`
 **Scope:** Targeted hardening pass for 12 structural control issues identified by independent audit

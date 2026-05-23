@@ -1,5 +1,7 @@
 # Module 3 — Procurement / Purchasing Engine — Implementation Plan
 
+> **Branch reference updated 2026-05-22 per PIC-74 (Stage 4):** This doc references `feature/module-3-procurement-engine` as the implementation branch. That branch was retired when PIC-74 migrated all Module 3 work into `main` (squash commit `b8e0a88`). The implementation completed and merged; treat branch references below as historical — current implementation lives on `main`. Linear: https://linear.app/pico-play-ksa/issue/PIC-74
+
 **Project:** Pico Play Fun Makers KSA — Internal Operations Platform
 **Module:** 3 of 7 — Procurement / Purchasing Engine
 **Date:** 2026-04-11
