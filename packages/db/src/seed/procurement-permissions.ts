@@ -26,7 +26,10 @@ const RESOURCES: { resource: string; label: string; actions: string[] }[] = [
   {
     resource: 'rfq',
     label: 'Request for Quotation',
-    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'terminate'],
+    // PIC-53 adds 'materialise' (RFQ award → PurchaseOrder OR VendorContract subcontract).
+    // 'evaluate' was already declared but had no service backing it pre-PIC-53; the
+    // bid-evaluation service now consumes it for the QuotationEvaluation write path.
+    actions: ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate'],
   },
   {
     resource: 'quotation',

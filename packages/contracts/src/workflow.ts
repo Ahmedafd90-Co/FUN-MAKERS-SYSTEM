@@ -217,3 +217,103 @@ export const WorkflowStatusValues = [
 ] as const;
 
 export type WorkflowStatus = (typeof WorkflowStatusValues)[number];
+
+// ---------------------------------------------------------------------------
+// PIC-50 — Workflow template registry (canonical recordType → template-code mapping)
+//
+// Declares how a workflow-managed recordType maps to its template codes. The
+// system-default fallback in template-resolution.ts (`packages/core/src/workflow/`)
+// looks up this registry to construct the expected `${prefix}_standard` /
+// `${prefix}_high_value` code instead of relying on a string-`endsWith` heuristic.
+// The heuristic was policy-by-accident — `endsWith: '_standard'` returns whichever
+// template alphabetically wins per recordType, which works today only because
+// no two registered templates per recordType end in the same suffix. One additional
+// template would silently break it (the PIC-50 class — same shape as PIC-41's
+// "alphabetical-first accident routed 100% of Expenses/POs to PD approval").
+//
+// Two modes are declared explicitly:
+//
+//   - `standard-default`: the resolver expects a `${prefix}_standard` template
+//     in seed (and optionally `${prefix}_high_value` for PIC-41 amount-triggered
+//     escalation). 12 of 13 workflow-managed entities follow this mode.
+//
+//   - `subtype-driven`: the entity has NO single canonical template. Templates
+//     are `${subtype}_*` (e.g. correspondence's `letter_*` / `claim_*` /
+//     `notice_*` / `back_charge_*`). The resolver requires the caller to pass
+//     `subtype`; calls without subtype return null rather than silently
+//     falling through to an alphabetical accident. Closes a latent
+//     financial-control mis-routing path the recon found (a no-subtype call
+//     on `correspondence` would previously return `back_charge_standard`
+//     alphabetically — wrong approval tier).
+//
+// To add a new workflow-managed entity, do ALL THREE atomically in ONE PR:
+//
+//   1. APPEND the Pascal-case model to `WORKFLOW_DRIVEN_MODELS` in
+//      `packages/db/src/middleware/no-direct-status-write.ts`.
+//   2. ADD a registry entry below for the snake_case recordType:
+//        `'my_entity': { mode: 'standard-default', prefix: 'my_entity' }`
+//      (or `prefix: 'something_else'` if a non-convention abbreviation is
+//      genuinely required — like PO's `po` — but document the why inline).
+//   3. SEED the `${prefix}_standard` workflow template (and the
+//      `${prefix}_high_value` variant if Pico Play's DoA matrix calls for
+//      amount-triggered escalation).
+//
+// The parity-guard test at
+// `packages/core/tests/workflow/template-registry-parity.test.ts` WILL fail
+// if (1) was done without (2), if (2) was done without (3), or if a
+// subtype-driven recordType somehow gets resolved without a subtype. This
+// is intentional — drift between WORKFLOW_DRIVEN_MODELS, the registry, and
+// the seed is the PIC-50 class of silent-mis-resolution at this layer, and
+// we catch it structurally rather than by human discipline.
+//
+// `endsWith` heuristics: deleted by PIC-50. The resolver no longer uses
+// suffix matching for tier-3 (PIC-41 amount escalation) or tier-4 (generic
+// fallback) — the registry's `prefix` is the source of truth.
+// ---------------------------------------------------------------------------
+
+export type WorkflowTemplateRegistryEntry =
+  | { mode: 'standard-default'; prefix: string }
+  | { mode: 'subtype-driven' };
+
+export const WORKFLOW_TEMPLATE_REGISTRY = {
+  ipa: { mode: 'standard-default', prefix: 'ipa' },
+  ipc: { mode: 'standard-default', prefix: 'ipc' },
+  variation: { mode: 'standard-default', prefix: 'variation' },
+  expense: { mode: 'standard-default', prefix: 'expense' },
+
+  // PurchaseOrder uses the legacy `po_*` prefix (the abbreviation predates
+  // the convention). PIC-41 inline-patched this with an `endsWith` heuristic;
+  // PIC-50 makes the non-convention mapping explicit so the heuristic can die.
+  // A rename to `purchase_order_*` is an optional hygiene backlog item — not
+  // coupled to the correctness fix here, and would require a data migration
+  // (workflow_instance.templateCode rows + any project-setting references).
+  purchase_order: { mode: 'standard-default', prefix: 'po' },
+
+  rfq: { mode: 'standard-default', prefix: 'rfq' },
+  supplier_invoice: { mode: 'standard-default', prefix: 'supplier_invoice' },
+  cost_proposal: { mode: 'standard-default', prefix: 'cost_proposal' },
+  tax_invoice: { mode: 'standard-default', prefix: 'tax_invoice' },
+  vendor_contract: { mode: 'standard-default', prefix: 'vendor_contract' },
+  framework_agreement: { mode: 'standard-default', prefix: 'framework_agreement' },
+  credit_note: { mode: 'standard-default', prefix: 'credit_note' },
+
+  // PIC-52 — Drawing Register (Layer 2.5 PR-3). DrawingRevision is the
+  // workflow-managed entity; Drawing is a header/metadata entity NOT in
+  // WORKFLOW_DRIVEN_MODELS. Each revision goes through its own approval
+  // cycle (For Information → For Approval → For Construction → Superseded).
+  // Standard prefix matches recordType — no abbreviation.
+  drawing_revision: { mode: 'standard-default', prefix: 'drawing_revision' },
+
+  // Correspondence is subtype-driven by design — templates are `${subtype}_*`
+  // (`letter_standard`, `claim_standard`, `notice_standard`, `back_charge_standard`,
+  // plus the override variants). There is NO `correspondence_standard` in seed.
+  //
+  // The resolver requires the caller to pass `subtype` for this recordType.
+  // A call without subtype returns null instead of silently falling through —
+  // closes a latent financial-control mis-routing where the old `endsWith`
+  // heuristic would have returned `back_charge_standard` alphabetically
+  // (the wrong approval tier; back-charges route through Finance).
+  correspondence: { mode: 'subtype-driven' },
+} as const satisfies Record<string, WorkflowTemplateRegistryEntry>;
+
+export type WorkflowRecordType = keyof typeof WORKFLOW_TEMPLATE_REGISTRY;

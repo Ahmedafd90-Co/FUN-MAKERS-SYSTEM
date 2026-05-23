@@ -229,7 +229,9 @@ export async function transitionExpense(
   // projects without a template fall back to manual approval.
   if (newStatus === 'submitted') {
     try {
-      const resolution = await resolveTemplate('expense', existing.projectId);
+      // PIC-41: pass amount so the resolver can apply the configured
+      // high-value threshold (if any). Unconfigured → standard default.
+      const resolution = await resolveTemplate('expense', existing.projectId, undefined, existing.amount);
       if (resolution) {
         await workflowInstanceService.startInstance({
           templateCode: resolution.code,

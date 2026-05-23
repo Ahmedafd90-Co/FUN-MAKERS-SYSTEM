@@ -23,6 +23,8 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
       delete: vi.fn(),
     },
     project: {
+      // PIC-60: createPrimeContract loads Project for currencyCode resolution.
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ currencyCode: 'SAR' }),
       update: vi.fn(),
     },
   };

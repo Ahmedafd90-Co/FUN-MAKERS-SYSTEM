@@ -260,6 +260,8 @@ model Entity {
   intercompanyContractsFrom IntercompanyContract[] @relation("IntercompanyContractFrom")
   intercompanyContractsTo   IntercompanyContract[] @relation("IntercompanyContractTo")
   vendorAliases             Vendor[]               @relation("VendorInternalEntity")
+  // Layer 2.5 — Drawing Register originator (PIC-52)
+  drawingsOriginated        Drawing[]              @relation("DrawingOriginator")
 
   @@map("entities")
 }
@@ -338,6 +340,8 @@ model Project {
   primeContract              PrimeContract?              @relation("ProjectPrimeContract")
   primeContractRef           PrimeContract?              @relation("ProjectPrimeContractRef", fields: [primeContractId], references: [id], onDelete: Restrict)
   intercompanyContracts      IntercompanyContract[]      @relation("ProjectIntercompanyContracts")
+  // Layer 2.5 — Drawing Register (PIC-52)
+  drawings                   Drawing[]
 
   @@index([entityId])
   @@map("projects")
@@ -1561,6 +1565,12 @@ model VendorContract {
   terms            String?
   signedDate       DateTime?            @map("signed_date")
   parentContractId String?              @map("parent_contract_id")
+  // PIC-53: optional FK to the RFQ that materialised this contract (when the
+  // contract was created via materialiseAward with materialiseAs='subcontract').
+  // Nullable — a VendorContract may also be created standalone (no RFQ origin).
+  // Used by the materialisation idempotency check (refuse a second materialise
+  // if a VendorContract with this rfqId already exists).
+  rfqId            String?              @map("rfq_id")
   status           VendorContractStatus @default(draft)
   referenceNumber  String?              @unique @map("reference_number")
   createdBy        String               @map("created_by")
@@ -1571,11 +1581,14 @@ model VendorContract {
   vendor         Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   parentContract VendorContract?  @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
   childContracts VendorContract[] @relation("ContractAmendment")
+  // PIC-53 — Subcontract materialisation origin (nullable FK to RFQ)
+  rfq            RFQ?             @relation("VendorContractFromRfq", fields: [rfqId], references: [id], onDelete: Restrict)
 
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
   @@index([parentContractId])
+  @@index([rfqId])
   @@map("vendor_contracts")
 }
 
@@ -1630,26 +1643,34 @@ model FrameworkAgreementItem {
 }
 
 model RFQ {
-  id              String    @id @default(uuid())
-  projectId       String    @map("project_id")
-  rfqNumber       String    @unique @map("rfq_number")
-  title           String
-  description     String?
-  requiredByDate  DateTime? @map("required_by_date")
-  categoryId      String?   @map("category_id")
-  currency        String
-  estimatedBudget Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
-  status          RfqStatus @default(draft)
-  referenceNumber String?   @unique @map("reference_number")
-  createdBy       String    @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  projectId          String    @map("project_id")
+  rfqNumber          String    @unique @map("rfq_number")
+  title              String
+  description        String?
+  requiredByDate     DateTime? @map("required_by_date")
+  categoryId         String?   @map("category_id")
+  currency           String
+  estimatedBudget    Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
+  status             RfqStatus @default(draft)
+  referenceNumber    String?   @unique @map("reference_number")
+  // PIC-53: first-class FK to the winning quotation (promotes the value that
+  // previously lived only in audit-log afterJson). Nullable; set when RFQ
+  // transitions to awarded. Enables efficient "find me the winning quotation"
+  // queries plus the materialisation-idempotency check.
+  awardedQuotationId String?   @unique @map("awarded_quotation_id")
+  createdBy          String    @map("created_by")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  project    Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  category   ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  items      RFQItem[]
-  rfqVendors RFQVendor[]
-  quotations Quotation[]
+  project          Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  category         ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  awardedQuotation Quotation?           @relation("RfqAwardedQuotation", fields: [awardedQuotationId], references: [id], onDelete: Restrict)
+  items            RFQItem[]
+  rfqVendors       RFQVendor[]
+  quotations       Quotation[]          @relation("QuotationRfq")
+  // PIC-53 — Subcontract materialisation back-relation
+  vendorContracts  VendorContract[]     @relation("VendorContractFromRfq")
 
   @@index([projectId, status])
   @@index([projectId, createdAt])
@@ -1681,6 +1702,10 @@ model RFQVendor {
   rfqId          String    @map("rfq_id")
   vendorId       String    @map("vendor_id")
   sentAt         DateTime? @map("sent_at")
+  // PIC-53: timestamp at which this vendor responded to the RFQ. The pair
+  // (sentAt, respondedAt) is the input to the time-to-respond SLA computation.
+  // Nullable: a vendor may decline or never respond.
+  respondedAt    DateTime? @map("responded_at")
   responseStatus String?   @map("response_status")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -1709,15 +1734,56 @@ model Quotation {
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 
-  rfq       RFQ                 @relation(fields: [rfqId], references: [id], onDelete: Restrict)
-  vendor    Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  lineItems QuotationLineItem[]
+  rfq         RFQ                  @relation("QuotationRfq", fields: [rfqId], references: [id], onDelete: Restrict)
+  vendor      Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lineItems   QuotationLineItem[]
+  // PIC-53: 1:1 with QuotationEvaluation. Optional — not every quotation gets scored.
+  evaluation  QuotationEvaluation?
+  // PIC-53: inverse of RFQ.awardedQuotationId (winning quotation pointer)
+  rfqAsWinner RFQ?                 @relation("RfqAwardedQuotation")
 
   // Identity enforced at application level (status-aware: one ACTIVE quotation per vendor per RFQ).
   // DB-level partial unique index in migration handles the hard constraint.
   @@index([rfqId, vendorId])
   @@index([rfqId, status])
   @@map("quotations")
+}
+
+// ---------------------------------------------------------------------------
+// PIC-53 — Bid evaluation scoring (Layer 2.5 PR-4)
+//
+// One QuotationEvaluation per Quotation (1:1). Five PD-decided scoring
+// criteria, each 0-100 NUMERIC(5,2). compositeScore is computed at write time
+// from per-project weights stored in projectSetting (keys
+// `rfq_evaluation_weight_{criterion}`). No weight values hardcoded anywhere
+// (code/seed/fixture) — per the PIC-41 governance discipline.
+//
+// composite = Σ(criterion × weight). Formula explicit in the service layer
+// and audit-log payload; weight values used are also recorded in audit
+// so a future read can reconstruct exactly how a score was computed.
+// ---------------------------------------------------------------------------
+
+model QuotationEvaluation {
+  id                                 String   @id @default(uuid())
+  quotationId                        String   @unique @map("quotation_id")
+  // Five Pico Play scoring criteria (PD ruling 2026-05-20).
+  technicalScore                     Decimal  @map("technical_score") @db.Decimal(5, 2)
+  commercialScore                    Decimal  @map("commercial_score") @db.Decimal(5, 2)
+  genericExperienceScore             Decimal  @map("generic_experience_score") @db.Decimal(5, 2)
+  themedEntertainmentExperienceScore Decimal  @map("themed_entertainment_experience_score") @db.Decimal(5, 2)
+  creativeAestheticCapabilityScore   Decimal  @map("creative_aesthetic_capability_score") @db.Decimal(5, 2)
+  // Composite is computed at write time from the five scores + project-scoped weights.
+  // 7,4 fits 0.0000 - 100.0000 with margin for weight rounding.
+  compositeScore                     Decimal  @map("composite_score") @db.Decimal(7, 4)
+  evaluationNotes                    String?  @map("evaluation_notes") @db.Text
+  evaluatedBy                        String   @map("evaluated_by")
+  evaluatedAt                        DateTime @default(now()) @map("evaluated_at")
+  createdAt                          DateTime @default(now()) @map("created_at")
+  updatedAt                          DateTime @updatedAt @map("updated_at")
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  @@map("quotation_evaluations")
 }
 
 model QuotationLineItem {
@@ -2499,4 +2565,109 @@ model EntityLegalDetails {
   updater User   @relation("EntityLegalDetailsUpdater", fields: [updatedBy], references: [id], onDelete: Restrict)
 
   @@map("entity_legal_details")
+}
+
+// ---------------------------------------------------------------------------
+// 15. Drawing Register — Layer 2.5 PR-3 (PIC-52)
+//
+// Design drawings (architectural / structural / MEP / theming / FF&E /
+// rockwork / ride_systems / show_control / scenic) with revision events as
+// first-class records, status flow (For Information → For Approval →
+// For Construction → Superseded), and approval routing through the
+// existing workflow engine.
+//
+// DrawingRevision is the workflow-managed entity (joins
+// WORKFLOW_DRIVEN_MODELS). Drawing is a header/metadata entity NOT directly
+// workflow-managed — Drawing.currentRevisionId is updated by the workflow
+// convergence handler when a DrawingRevision reaches for_construction.
+// That update is a workflow-driven write on a non-workflow-managed entity
+// (a PIC-47-class blind spot of the PIC-49 structural guard, which only
+// covers WORKFLOW_DRIVEN_MODELS — caller-compliance discipline applies:
+// the write MUST be runAsWorkflowEngine-scoped, asserted in tests).
+//
+// Document attachment: each DrawingRevision attaches a file via the
+// PIC-51 polymorphic recordType registry (recordType='drawing_revision').
+// ---------------------------------------------------------------------------
+
+enum DrawingDiscipline {
+  architectural @map("architectural")
+  structural    @map("structural")
+  mep           @map("mep")
+  theming       @map("theming")
+  ff_and_e      @map("ff_and_e")
+  rockwork      @map("rockwork")
+  ride_systems  @map("ride_systems")
+  show_control  @map("show_control")
+  scenic        @map("scenic")
+
+  @@map("drawing_discipline")
+}
+
+enum DrawingRevisionStatus {
+  for_information  @map("for_information")
+  for_approval     @map("for_approval")
+  for_construction @map("for_construction")
+  superseded       @map("superseded")
+
+  @@map("drawing_revision_status")
+}
+
+model Drawing {
+  id                 String            @id @default(uuid()) @map("id")
+  projectId          String            @map("project_id")
+  drawingNumber      String            @map("drawing_number")
+  title              String            @map("title")
+  discipline         DrawingDiscipline @map("discipline")
+  originatorEntityId String?           @map("originator_entity_id")
+  currentRevisionId  String?           @unique @map("current_revision_id")
+  createdBy          String            @map("created_by")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  originatorEntity Entity?           @relation("DrawingOriginator", fields: [originatorEntityId], references: [id], onDelete: Restrict)
+  currentRevision  DrawingRevision?  @relation("DrawingCurrentRevision", fields: [currentRevisionId], references: [id])
+  revisions        DrawingRevision[] @relation("DrawingRevisions")
+
+  @@unique([projectId, drawingNumber])
+  @@index([projectId, discipline])
+  @@index([projectId, createdAt])
+  @@map("drawings")
+}
+
+model DrawingRevision {
+  id               String                @id @default(uuid()) @map("id")
+  drawingId        String                @map("drawing_id")
+  revisionLabel    String                @map("revision_label")
+  status           DrawingRevisionStatus @default(for_information) @map("status")
+  whatChanged      String                @map("what_changed") @db.Text
+  distributionList Json                  @default("[]") @map("distribution_list")
+  issuedBy         String?               @map("issued_by")
+  issuedAt         DateTime?             @map("issued_at")
+  createdBy        String                @map("created_by")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  drawing          Drawing                          @relation("DrawingRevisions", fields: [drawingId], references: [id], onDelete: Restrict)
+  drawingHead      Drawing?                         @relation("DrawingCurrentRevision")
+  acknowledgements DrawingRevisionAcknowledgement[]
+
+  @@unique([drawingId, revisionLabel])
+  @@index([drawingId, status])
+  @@index([drawingId, createdAt])
+  @@map("drawing_revisions")
+}
+
+model DrawingRevisionAcknowledgement {
+  id             String   @id @default(uuid()) @map("id")
+  revisionId     String   @map("revision_id")
+  userId         String   @map("user_id")
+  acknowledgedAt DateTime @default(now()) @map("acknowledged_at")
+
+  revision DrawingRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  @@unique([revisionId, userId])
+  @@index([revisionId])
+  @@index([userId])
+  @@map("drawing_revision_acknowledgements")
 }

@@ -239,7 +239,9 @@ export async function transitionPurchaseOrder(
   // without a template fall back to manual approval.
   if (newStatus === 'submitted') {
     try {
-      const resolution = await resolveTemplate('purchase_order', existing.projectId);
+      // PIC-41: pass totalAmount so the resolver can apply the configured
+      // high-value threshold (if any). Unconfigured → standard default.
+      const resolution = await resolveTemplate('purchase_order', existing.projectId, undefined, existing.totalAmount);
       if (resolution) {
         await workflowInstanceService.startInstance({
           templateCode: resolution.code,

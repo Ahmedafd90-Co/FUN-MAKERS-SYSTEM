@@ -180,13 +180,18 @@ export async function validateBatch(batchId: string, actorUserId: string) {
 
   const snapshot = await buildReferenceSnapshot(batch.importType, batch.projectId);
 
-  let projectCurrency = 'SAR';
+  // PIC-60 audit D2.04: resolve project currency from Project.currencyCode
+  // (NOT NULL in schema). The previous 'SAR' fallback was a KSA-only assumption
+  // that would silently default non-SAR projects.
+  // For non-ipa_history imports the currency isn't used downstream — initialise
+  // to empty string so subsequent code that needs it would fail explicitly.
+  let projectCurrency = '';
   if (batch.importType === 'ipa_history') {
     const project = await prisma.project.findUniqueOrThrow({
       where: { id: batch.projectId },
       select: { currencyCode: true },
     });
-    projectCurrency = project.currencyCode ?? 'SAR';
+    projectCurrency = project.currencyCode;
   }
 
   let validCount = 0;

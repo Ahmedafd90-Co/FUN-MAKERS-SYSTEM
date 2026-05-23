@@ -39,11 +39,23 @@ import { Prisma } from '@prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
- * The 13 workflow-driven entity models (Prisma model names, Pascal case).
+ * The 14 workflow-driven entity models (Prisma model names, Pascal case).
  * Status writes on these tables go through `runAsWorkflowEngine` or fail.
+ *
+ * Exported (PIC-50) so the template-registry parity test in `@fmksa/core`
+ * can assert that every workflow-managed model has a matching entry in
+ * `WORKFLOW_TEMPLATE_REGISTRY` (declared in `@fmksa/contracts`). Drift
+ * between the two — a new entity added here but missing from the
+ * registry, or vice versa — is exactly the silent-mis-resolution class
+ * PIC-50 exists to prevent.
+ *
+ * Adding a new entity (PIC-50 atomic-add convention): append the Pascal-case
+ * model name here + add the snake_case recordType entry to
+ * WORKFLOW_TEMPLATE_REGISTRY + seed the `${prefix}_standard` template.
+ * The parity-guard test fails if any step is missed.
  */
-const WORKFLOW_DRIVEN_MODELS = [
-  // 8 auto-start (workflow.start fires on entity submit)
+export const WORKFLOW_DRIVEN_MODELS = [
+  // 9 auto-start (workflow.start fires on entity submit)
   'Ipa',
   'Ipc',
   'Variation',
@@ -52,6 +64,15 @@ const WORKFLOW_DRIVEN_MODELS = [
   'PurchaseOrder',
   'RFQ',
   'SupplierInvoice',
+  // PIC-52 (Layer 2.5 PR-3) — Drawing Register: each revision has its own
+  // approval cycle (For Information → For Approval → For Construction →
+  // Superseded). Drawing itself is NOT in this list (header/metadata only).
+  // Drawing.currentRevisionId IS updated by the workflow convergence handler
+  // when a revision reaches for_construction; that write is a workflow-driven
+  // write on a non-workflow-managed entity — a structural blind spot of this
+  // guard. Caller-compliance discipline enforced at the service layer and
+  // asserted by test (see packages/core/tests/documents/drawings/).
+  'DrawingRevision',
   // 5 manual-start (workflow_instance auto-seeded on entity create, PR-W2A Step 5)
   'CostProposal',
   'TaxInvoice',

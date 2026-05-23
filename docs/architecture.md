@@ -119,6 +119,44 @@ These are enforced at the data and service layer — do not work around them.
 
 ---
 
+## Standing Rules
+
+Process-class invariants — these apply to how PRs are conducted, not what runtime code does. Each rule documents its provenance + a first-application example so the rule's authority is traceable.
+
+### SR-1 — Doc-currency discipline (PIC-63, 2026-05-20)
+
+**When a Phase A recon overturns a claim made in a roadmap / spec / decision doc, the source doc MUST be amended within the PR that surfaces the correction.** Correction-as-PR-body or correction-as-ticket-comment is not sufficient — a future reader of the original spec will not know to look elsewhere.
+
+**Mechanics:**
+1. The PR description includes a **"Source doc amendments"** section listing every doc touched by the recon correction.
+2. The amendment is a header note at the top of the corrected section in the source doc, linking to the recon source (PR / Linear ticket / Decisions doc).
+3. If the source doc is owned by a different team / system / Linear scope, the amendment may instead be a stub linking to the canonical correction venue, but the stub MUST be added — silent drift is the failure mode.
+
+**Provenance:** PIC-63 (Pre-PR-5 Sweep Session 1, 2026-05-20). Lesson surfaced by the 2026-05-20 Functional Readiness Audit Phase 4 — three specs found stale, corrections living only in PR bodies / Layer 2.5 Decisions doc, never folded back into source. The Module Spec "RFQ Management is the missing module" claim (corrected by PIC-53 Phase A recon, four weeks unflagged in the source doc) is the RED-class example.
+
+**Why it matters:** every recon-gated PR (PIC-50/51/52/53 Phase A pattern) has surfaced findings the ticket didn't anticipate. Each correction has to live somewhere. Without this rule, corrections accumulate in PR bodies and ticket comments — invisible to anyone who reads the source spec months later. The cumulative effect is the doc-currency cluster the 2026-05-20 audit surfaced.
+
+**First application:** PIC-62 (Module Spec correction header for the RFQ-missing-premise drift), landed in the same Pre-PR-5 Sweep PR as this standing rule.
+
+### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
+
+**Adding a new workflow-managed entity requires an ATOMIC 4-step contract in a single PR:**
+
+1. Add the model to `WORKFLOW_DRIVEN_MODELS` (in `packages/db/src/middleware/no-direct-status-write.ts`)
+2. Add the entry to `WORKFLOW_TEMPLATE_REGISTRY` (in `packages/contracts/src/workflow.ts`)
+3. If the entity attaches documents, add to `RECORD_TYPES_FOR_DOCUMENTS` (in `packages/contracts/src/documents.ts`)
+4. Seed the `{prefix}_standard` template (in `packages/db/src/seed/*-workflow-templates.ts`)
+
+**Plus, post-merge (added by PIC-64, 2026-05-20):**
+
+5. **Re-seed every target environment** (dev DB minimum; staging + prod per deployment pipeline). The PIC-50 parity guard catches code-level drift, but NOT per-DB seed presence. PIC-64 surfaced this gap when both `drawing_revision_standard` (PIC-52) and `rfq.materialise` (PIC-53) were absent from dev DB despite the seed files being correct — the dev DB had not been re-seeded after merge.
+
+**Failure mode if step 5 is skipped:** the entity ships code-clean (PIC-50 guard passes), but production runtime fails silently at workflow auto-start (`resolveTemplate` returns null because the template isn't in DB) or at permission-gate check (`ctx.user.permissions.includes('rfq.materialise')` returns false because the permission isn't in DB).
+
+**Provenance:** PIC-50 (mechanism, 2026-05-19) extended by PIC-64 (Pre-PR-5 Sweep Session 1, 2026-05-20) to include step 5.
+
+---
+
 ## Input Validation
 
 All tRPC inputs are validated against **Zod schemas** defined in `packages/contracts`. Do not define schemas inline in routers — add them to contracts and import.
