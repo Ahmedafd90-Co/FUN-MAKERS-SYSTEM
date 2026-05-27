@@ -74,6 +74,106 @@ has a live subject. The brand-chain abandonment finding (PIC-74 Pass 2) was the
 canonical example — "PR #10 untouched" was guarding an abandoned PR for the
 engagement's duration.
 
+#### Class-structured extensions (catches 12–22, 2026-05-22 → 2026-05-27)
+
+The six foundational layers above all caught variants of the same drift mechanism.
+PIC-72 cluster 2 → cluster 5 → PIC-75 → PIC-76 surfaced eleven more catches across
+five structural classes. Each class extends the rule with class-specific operating
+discipline — knowing the headline rule isn't sufficient; the verification step
+that operationalises the rule per class must execute.
+
+##### Drift-class (catches 12–16)
+
+12. **Cluster 2 prompt presupposed PIC-74 Stage 2's transient measurement as
+    canonical baseline.** The "demo-project-integrity FAIL is the State B baseline"
+    framing rested on one local measurement that didn't reproduce in CI.
+13. **PD verbatim text referenced `pnpm -F @fmksa/db seed` but canonical script is
+    `db:seed`** per `packages/db/package.json`. Verbatim prescription assumed a
+    script name without verifying the source.
+14. **Turbo stop-on-first-failure masks `@fmksa/core` convergence signal in CI.**
+    Cluster 2 sequencing assumed `@fmksa/core` would run regardless of `@fmksa/db`;
+    turbo's default halts the pipeline on first failure before `@fmksa/core` ever
+    starts.
+15. **Cluster 5 prompt presupposed adjacent failures share root cause.** The
+    "f114b50 cherry-pick fixes idempotency + demo-project-integrity" framing
+    collapsed two distinct failure mechanisms into one; post-cherry-pick state
+    showed idempotency green but demo-project-integrity still failing.
+16. **Session-restored worktree was on preservation-list branch.** A compacted
+    session restored Claude to a forbidden worktree
+    (`feature/commercial-monthly-cost-sheet`, HEAD `067e3ea`); caught before any
+    write via verify-before-resume recon.
+
+**Operating discipline (drift-class):** before prescribing a mechanism, verify
+body-vs-reality. The pre-action verification step is what binds the rule —
+having the rule documented is not enough; the recon step must execute.
+
+##### Revision-class (catches 17 → 18)
+
+17. **RETRACTED.** Original framing — that `f114b50` cherry-pick unmasked latent
+    concurrent-execution test pollution — was a misdiagnosis. The diagnostic
+    step skipped to "what could cause this" before reading "what is the contract."
+18. **Catch 17 retraction.** Phase A reading of `vitest.config.ts` proved
+    sequential execution is the contract (`pool: 'forks'`, `singleFork: true`).
+    The retraction itself becomes a register entry — pattern register entries
+    are not immune to revision by deeper recon.
+
+**Operating discipline (revision-class):** a retraction creates a new register
+entry, not a silent rollback. Document the revision relationship (17 → 18)
+explicitly so future readers see both the original framing and the corrected
+diagnosis. The arc continues at catch 22 (scope-overgeneralized retraction).
+
+##### Recurrence-class (catch 19)
+
+19. **Local State B stress test does NOT predict CI State A behavior — same
+    class as catch 12.** PIC-75 PR #53 commit 3 documented β1 as "empirically
+    resolved" based on local 42/42; CI showed row-counts failing, despite
+    catch 12 being canonicalized in the register at the time.
+
+**Operating discipline (recurrence-class):** documenting a rule doesn't
+operationalize it. A register entry firing twice in the same class is a signal
+that the rule needs a verifiable artifact (pre-action checklist, CI gate,
+explicit recon step) — not just text in CLAUDE.md. Without operationalisation,
+the rule is decorative.
+
+##### Methodology-insufficiency class (catches 20–21)
+
+20. **State A locally may not equal State A in CI; reproduce methodology hit a
+    wall.** PIC-76 Phase A attempted local State-A reproduction of the CI
+    catch-22 mechanism. Single-package vitest passed locally even with turbo
+    concurrency simulated, because the local DB had no other package's writes
+    racing. The prescribed verification step was necessary but not sufficient.
+21. **PD's P4 step presupposed push triggers CI; reality requires PR.** Probe
+    branch push didn't trigger CI workflows; `gh run list` empty. The
+    push-as-CI-trigger presupposition didn't survive contact with repo CI
+    configuration (workflows trigger on `pull_request` + push-to-main, not
+    arbitrary branch pushes). Resolved by Option-A draft PR convention.
+
+**Operating discipline (methodology-insufficiency class):** when a prescribed
+verification step can't reach the actual failure state, escalate to probe at
+the actual failure surface — don't iterate on a method that can't reach State A.
+Mark unverified prescriptions in PD rulings as `ASSUMED — verify before
+executing` so the gap is visible at execution time.
+
+##### Scope-overgeneralized-retraction class (catch 22)
+
+22. **vitest `fileParallelism: false` doesn't compose with turbo's inter-package
+    parallelism; F3 fixes.** The β1 retraction in PIC-75 PR #53 claimed "vitest
+    sequential execution proven via config" — true for a single package, but
+    turbo runs `pnpm -F @fmksa/db test` and `pnpm -F @fmksa/core test` in
+    parallel processes, each owning its own vitest runner with
+    `fileParallelism: false`. Process-isolation guarantees do not compose
+    across runners; the retraction's scope didn't match the original
+    hypothesis's scope.
+
+**Operating discipline (scope-overgeneralized-retraction class):** when
+retracting a hypothesis, verify the retraction's scope matches the original
+hypothesis's scope. F3 (per-package test DBs, see `docs/architecture.md` § β1)
+is the canonical architectural fix for this class — see also SR-Canonical-Patterns
+for codification.
+
+**Canonicalized 2026-05-27 in PIC-72 cluster 6/7/1.c** (single PR umbrella with
+SR-3 introduction, Canonical Patterns codification, PIC-19 closure, β4 hygiene).
+
 ### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
 
 **Adding a new workflow-managed entity requires an ATOMIC 4-step contract in a single PR:**
