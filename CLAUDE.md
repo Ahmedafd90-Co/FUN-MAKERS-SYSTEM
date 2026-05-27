@@ -197,6 +197,59 @@ exits CI on failure. SR-2 step 5 ("re-seed every target environment") is now
 structurally guaranteed for CI; remains documented discipline for staging + prod
 per deployment pipeline.
 
+### SR-3 — Verification before mechanism prescription (PIC-72 cluster 6/7/1.c, 2026-05-27)
+
+**When a rule, instruction, or ruling prescribes a mechanism (CI behavior,
+test-isolation contract, environment property, tooling behavior), verify the
+mechanism actually applies in the target environment before acting on the
+prescription.** This complements SR-1 extension (which catches wrong-identifier
+presuppositions) by catching wrong-mechanism presuppositions.
+
+**Mechanics:**
+
+1. When a prescription depends on environmental mechanism (e.g., "push triggers
+   CI", "vitest sequential execution composes across packages", "local State A
+   = CI State A"), state the mechanism assumption explicitly before executing.
+2. Verify the mechanism against the target environment before acting. If
+   verification can't reach the failure state, escalate to probe at the actual
+   failure surface — don't iterate on a method that can't reach State A.
+3. If the prescription includes a retraction or revision, verify the
+   retraction's scope matches the original hypothesis's scope. Process-isolation
+   guarantees, single-runner contracts, and per-package configuration do not
+   compose across runners by default.
+4. Mark unverified mechanism prescriptions as `ASSUMED — verify before
+   executing` so the gap is visible at execution time, not at failure time.
+
+**Provenance — three catches surfaced during PIC-75 → PIC-76 execution
+(2026-05-27):**
+
+- **Catch 20** (methodology-insufficiency): PIC-76 Phase A attempted local
+  State-A reproduction of the CI catch-22 mechanism. Single-package vitest
+  passed locally even with turbo concurrency simulated — local DB had no
+  other package's writes racing. Prescribed verification step was necessary
+  but not sufficient.
+- **Catch 21** (methodology-insufficiency): PD's P4 step presupposed push
+  triggers CI; reality requires PR. Probe branch push didn't trigger CI
+  workflows; `gh run list` empty. Resolved by Option-A draft PR convention.
+- **Catch 22** (scope-overgeneralized-retraction): vitest `fileParallelism:
+  false` doesn't compose with turbo's inter-package parallelism. The β1
+  retraction in PIC-75 PR #53 claimed "vitest sequential execution proven via
+  config" — true for a single package, but turbo runs per-package vitest
+  runners in parallel processes; process-isolation guarantees do not compose
+  across runners. F3 (per-package test DBs, see `docs/architecture.md` § β1)
+  is the canonical architectural fix.
+
+**Relationship to SR-1 extension:** SR-1 extension catches wrong-identifier
+presuppositions (PR numbers, script names, file paths, branch names). SR-3
+catches wrong-mechanism presuppositions (CI triggers, isolation guarantees,
+environment behavior). Both are forms of body-vs-reality drift; both require
+explicit verification before acting. SR-1 extension's drift-class operating
+discipline ("before prescribing a mechanism, verify body-vs-reality") points
+at this rule; SR-3 is the canonical mechanism-side companion.
+
+**First application:** SR-3 introduced 2026-05-27 in PIC-72 cluster 6/7/1.c,
+landed in the same single-PR umbrella as the SR-1 extension canonicalization.
+
 ### SR-Sentinel — PR #4 untouched
 
 PR #4 (`chore/brand-adaptation-ci-cleanup`, open 13+ months as of 2026-05) is the
