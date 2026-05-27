@@ -14,6 +14,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { cleanTestData } from './clean-test-data';
+import { seedOrganizations } from './organizations';
 import { seedCountries } from './countries';
 import { seedCurrencies } from './currencies';
 import { seedAppSettings } from './app-settings';
@@ -52,7 +53,10 @@ async function main() {
   // Clean orphaned test data before seeding demo records
   await cleanTestData(prisma);
 
-  // Order matters: no-FK tables first, then FK-dependent tables
+  // Order matters: no-FK tables first, then FK-dependent tables.
+  // PIC-75: Organization singleton seeded FIRST — it's the tenancy root
+  // that all per-tenant transactional models default to via @default.
+  await seedOrganizations(prisma);
   await seedCountries(prisma);
   await seedCurrencies(prisma);
   await seedAppSettings(prisma);
