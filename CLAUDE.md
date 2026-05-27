@@ -137,3 +137,25 @@ or any other per-tenant artefact all belong in runtime configuration.
 
 **Provenance:** PIC-74 Stage 3.a architectural ruling (Linear comment 82a89841,
 2026-05-22).
+
+**Canonical worked example — PIC-75 (2026-05-27):** the `Organization` model
+introduced as first-class tenant root with hardcoded singleton UUID
+`00000000-0000-0000-0000-000000000001` + transitional `@default` pattern on
+`orgId`. Compound `@@unique` keys applied to 9 project-scoped commercial /
+procurement models (IPA, IPC, Variation, CostProposal, Correspondence, RFQ,
+EngineerInstruction, VendorContract, PurchaseOrder) as `[orgId, projectId,
+referenceNumber]`; TaxInvoice gets `[orgId, referenceNumber]` (no projectId)
+for ZATCA Phase 2 — invoice numbers are per-tenant sequential, not per-project.
+
+VendorContract + PurchaseOrder confirmed the dual-identifier pattern:
+customer-facing globally-unique identifier (`contractNumber` / `poNumber`)
+stays as global `@unique`; internal sequential `referenceNumber` becomes
+per-tenant project-scoped via compound key. Use this pattern for any future
+entity carrying both an external public reference and an internal sequential
+reference.
+
+Single-tenant `@default` is a deliberate transitional shortcut, intended to
+be removed when multi-tenancy ships (service code will then be required to
+supply `orgId` from the request context). See `docs/architecture.md` §
+"Multi-Tenancy Schema Primitives" for the full design rationale per entity
+class + the future-multi-tenant migration path.

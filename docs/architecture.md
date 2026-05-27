@@ -119,6 +119,75 @@ These are enforced at the data and service layer — do not work around them.
 
 ---
 
+## Multi-Tenancy Schema Primitives (PIC-75, 2026-05-27)
+
+ProjectLedger is multi-tenant-by-design but currently runs as a single-tenant deployment ("Pico Play KSA"). PIC-75 lands the canonical first application of SR-Multi-Tenancy as schema-level primitives that the rest of the codebase can reference when extending multi-tenant scope to additional surfaces.
+
+### Organization model (tenant root)
+
+`packages/db/prisma/schema.prisma` — `Organization` is the canonical tenant root. Each tenant is one Organization row keyed by UUID `id` with a human-readable `slug` (e.g. `picoplay-ksa`). The platform currently has a hardcoded singleton:
+
+```
+id   = '00000000-0000-0000-0000-000000000001'
+slug = 'picoplay-ksa'
+name = 'Pico Play KSA'
+```
+
+This singleton UUID is **byte-identical** across three sources:
+1. `schema.prisma` — `@default("...")` on `orgId` for 10 transactional models
+2. `prisma/migrations/20260527140000_pic75_multi_tenancy_org/migration.sql` — INSERT statement
+3. `src/seed/organizations.ts` — `SINGLETON_ORG_ID` constant
+
+Changing the singleton requires updating all three in lockstep. The `seedOrganizations` function runs first in the seed chain (before countries/currencies/etc.) so all FK-dependent seeds find the singleton.
+
+### `referenceNumber` semantic constraints — per entity class
+
+The 10 transactional models carrying a `referenceNumber String?` field have one of two constraint shapes:
+
+| Entity class | Compound key | Rationale |
+|---|---|---|
+| `Ipa`, `Ipc`, `Variation`, `CostProposal`, `Correspondence`, `Rfq`, `EngineerInstruction`, `VendorContract`, `PurchaseOrder` | `@@unique([orgId, projectId, referenceNumber])` | Project-scoped sequential reference inside a tenant. Two tenants can both have an `IPA-001` against their own `FMKSA-2026-001` project — these are distinct because the tenant scope differs. |
+| `TaxInvoice` | `@@unique([orgId, referenceNumber])` (no `projectId`) | ZATCA Phase 2 compliance: invoice numbers form one sequential space per tenant, not per project. A tenant's tax authority filing draws from one stream regardless of which project the invoice belongs to. |
+
+**Identifier types on VendorContract + PurchaseOrder** — both carry two distinct unique identifiers:
+- `contractNumber` (VC) / `poNumber` (PO) — customer-facing, externally referenced (e.g. on signed contracts, supplier portals). Stays globally `@unique` even after PIC-75.
+- `referenceNumber` — internal sequential, per-tenant project-scoped via compound key.
+
+Do not conflate the two — `contractNumber` / `poNumber` is the public ID; `referenceNumber` is the internal organizational ID.
+
+### Transitional `@default` pattern
+
+`orgId` on the 10 models carries `@default("00000000-0000-0000-0000-000000000001")`. This lets existing single-tenant service code create rows without supplying `orgId` explicitly — Prisma populates the singleton at create time.
+
+When multi-tenancy ships:
+1. Remove the `@default(...)` from `orgId` declarations
+2. Require service code to provide `orgId` from the request context (e.g. `ctx.user.orgId` or the auth session)
+3. Add an explicit `data: { orgId: ctx.user.orgId, ... }` to every `prisma.*.create({ data: ... })` call site
+4. (Optionally) add a Prisma client extension that asserts `orgId` matches the caller's session, parallel to PIC-35 Step 7's status-write blocker
+
+The `@default` pattern is INTENDED to be removed — it is a deliberate transitional shortcut, not a permanent design.
+
+### Multi-tenancy migration path (future)
+
+Surfaces NOT yet multi-tenant-scoped but candidates for the same compound-key treatment when their multi-tenant story is written:
+
+- `Project`, `Entity`, `User`, `Role`, `UserRole`, `ProjectAssignment`, `ScreenPermission` — Layer 1 identity + project scaffolding
+- `Vendor`, `ProcurementCategory`, `ItemCatalog`, `FrameworkAgreement` — procurement master data
+- `Document`, `DocumentVersion`, `DocumentSignature` — document layer
+- `WorkflowTemplate`, `WorkflowInstance` — workflow engine state
+
+Each future multi-tenant extension follows the PIC-75 pattern: introduce `orgId` with singleton `@default`, add compound uniqueness, document the entity-class semantic in this section, eventually remove the `@default`.
+
+### β1 finding — row-counts CI failure resolved indirectly (catch 18)
+
+PIC-75 Phase A diagnosed PR #52's CI row-counts failure as concurrent-execution pollution (catch 17). That diagnosis was wrong — `vitest.config.ts` already has `fileParallelism: false`. Catch 18 retracts catch 17. Empirical Phase B finding: post-schema-migration, the row-counts test passes consistently in CI-mimic environment (3 stress runs, 42/42 passing) without a targeted fix. The PIC-75 schema migration appears to have indirectly resolved the underlying state interaction.
+
+Candidates **deferred to PIC-76** filing (β2/β3 — quality improvements, not bugfixes):
+- β2 — Harmonize `cleanTestData` TRUNCATE scope (16 tables) with `idempotency.test.ts` TRUNCATE scope (13 tables). Inconsistency does not currently cause failures but could in future.
+- β3 — Replace `.catch(() => {})` in `demo-project-integrity.test.ts` afterAll with explicit FK-aware teardown ordering. The schema migration removed the immediate symptom (IPA-DEMO-001 collision) but the underlying silent-failure pattern remains.
+
+---
+
 ## Standing Rules
 
 Process-class invariants — these apply to how PRs are conducted, not what runtime code does. Each rule documents its provenance + a first-application example so the rule's authority is traceable.
