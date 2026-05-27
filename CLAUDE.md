@@ -74,6 +74,125 @@ has a live subject. The brand-chain abandonment finding (PIC-74 Pass 2) was the
 canonical example — "PR #10 untouched" was guarding an abandoned PR for the
 engagement's duration.
 
+#### Class-structured extensions (catches 12–22, 2026-05-22 → 2026-05-27)
+
+The six foundational layers above all caught variants of the same drift mechanism.
+PIC-72 cluster 2 → cluster 5 → PIC-75 → PIC-76 surfaced eleven more catches across
+five structural classes. Each class extends the rule with class-specific operating
+discipline — knowing the headline rule isn't sufficient; the verification step
+that operationalises the rule per class must execute.
+
+##### Drift-class (catches 12–16)
+
+12. **Cluster 2 prompt presupposed PIC-74 Stage 2's transient measurement as
+    canonical baseline.** The "demo-project-integrity FAIL is the State B baseline"
+    framing rested on one local measurement that didn't reproduce in CI.
+13. **PD verbatim text referenced `pnpm -F @fmksa/db seed` but canonical script is
+    `db:seed`** per `packages/db/package.json`. Verbatim prescription assumed a
+    script name without verifying the source.
+14. **Turbo stop-on-first-failure masks `@fmksa/core` convergence signal in CI.**
+    Cluster 2 sequencing assumed `@fmksa/core` would run regardless of `@fmksa/db`;
+    turbo's default halts the pipeline on first failure before `@fmksa/core` ever
+    starts.
+15. **Cluster 5 prompt presupposed adjacent failures share root cause.** The
+    "f114b50 cherry-pick fixes idempotency + demo-project-integrity" framing
+    collapsed two distinct failure mechanisms into one; post-cherry-pick state
+    showed idempotency green but demo-project-integrity still failing.
+16. **Session-restored worktree was on preservation-list branch.** A compacted
+    session restored Claude to a forbidden worktree
+    (`feature/commercial-monthly-cost-sheet`, HEAD `067e3ea`); caught before any
+    write via verify-before-resume recon.
+
+**Operating discipline (drift-class):** before prescribing a mechanism, verify
+body-vs-reality. The pre-action verification step is what binds the rule —
+having the rule documented is not enough; the recon step must execute.
+
+##### Revision-class (catches 17 → 18)
+
+17. **RETRACTED.** Original framing — that `f114b50` cherry-pick unmasked latent
+    concurrent-execution test pollution — was a misdiagnosis. The diagnostic
+    step skipped to "what could cause this" before reading "what is the contract."
+18. **Catch 17 retraction.** Phase A reading of `vitest.config.ts` proved
+    sequential execution is the contract (`pool: 'forks'`, `singleFork: true`).
+    The retraction itself becomes a register entry — pattern register entries
+    are not immune to revision by deeper recon.
+
+**Operating discipline (revision-class):** a retraction creates a new register
+entry, not a silent rollback. Document the revision relationship (17 → 18)
+explicitly so future readers see both the original framing and the corrected
+diagnosis. The arc continues at catch 22 (scope-overgeneralized retraction).
+
+##### Recurrence-class (catch 19)
+
+19. **Local State B stress test does NOT predict CI State A behavior — same
+    class as catch 12.** PIC-75 PR #53 commit 3 documented β1 as "empirically
+    resolved" based on local 42/42; CI showed row-counts failing, despite
+    catch 12 being canonicalized in the register at the time.
+
+**Operating discipline (recurrence-class):** documenting a rule doesn't
+operationalize it. A register entry firing twice in the same class is a signal
+that the rule needs a verifiable artifact (pre-action checklist, CI gate,
+explicit recon step) — not just text in CLAUDE.md. Without operationalisation,
+the rule is decorative.
+
+##### Methodology-insufficiency class (catches 20, 21, 23)
+
+20. **State A locally may not equal State A in CI; reproduce methodology hit a
+    wall.** PIC-76 Phase A attempted local State-A reproduction of the CI
+    catch-22 mechanism. Single-package vitest passed locally even with turbo
+    concurrency simulated, because the local DB had no other package's writes
+    racing. The prescribed verification step was necessary but not sufficient.
+21. **PD's P4 step presupposed push triggers CI; reality requires PR.** Probe
+    branch push didn't trigger CI workflows; `gh run list` empty. The
+    push-as-CI-trigger presupposition didn't survive contact with repo CI
+    configuration (workflows trigger on `pull_request` + push-to-main, not
+    arbitrary branch pushes). Resolved by Option-A draft PR convention.
+23. **β4 hygiene estimate didn't survive typecheck — methodology fired on its
+    own canonicalization PR.** During this PR's Phase B execution, β4
+    (`packages/db/tests/seed/idempotency.test.ts` singleton standardization)
+    was estimated as "~2 line change" without verifying type compatibility
+    between the `@fmksa/db` extended singleton
+    (`.$extends(signedImmutability).$extends(noDeleteOnImmutable).$extends(noDirectStatusWrite)`)
+    and the raw `PrismaClient` parameter types in seed function signatures.
+    Typecheck rejected the change. β4 deferred to a standalone follow-up
+    ticket per Karpathy "Surgical Changes" + `feedback_stop_broadening.md`
+    discipline. **Self-referential worked example:** catch 23 fired during
+    the canonicalization PR for catches 20–21 (its own structural class),
+    demonstrating SR-3 verification-before-prescription operates even on
+    the PR that introduces it — the strongest possible evidence that
+    methodology has stopped being aspirational. Operationalized via: SR-3
+    (this PR's introduction).
+
+**Operating discipline (methodology-insufficiency class):** when a prescribed
+verification step can't reach the actual failure state, escalate to probe at
+the actual failure surface — don't iterate on a method that can't reach State A.
+Mark unverified prescriptions in PD rulings as `ASSUMED — verify before
+executing` so the gap is visible at execution time. **Class is recurrence-prone**
+— three entries (20, 21, 23) in three sessions; SR-3 canonicalization is the
+binding operational response.
+
+##### Scope-overgeneralized-retraction class (catch 22)
+
+22. **vitest `fileParallelism: false` doesn't compose with turbo's inter-package
+    parallelism; F3 fixes.** The β1 retraction in PIC-75 PR #53 claimed "vitest
+    sequential execution proven via config" — true for a single package, but
+    turbo runs `pnpm -F @fmksa/db test` and `pnpm -F @fmksa/core test` in
+    parallel processes, each owning its own vitest runner with
+    `fileParallelism: false`. Process-isolation guarantees do not compose
+    across runners; the retraction's scope didn't match the original
+    hypothesis's scope.
+
+**Operating discipline (scope-overgeneralized-retraction class):** when
+retracting a hypothesis, verify the retraction's scope matches the original
+hypothesis's scope. F3 (per-package test DBs, see `docs/architecture.md` § β1)
+is the canonical architectural fix for this class — see also SR-Canonical-Patterns
+for codification.
+
+**Canonicalized 2026-05-27 in PIC-72 cluster 6/7/1.c** (single PR umbrella with
+SR-3 introduction, Canonical Patterns codification, PIC-19 closure, and catch 23
+inline as SR-3's first post-introduction worked example; β4 deferred to standalone
+Phase 2 backlog ticket per Karpathy "Surgical Changes").
+
 ### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
 
 **Adding a new workflow-managed entity requires an ATOMIC 4-step contract in a single PR:**
@@ -96,6 +215,66 @@ engagement's duration.
 exits CI on failure. SR-2 step 5 ("re-seed every target environment") is now
 structurally guaranteed for CI; remains documented discipline for staging + prod
 per deployment pipeline.
+
+### SR-3 — Verification before mechanism prescription (PIC-72 cluster 6/7/1.c, 2026-05-27)
+
+**When a rule, instruction, or ruling prescribes a mechanism (CI behavior,
+test-isolation contract, environment property, tooling behavior), verify the
+mechanism actually applies in the target environment before acting on the
+prescription.** This complements SR-1 extension (which catches wrong-identifier
+presuppositions) by catching wrong-mechanism presuppositions.
+
+**Mechanics:**
+
+1. When a prescription depends on environmental mechanism (e.g., "push triggers
+   CI", "vitest sequential execution composes across packages", "local State A
+   = CI State A"), state the mechanism assumption explicitly before executing.
+2. Verify the mechanism against the target environment before acting. If
+   verification can't reach the failure state, escalate to probe at the actual
+   failure surface — don't iterate on a method that can't reach State A.
+3. If the prescription includes a retraction or revision, verify the
+   retraction's scope matches the original hypothesis's scope. Process-isolation
+   guarantees, single-runner contracts, and per-package configuration do not
+   compose across runners by default.
+4. Mark unverified mechanism prescriptions as `ASSUMED — verify before
+   executing` so the gap is visible at execution time, not at failure time.
+
+**Provenance — four catches surfaced during PIC-75 → PIC-76 → cluster 6/7/1.c
+(2026-05-27):**
+
+- **Catch 20** (methodology-insufficiency): PIC-76 Phase A attempted local
+  State-A reproduction of the CI catch-22 mechanism. Single-package vitest
+  passed locally even with turbo concurrency simulated — local DB had no
+  other package's writes racing. Prescribed verification step was necessary
+  but not sufficient.
+- **Catch 21** (methodology-insufficiency): PD's P4 step presupposed push
+  triggers CI; reality requires PR. Probe branch push didn't trigger CI
+  workflows; `gh run list` empty. Resolved by Option-A draft PR convention.
+- **Catch 22** (scope-overgeneralized-retraction): vitest `fileParallelism:
+  false` doesn't compose with turbo's inter-package parallelism. The β1
+  retraction in PIC-75 PR #53 claimed "vitest sequential execution proven via
+  config" — true for a single package, but turbo runs per-package vitest
+  runners in parallel processes; process-isolation guarantees do not compose
+  across runners. F3 (per-package test DBs, see `docs/architecture.md` § β1)
+  is the canonical architectural fix.
+- **Catch 23** (methodology-insufficiency, self-referential): β4 hygiene
+  estimated as "~2 line change" without verifying `@fmksa/db` extended
+  singleton vs raw `PrismaClient` parameter type compatibility; typecheck
+  rejected at execution. β4 deferred to standalone follow-up ticket. See
+  SR-1 extension methodology-insufficiency subsection for full provenance.
+  **Fired during SR-3's own canonicalization PR** — the strongest possible
+  evidence that the rule is binding, not aspirational.
+
+**Relationship to SR-1 extension:** SR-1 extension catches wrong-identifier
+presuppositions (PR numbers, script names, file paths, branch names). SR-3
+catches wrong-mechanism presuppositions (CI triggers, isolation guarantees,
+environment behavior). Both are forms of body-vs-reality drift; both require
+explicit verification before acting. SR-1 extension's drift-class operating
+discipline ("before prescribing a mechanism, verify body-vs-reality") points
+at this rule; SR-3 is the canonical mechanism-side companion.
+
+**First application:** SR-3 introduced 2026-05-27 in PIC-72 cluster 6/7/1.c,
+landed in the same single-PR umbrella as the SR-1 extension canonicalization.
 
 ### SR-Sentinel — PR #4 untouched
 
@@ -159,3 +338,78 @@ be removed when multi-tenancy ships (service code will then be required to
 supply `orgId` from the request context). See `docs/architecture.md` §
 "Multi-Tenancy Schema Primitives" for the full design rationale per entity
 class + the future-multi-tenant migration path.
+
+### SR-Canonical-Patterns — Codified architectural patterns (PIC-72 cluster 6/7/1.c, 2026-05-27)
+
+When an architectural decision becomes canonical (used in production,
+validated by recon, surviving multiple incidents), codify it here as a named
+pattern with a single canonical reference location. New code that touches
+the same surface must follow the pattern; deviations require explicit PD
+ruling. This rule indexes cross-cutting *patterns* — reusable solution
+shapes — distinct from SR-Sentinel / SR-Multi-Tenancy which govern specific
+identifiers and tenant invariants.
+
+#### F3 — Per-package test DB isolation (PIC-76, 2026-05-27)
+
+**Pattern:** when a workspace package owns tests that mutate database
+state, the package runs against its own dedicated test database
+(`fmksa_test_<pkg>`, e.g. `fmksa_test_db`, `fmksa_test_core`). Turbo
+executes per-package vitest runners in parallel processes; shared test DB
+→ cross-package write races.
+
+**Canonical reference:** `docs/architecture.md` § β1 (F3 mechanism).
+Surface locations:
+
+- `.github/workflows/ci.yml` — per-package `DATABASE_URL_TEST_<PKG>` env +
+  `CREATE DATABASE` step + sequential per-package test steps.
+- `infra/docker/postgres/init.sql` — local-dev parity DBs.
+- `packages/<pkg>/tests/setup-test-db.ts` — priority order
+  `DATABASE_URL_TEST_<PKG>` → `DATABASE_URL_TEST` → `DATABASE_URL`.
+- `packages/<pkg>/tests/helpers/assert-test-db.ts` — PIC-37/PIC-38
+  guardrail accepts `_test` + `_test_<pkg>` regex.
+
+**Operational rule for new packages:**
+
+- Adding a new workspace package with tests that mutate DB → create
+  `fmksa_test_<pkg>` (init.sql + CI workflow + per-package setup)
+  following the existing `@fmksa/db` and `@fmksa/core` shape.
+- Adding a new test file to an existing package → no schema work; existing
+  per-package DB carries it.
+- Adding a non-DB-touching package → no test-DB work; vitest runs in
+  process without DB.
+
+**Provenance:** catch 22 (scope-overgeneralized-retraction) demonstrated
+that vitest `fileParallelism: false` doesn't compose across turbo-parallel
+package runners. F3 is the architectural fix; landed in PIC-76 PR #55 at
+commit `6d7133a`.
+
+#### Multi-tenancy compound keys (PIC-75, 2026-05-27)
+
+**Pattern:** project-scoped models with sequential `referenceNumber` use
+compound `@@unique([orgId, projectId, referenceNumber])` rather than global
+`@unique([referenceNumber])`. Tenant-scoped invoice models (TaxInvoice) use
+compound `@@unique([orgId, referenceNumber])` (no `projectId`) for ZATCA
+Phase 2.
+
+**Canonical reference:** SR-Multi-Tenancy above (PIC-75 worked example).
+Surface location: `packages/db/prisma/schema.prisma`.
+
+**Operational rule for new models:**
+
+- Project-scoped + sequential `referenceNumber` → compound
+  `@@unique([orgId, projectId, referenceNumber])` + `orgId String
+  @default("00000000-0000-0000-0000-000000000001") @map("org_id")`.
+- Tenant-scoped (per-tenant sequential, not per-project) → compound
+  `@@unique([orgId, referenceNumber])`.
+- Dual identifiers (customer-facing globally-unique + internal sequential)
+  → customer-facing stays global `@unique`; internal sequential becomes
+  per-tenant project-scoped compound.
+
+**Provenance:** PIC-75 (2026-05-27); SR-Multi-Tenancy above documents the
+full per-entity rationale and `docs/architecture.md` §
+"Multi-Tenancy Schema Primitives" the implementation details.
+
+**First application:** SR-Canonical-Patterns introduced 2026-05-27 in
+PIC-72 cluster 6/7/1.c. Indexes patterns landed in earlier cluster work;
+future patterns added here as they mature from one-off decisions to
+reusable shapes.
