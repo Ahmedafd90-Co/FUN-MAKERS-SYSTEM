@@ -99,6 +99,43 @@ model Department {
   @@map("departments")
 }
 
+// ---------------------------------------------------------------------------
+// PIC-75 — Multi-tenancy root: Organization
+//
+// First structural application of SR-Multi-Tenancy. Each tenant is one
+// Organization row. The platform is currently single-tenant (singleton:
+// 'picoplay-ksa'); the column + compound-unique pattern lands now as the
+// worked example for future multi-tenant constraint decisions.
+//
+// Reference numbers on transactional models (IPA/IPC/Variation/CostProposal/
+// Correspondence/RFQ/EngineerInstruction/VendorContract/PurchaseOrder) are
+// project-scoped under (orgId, projectId, referenceNumber). TaxInvoice is
+// tenant-scoped under (orgId, referenceNumber) for ZATCA Phase 2 — each
+// tenant maintains its own sequential invoice space.
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid()) @map("id")
+  slug      String   @unique @map("slug")
+  name      String   @map("name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Reverse relations — per-tenant scoped transactional models (PIC-75)
+  ipas                 Ipa[]
+  ipcs                 Ipc[]
+  variations           Variation[]
+  costProposals        CostProposal[]
+  taxInvoices          TaxInvoice[]
+  correspondences      Correspondence[]
+  vendorContracts      VendorContract[]
+  rfqs                 RFQ[]
+  purchaseOrders       PurchaseOrder[]
+  engineerInstructions EngineerInstruction[]
+
+  @@map("organizations")
+}
+
 model User {
   id               String     @id @default(uuid()) @map("id")
   email            String     @unique @map("email")
@@ -1103,9 +1140,11 @@ enum CorrespondenceStatus {
 
 model Ipa {
   id                String    @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId             String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String    @map("project_id")
   status            IpaStatus @default(draft) @map("status")
-  referenceNumber   String?   @unique @map("reference_number")
+  referenceNumber   String?            @map("reference_number")
   periodNumber      Int       @map("period_number")
   periodFrom        DateTime  @map("period_from")
   periodTo          DateTime  @map("period_to")
@@ -1134,10 +1173,13 @@ model Ipa {
   importedAt           DateTime? @map("imported_at")
 
   project           Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization      Organization         @relation(fields: [orgId], references: [id])
   ipcs              Ipc[]
   adjustmentBatches IpaAdjustmentBatch[]
 
   @@unique([projectId, periodNumber])
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([projectId, origin])
@@ -1147,10 +1189,12 @@ model Ipa {
 
 model Ipc {
   id                String    @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId             String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String    @map("project_id")
   ipaId             String    @map("ipa_id")
   status            IpcStatus @default(draft) @map("status")
-  referenceNumber   String?   @unique @map("reference_number")
+  referenceNumber   String?            @map("reference_number")
   certifiedAmount   Decimal   @map("certified_amount") @db.Decimal(18, 2)
   retentionAmount   Decimal   @map("retention_amount") @db.Decimal(18, 2)
   adjustments       Decimal?  @map("adjustments") @db.Decimal(18, 2)
@@ -1162,10 +1206,13 @@ model Ipc {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ipa         Ipa          @relation(fields: [ipaId], references: [id], onDelete: Restrict)
-  taxInvoices TaxInvoice[]
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [orgId], references: [id])
+  ipa          Ipa          @relation(fields: [ipaId], references: [id], onDelete: Restrict)
+  taxInvoices  TaxInvoice[]
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([ipaId])
@@ -1174,10 +1221,12 @@ model Ipc {
 
 model Variation {
   id                     String                @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId                  String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId              String                @map("project_id")
   subtype                VariationSubtype      @map("subtype")
   status                 VariationStatus       @default(draft) @map("status")
-  referenceNumber        String?               @unique @map("reference_number")
+  referenceNumber        String?                        @map("reference_number")
   title                  String                @map("title")
   description            String                @map("description")
   reason                 String                @map("reason")
@@ -1203,11 +1252,14 @@ model Variation {
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
   project              Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization         Organization          @relation(fields: [orgId], references: [id])
   parentVariation      Variation?            @relation("VariationParent", fields: [parentVariationId], references: [id], onDelete: Restrict)
   childVariations      Variation[]           @relation("VariationParent")
   costProposals        CostProposal[]
   engineerInstructions EngineerInstruction[]
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, subtype, status])
   @@index([projectId, status])
   @@index([projectId, createdAt])
@@ -1216,10 +1268,12 @@ model Variation {
 
 model CostProposal {
   id                String             @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId             String             @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String             @map("project_id")
   variationId       String?            @map("variation_id")
   status            CostProposalStatus @default(draft) @map("status")
-  referenceNumber   String?            @unique @map("reference_number")
+  referenceNumber   String?                     @map("reference_number")
   revisionNumber    Int                @map("revision_number")
   estimatedCost     Decimal            @map("estimated_cost") @db.Decimal(18, 2)
   estimatedTimeDays Int?               @map("estimated_time_days")
@@ -1235,9 +1289,12 @@ model CostProposal {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [orgId], references: [id])
+  variation    Variation?   @relation(fields: [variationId], references: [id], onDelete: Restrict)
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([variationId])
@@ -1246,10 +1303,13 @@ model CostProposal {
 
 model TaxInvoice {
   id              String           @id @default(uuid()) @map("id")
+  // PIC-75: ZATCA Phase 2 tenant-scoped invoice number space (per-tenant
+  // sequential), not project-scoped. orgId is the only scope partition.
+  orgId           String           @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId       String           @map("project_id")
   ipcId           String           @map("ipc_id")
   status          TaxInvoiceStatus @default(draft) @map("status")
-  referenceNumber String?          @unique @map("reference_number")
+  referenceNumber String?                   @map("reference_number")
   invoiceNumber   String           @map("invoice_number")
   invoiceDate     DateTime         @map("invoice_date")
   grossAmount     Decimal          @map("gross_amount") @db.Decimal(18, 2)
@@ -1265,11 +1325,14 @@ model TaxInvoice {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ipc         Ipc                 @relation(fields: [ipcId], references: [id], onDelete: Restrict)
-  collections InvoiceCollection[]
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization        @relation(fields: [orgId], references: [id])
+  ipc          Ipc                 @relation(fields: [ipcId], references: [id], onDelete: Restrict)
+  collections  InvoiceCollection[]
 
   @@unique([projectId, invoiceNumber])
+  // PIC-75 multi-tenancy: ZATCA Phase 2 — tenant-scoped invoice space (not project-scoped)
+  @@unique([orgId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([ipcId])
@@ -1304,10 +1367,12 @@ model InvoiceCollection {
 
 model Correspondence {
   id                     String                @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId                  String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId              String                @map("project_id")
   subtype                CorrespondenceSubtype @map("subtype")
   status                 CorrespondenceStatus  @default(draft) @map("status")
-  referenceNumber        String?               @unique @map("reference_number")
+  referenceNumber        String?                        @map("reference_number")
   subject                String                @map("subject")
   body                   String                @map("body")
   recipientName          String                @map("recipient_name")
@@ -1337,12 +1402,15 @@ model Correspondence {
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
   project              Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization         Organization     @relation(fields: [orgId], references: [id])
   parentCorrespondence Correspondence?  @relation("CorrespondenceParent", fields: [parentCorrespondenceId], references: [id], onDelete: Restrict)
   childCorrespondences Correspondence[] @relation("CorrespondenceParent")
   inReplyTo            Correspondence?  @relation("CorrespondenceReply", fields: [inReplyToId], references: [id], onDelete: Restrict)
   replies              Correspondence[] @relation("CorrespondenceReply")
   creditNotes          CreditNote[] // M3 back_charge cross-reference
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, subtype, status])
   @@index([projectId, status])
   @@index([projectId, createdAt])
@@ -1552,6 +1620,11 @@ model ItemCatalog {
 
 model VendorContract {
   id               String               @id @default(uuid())
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  // VC carries TWO unique identifiers: contractNumber (customer-facing, stays
+  // globally unique) and referenceNumber (internal sequential, becomes
+  // per-tenant project-scoped via compound key below).
+  orgId            String               @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId        String               @map("project_id")
   vendorId         String               @map("vendor_id")
   contractNumber   String               @unique @map("contract_number")
@@ -1572,18 +1645,22 @@ model VendorContract {
   // if a VendorContract with this rfqId already exists).
   rfqId            String?              @map("rfq_id")
   status           VendorContractStatus @default(draft)
-  referenceNumber  String?              @unique @map("reference_number")
+  referenceNumber  String?                       @map("reference_number")
   createdBy        String               @map("created_by")
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
 
   project        Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization   Organization     @relation(fields: [orgId], references: [id])
   vendor         Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   parentContract VendorContract?  @relation("ContractAmendment", fields: [parentContractId], references: [id], onDelete: Restrict)
   childContracts VendorContract[] @relation("ContractAmendment")
   // PIC-53 — Subcontract materialisation origin (nullable FK to RFQ)
   rfq            RFQ?             @relation("VendorContractFromRfq", fields: [rfqId], references: [id], onDelete: Restrict)
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  // (contractNumber retains its global @unique — customer-facing identifier)
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
@@ -1644,6 +1721,10 @@ model FrameworkAgreementItem {
 
 model RFQ {
   id                 String    @id @default(uuid())
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  // RFQ carries TWO unique identifiers: rfqNumber (customer-facing, stays
+  // globally unique) and referenceNumber (internal sequential, per-tenant).
+  orgId              String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId          String    @map("project_id")
   rfqNumber          String    @unique @map("rfq_number")
   title              String
@@ -1653,7 +1734,7 @@ model RFQ {
   currency           String
   estimatedBudget    Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
   status             RfqStatus @default(draft)
-  referenceNumber    String?   @unique @map("reference_number")
+  referenceNumber    String?            @map("reference_number")
   // PIC-53: first-class FK to the winning quotation (promotes the value that
   // previously lived only in audit-log afterJson). Nullable; set when RFQ
   // transitions to awarded. Enables efficient "find me the winning quotation"
@@ -1664,6 +1745,7 @@ model RFQ {
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   project          Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization     Organization         @relation(fields: [orgId], references: [id])
   category         ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   awardedQuotation Quotation?           @relation("RfqAwardedQuotation", fields: [awardedQuotationId], references: [id], onDelete: Restrict)
   items            RFQItem[]
@@ -1672,6 +1754,9 @@ model RFQ {
   // PIC-53 — Subcontract materialisation back-relation
   vendorContracts  VendorContract[]     @relation("VendorContractFromRfq")
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  // (rfqNumber retains its global @unique — customer-facing identifier)
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([categoryId])
@@ -1812,6 +1897,10 @@ model QuotationLineItem {
 
 model PurchaseOrder {
   id                    String              @id @default(uuid())
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  // PO carries TWO unique identifiers: poNumber (customer-facing, stays
+  // globally unique) and referenceNumber (internal sequential, per-tenant).
+  orgId                 String              @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId             String              @map("project_id")
   vendorId              String              @map("vendor_id")
   rfqId                 String?             @map("rfq_id")
@@ -1829,12 +1918,13 @@ model PurchaseOrder {
   paymentTerms          String?             @map("payment_terms")
   hasFrameworkDeviation Boolean             @default(false) @map("has_framework_deviation")
   status                PurchaseOrderStatus @default(draft)
-  referenceNumber       String?             @unique @map("reference_number")
+  referenceNumber       String?                      @map("reference_number")
   createdBy             String              @map("created_by")
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
 
   project          Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization     Organization         @relation(fields: [orgId], references: [id])
   vendor           Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   category         ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   items            PurchaseOrderItem[]
@@ -1842,6 +1932,9 @@ model PurchaseOrder {
   expenses         Expense[]
   creditNotes      CreditNote[]
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  // (poNumber retains its global @unique — customer-facing identifier)
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
@@ -2207,8 +2300,10 @@ model BudgetAdjustment {
 
 model EngineerInstruction {
   id              String   @id @default(uuid()) @map("id")
+  // PIC-75: per-tenant scope (singleton default during single-tenant phase)
+  orgId           String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId       String   @map("project_id")
-  referenceNumber String?  @unique @map("reference_number")
+  referenceNumber String?           @map("reference_number")
   title           String   @map("title")
   description     String?  @map("description")
   estimatedValue  Decimal  @map("estimated_value") @db.Decimal(18, 2)
@@ -2226,9 +2321,12 @@ model EngineerInstruction {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  variation Variation? @relation(fields: [variationId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [orgId], references: [id])
+  variation    Variation?   @relation(fields: [variationId], references: [id], onDelete: Restrict)
 
+  // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
+  @@unique([orgId, projectId, referenceNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([variationId])
