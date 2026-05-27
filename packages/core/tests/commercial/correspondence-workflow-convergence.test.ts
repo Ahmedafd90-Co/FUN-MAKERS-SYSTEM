@@ -397,15 +397,15 @@ describe('Correspondence Workflow Convergence Proof', () => {
     // All workflow-managed actions should be blocked
     await expect(
       transitionCorrespondence(corr.id, 'approve', roleUsers.contracts_manager!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionCorrespondence(corr.id, 'reject', roleUsers.contracts_manager!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionCorrespondence(corr.id, 'return', roleUsers.contracts_manager!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
   });
 
   // -------------------------------------------------------------------------
