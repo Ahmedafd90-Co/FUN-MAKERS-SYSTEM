@@ -161,8 +161,15 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      # F3 (PIC-76): per-package test DBs prevent cross-package turbo concurrency
+      # pollution. Each vitest process routes to its own Postgres database via
+      # DATABASE_URL_TEST_<PKG> read by that package's tests/setup-test-db.ts.
+      # The base fmksa_test DB is retained for prisma tooling (`prisma db push`,
+      # `db:seed`) which run against an explicit URL set per step below.
       DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
       DATABASE_URL_TEST: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
+      DATABASE_URL_TEST_DB: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
+      DATABASE_URL_TEST_CORE: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
       REDIS_URL: redis://localhost:6379
     steps:
       - name: Restore workspace
@@ -189,13 +196,32 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # F3 (PIC-76): create per-package test DBs. The Postgres service container
+      # only creates POSTGRES_DB=fmksa_test at startup; the per-package DBs
+      # (fmksa_test_db, fmksa_test_core) are explicit CREATE DATABASE statements
+      # here. Future package additions follow the same pattern: fmksa_test_<pkg>.
+      - name: Create per-package test DBs
+        run: |
+          PGPASSWORD=fmksa psql -h localhost -U fmksa -d fmksa_test -c "CREATE DATABASE fmksa_test_db OWNER fmksa;"
+          PGPASSWORD=fmksa psql -h localhost -U fmksa -d fmksa_test -c "CREATE DATABASE fmksa_test_core OWNER fmksa;"
+
       # Sync schema state to the ephemeral test DB instead of replaying
       # migration history. There is a known-broken migration at 20260415120000
       # (add_sheet_import_layer) that references an enum created in an earlier
       # migration — 'migrate deploy' hits it, 'db push' bypasses it by syncing
       # final schema state directly. Tracked as technical debt to fix properly.
-      - name: Sync Prisma schema to test DB
+      #
+      # F3 (PIC-76): two syncs — one per per-package test DB. DATABASE_URL set
+      # explicitly per step so prisma targets the right DB.
+      - name: Sync Prisma schema to @fmksa/db test DB
         run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
+
+      - name: Sync Prisma schema to @fmksa/core test DB
+        run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
 
       # PIC-72 cluster 2 (2026-05-22): SR-2 step 5 structural enforcement.
       # Seed the test DB so tests have canonical permissions, workflow
@@ -203,8 +229,18 @@ jobs:
       # mode SR-2 step 5 was created to prevent (resolveTemplate returns null
       # at runtime; permission gate-check fails silently). Seed exits CI on
       # failure deliberately; no continue-on-error.
-      - name: Seed test DB
+      #
+      # F3 (PIC-76): two seeds — one per per-package test DB. DATABASE_URL set
+      # explicitly per step.
+      - name: Seed @fmksa/db test DB
         run: pnpm --filter @fmksa/db db:seed
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
+
+      - name: Seed @fmksa/core test DB
+        run: pnpm --filter @fmksa/db db:seed
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
 
       # Test is temporarily non-blocking. Integration tests have pre-existing
       # seed-data debt (missing baseline currencies / workflow templates on
@@ -212,9 +248,25 @@ jobs:
       # lane on chore/brand-adaptation-ci-cleanup. This flag will be removed
       # once that cleanup lands on main — Test will then become a required
       # check again. Typecheck and Build remain authoritative gates.
-      - name: Run tests
+      #
+      # F3 (PIC-76): explicit per-package test invocations. Replaces single
+      # `pnpm turbo run test` which previously ran @fmksa/db + @fmksa/core
+      # concurrently against the same DB (catch 22 mechanism). Sequential
+      # invocations + per-step DATABASE_URL ensure each package's vitest
+      # globalSetup AND setupFiles both see the correct per-package DB.
+      # vitest's intra-process `fileParallelism: false` still applies within
+      # each package; turbo's cross-package parallelism is what we're undoing.
+      - name: Run @fmksa/db tests
         continue-on-error: true
-        run: pnpm turbo run test
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
+        run: pnpm --filter @fmksa/db test
+
+      - name: Run @fmksa/core tests
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
+        run: pnpm --filter @fmksa/core test
 
   # ──────────────────────────────────────────────
   # Build
