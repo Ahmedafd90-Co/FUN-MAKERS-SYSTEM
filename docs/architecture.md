@@ -178,13 +178,28 @@ Surfaces NOT yet multi-tenant-scoped but candidates for the same compound-key tr
 
 Each future multi-tenant extension follows the PIC-75 pattern: introduce `orgId` with singleton `@default`, add compound uniqueness, document the entity-class semantic in this section, eventually remove the `@default`.
 
-### β1 finding — row-counts CI failure resolved indirectly (catch 18)
+### β1 — Row-counts CI failure (UNRESOLVED, deferred to PIC-76)
 
-PIC-75 Phase A diagnosed PR #52's CI row-counts failure as concurrent-execution pollution (catch 17). That diagnosis was wrong — `vitest.config.ts` already has `fileParallelism: false`. Catch 18 retracts catch 17. Empirical Phase B finding: post-schema-migration, the row-counts test passes consistently in CI-mimic environment (3 stress runs, 42/42 passing) without a targeted fix. The PIC-75 schema migration appears to have indirectly resolved the underlying state interaction.
+PIC-75 Phase B investigation showed `tests/seed/idempotency.test.ts > produces
+identical row counts across all seeded tables` passes locally (State B: no
+pre-seed before TRUNCATE→runFullSeed→snapshot pattern) but fails in CI
+(State A: cluster 2's `db:seed` step runs before tests). The schema migration
+landed in this PR resolved the demo-project-integrity SUITE FAIL but did NOT
+resolve row-counts.
 
-Candidates **deferred to PIC-76** filing (β2/β3 — quality improvements, not bugfixes):
-- β2 — Harmonize `cleanTestData` TRUNCATE scope (16 tables) with `idempotency.test.ts` TRUNCATE scope (13 tables). Inconsistency does not currently cause failures but could in future.
-- β3 — Replace `.catch(() => {})` in `demo-project-integrity.test.ts` afterAll with explicit FK-aware teardown ordering. The schema migration removed the immediate symptom (IPA-DEMO-001 collision) but the underlying silent-failure pattern remains.
+The original "concurrent-execution pollution" hypothesis (PIC-72 catch 17)
+was retracted by PIC-75 Phase A (catch 18) because `packages/db/vitest.config.ts`
+already has `fileParallelism: false`.
+
+The most likely actual mechanisms per PIC-75 Phase A surface map:
+- `cleanTestData` (16 tables) vs idempotency TRUNCATE (13 tables) scope mismatch
+- `demo-project-integrity.test.ts` afterAll's `.catch(() => {})` silent FK leak
+
+Both fall in PIC-76 scope (test-isolation hygiene β-track, filing pending PD ruling).
+
+**Catch 19 lesson:** local State B stress test (42/42 across 3 runs) does NOT
+predict CI State A behavior. Always verify CI parity before claiming "resolved"
+for state-dependent failures.
 
 ---
 
