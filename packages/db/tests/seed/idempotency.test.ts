@@ -88,6 +88,57 @@ async function snapshotCounts() {
   };
 }
 
+/**
+ * PIC-76 PROBE — verbose row-counts diagnostic for CI capture.
+ *
+ * THROWAWAY INSTRUMENTATION. Branch `probe/pic-76-row-counts-debug` only.
+ * Captures table counts + pg_stat_activity at 6 checkpoints to identify
+ * the CI-side mechanism causing `snapshot1 > snapshot2` (mathematically
+ * impossible from upsert-only runFullSeed; β2 ruled out per Phase A;
+ * β4 multi-PrismaClient is leading hypothesis).
+ */
+type ProbePgActivity = {
+  pid: number;
+  application_name: string | null;
+  state: string | null;
+  query: string;
+};
+
+async function probeStep(label: string): Promise<void> {
+  const ts = new Date().toISOString();
+  console.log(`\n[PROBE ${ts}] ${label}`);
+
+  // Capture full snapshot counts for table-by-table comparison
+  try {
+    const counts = await snapshotCounts();
+    console.log(`[PROBE]   counts: ${JSON.stringify(counts)}`);
+  } catch (e) {
+    console.log(`[PROBE]   counts: ERROR ${(e as Error).message}`);
+  }
+
+  // Capture pg_stat_activity for connection pool / async-query visibility
+  try {
+    const activity = await prisma.$queryRaw<ProbePgActivity[]>`
+      SELECT
+        pid,
+        application_name,
+        state,
+        LEFT(COALESCE(query, ''), 100) AS query
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+      ORDER BY pid
+    `;
+    console.log(`[PROBE]   pg_stat_activity (${activity.length} rows):`);
+    activity.forEach((row) =>
+      console.log(
+        `[PROBE]     pid=${row.pid} state=${row.state ?? 'null'} app=${row.application_name ?? 'null'} query="${row.query}"`,
+      ),
+    );
+  } catch (e) {
+    console.log(`[PROBE]   pg_stat_activity: ERROR ${(e as Error).message}`);
+  }
+}
+
 describe('seed idempotency', () => {
   let firstRunCounts: Awaited<ReturnType<typeof snapshotCounts>>;
   let secondRunCounts: Awaited<ReturnType<typeof snapshotCounts>>;
@@ -95,6 +146,10 @@ describe('seed idempotency', () => {
   beforeAll(async () => {
     // PIC-37: refuse to TRUNCATE against any DB whose URL doesn't contain `_test`.
     assertTestDb();
+
+    // PIC-76 PROBE: STEP 0 — pre-truncate (capture state arriving in)
+    await probeStep('STEP 0 — pre-truncate (test enters here)');
+
     // Clean slate: truncate every table the seed touches so earlier test
     // runs or manual inserts don't skew the counts.
     await prisma.$executeRaw`
@@ -115,13 +170,30 @@ describe('seed idempotency', () => {
       CASCADE
     `;
 
+    // PIC-76 PROBE: STEP 1 — post-truncate (did CASCADE clear everything?)
+    await probeStep('STEP 1 — post-truncate (pre-first-runFullSeed)');
+
     // --- First seed run ---
     await runFullSeed();
+
+    // PIC-76 PROBE: STEP 2 — post-first-runFullSeed (pre-first-snapshot)
+    await probeStep('STEP 2 — post-first-runFullSeed (pre-first-snapshot)');
+
     firstRunCounts = await snapshotCounts();
+
+    // PIC-76 PROBE: STEP 3 — post-first-snapshot (pre-second-runFullSeed)
+    await probeStep('STEP 3 — post-first-snapshot (pre-second-runFullSeed)');
 
     // --- Second seed run (must be identical) ---
     await runFullSeed();
+
+    // PIC-76 PROBE: STEP 4 — post-second-runFullSeed (pre-second-snapshot)
+    await probeStep('STEP 4 — post-second-runFullSeed (pre-second-snapshot)');
+
     secondRunCounts = await snapshotCounts();
+
+    // PIC-76 PROBE: STEP 5 — post-second-snapshot (assertion-time)
+    await probeStep('STEP 5 — post-second-snapshot (assertion-time)');
   }, 60_000); // generous timeout for two full seed runs
 
   afterAll(async () => {
