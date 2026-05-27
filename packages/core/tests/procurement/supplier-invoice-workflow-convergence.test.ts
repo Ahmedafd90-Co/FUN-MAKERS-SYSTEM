@@ -379,21 +379,21 @@ describe('Supplier Invoice Workflow Convergence Proof', () => {
         { projectId: testProject.id, id: si.id, action: 'approve' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionSupplierInvoice(
         { projectId: testProject.id, id: si.id, action: 'reject' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionSupplierInvoice(
         { projectId: testProject.id, id: si.id, action: 'dispute' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     // SI stays 'under_review' — no bypass happened
     const stillUnderReview = await prisma.supplierInvoice.findUnique({ where: { id: si.id } });

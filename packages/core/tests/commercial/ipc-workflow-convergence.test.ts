@@ -435,15 +435,15 @@ describe('IPC Workflow Convergence Proof', () => {
 
     await expect(
       transitionIpc(ipc.id, 'review', roleUsers.qs_commercial!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionIpc(ipc.id, 'reject', roleUsers.qs_commercial!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionIpc(ipc.id, 'return', roleUsers.qs_commercial!),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     // approve is blocked by the transition map (submitted → approved_internal not valid)
     await expect(

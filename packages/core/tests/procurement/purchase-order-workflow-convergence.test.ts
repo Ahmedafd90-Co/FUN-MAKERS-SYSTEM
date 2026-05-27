@@ -398,21 +398,21 @@ describe('Purchase Order Workflow Convergence Proof', () => {
         { projectId: testProject.id, id: po.id, action: 'approve' },
         roleUsers.contracts_manager!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionPurchaseOrder(
         { projectId: testProject.id, id: po.id, action: 'reject' },
         roleUsers.contracts_manager!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionPurchaseOrder(
         { projectId: testProject.id, id: po.id, action: 'return' },
         roleUsers.contracts_manager!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     // PO stays 'submitted' — no bypass happened
     const stillSubmitted = await prisma.purchaseOrder.findUnique({ where: { id: po.id } });

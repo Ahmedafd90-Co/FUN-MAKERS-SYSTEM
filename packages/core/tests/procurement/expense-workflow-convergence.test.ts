@@ -350,21 +350,21 @@ describe('Expense Workflow Convergence Proof', () => {
         { projectId: testProject.id, id: expense.id, action: 'approve' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionExpense(
         { projectId: testProject.id, id: expense.id, action: 'reject' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     await expect(
       transitionExpense(
         { projectId: testProject.id, id: expense.id, action: 'return' },
         roleUsers.finance!,
       ),
-    ).rejects.toThrow(/approval phase is managed by workflow instance/);
+    ).rejects.toThrow(/Cannot manually .+ workflow-managed actions/);
 
     const stillSubmitted = await prisma.expense.findUnique({ where: { id: expense.id } });
     expect(stillSubmitted!.status).toBe('submitted');
