@@ -155,6 +155,12 @@ Process-class invariants — these apply to how PRs are conducted, not what runt
 
 **Provenance:** PIC-50 (mechanism, 2026-05-19) extended by PIC-64 (Pre-PR-5 Sweep Session 1, 2026-05-20) to include step 5.
 
+**Structural enforcement (PIC-72 cluster 2, 2026-05-22):** CI pipeline now invokes
+`pnpm -F @fmksa/db db:seed` after `prisma db push` and before `Run tests`. Seed step
+exits CI on failure. SR-2 step 5 ("re-seed every target environment") is now
+structurally guaranteed for CI; remains documented discipline for staging + prod
+per deployment pipeline.
+
 ---
 
 ## Input Validation
