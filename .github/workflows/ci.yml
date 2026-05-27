@@ -148,9 +148,22 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # PIC-72 cluster 2 (2026-05-22): Redis service container — mirrors
+      # infra/docker/docker-compose.yml's redis service for local-CI parity.
+      # BullMQ-dependent tests (notifications/*) require Redis at localhost:6379.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
       DATABASE_URL_TEST: postgresql://fmksa:fmksa@localhost:5432/fmksa_test?schema=public
+      REDIS_URL: redis://localhost:6379
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -183,6 +196,15 @@ jobs:
       # final schema state directly. Tracked as technical debt to fix properly.
       - name: Sync Prisma schema to test DB
         run: pnpm --filter @fmksa/db exec prisma db push --skip-generate
+
+      # PIC-72 cluster 2 (2026-05-22): SR-2 step 5 structural enforcement.
+      # Seed the test DB so tests have canonical permissions, workflow
+      # templates, and reference data. Silent seed failure is the exact failure
+      # mode SR-2 step 5 was created to prevent (resolveTemplate returns null
+      # at runtime; permission gate-check fails silently). Seed exits CI on
+      # failure deliberately; no continue-on-error.
+      - name: Seed test DB
+        run: pnpm --filter @fmksa/db db:seed
 
       # Test is temporarily non-blocking. Integration tests have pre-existing
       # seed-data debt (missing baseline currencies / workflow templates on
