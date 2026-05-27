@@ -70,26 +70,52 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Clean up in FK-safe order (only test data — no deep FK graph)
+  // β3 (PIC-76): FK-aware teardown order. seedCommercialDemoData emits 7
+  // posting_events referencing this test project. posting_events is
+  // append-only via the no-delete-on-immutable middleware, so
+  // prisma.postingEvent.deleteMany() is blocked by design. Use raw SQL —
+  // the established pattern (also in packages/db/src/seed/clean-test-data.ts)
+  // for test cleanup of append-only tables.
+  //
+  // Without the raw-SQL delete on posting_events FIRST, project.delete()
+  // below FK-fails. Previously suppressed via `.catch(() => {})` which
+  // silently leaked the test project and its 7 posting_events. F3
+  // per-package DBs contain the leak to fmksa_test_db now, but the silent-
+  // failure pattern was itself worth fixing.
+  //
+  // All `.catch(() => {})` patterns replaced with explicit error handling
+  // so future FK constraint additions surface loudly rather than silently.
+
+  // Step 1: Clean transactional records that FK to project (FK-safe order
+  // from leaf to root: collections → invoices → ipcs → ipas → variations)
   await prisma.invoiceCollection.deleteMany({ where: { taxInvoice: { projectId: testProjectId } } });
   await prisma.taxInvoice.deleteMany({ where: { projectId: testProjectId } });
   await prisma.ipc.deleteMany({ where: { projectId: testProjectId } });
   await prisma.ipa.deleteMany({ where: { projectId: testProjectId } });
   await prisma.variation.deleteMany({ where: { projectId: testProjectId } });
-  await prisma.projectSetting.deleteMany({ where: { projectId: testProjectId } }).catch(() => {});
-  await prisma.project.delete({ where: { id: testProjectId } }).catch(() => {});
+  await prisma.projectSetting.deleteMany({ where: { projectId: testProjectId } });
 
-  // Restore the original project's code if we renamed it
+  // Step 2: Append-only tables that FK to project — raw SQL bypasses the
+  // no-delete-on-immutable middleware (established codebase pattern;
+  // see middleware file's doc comment endorsing this for test cleanup).
+  await prisma.$executeRaw`DELETE FROM posting_events WHERE project_id = ${testProjectId}`;
+
+  // Step 3: project itself (now safe — all FK referrers cleared)
+  await prisma.project.delete({ where: { id: testProjectId } });
+
+  // Step 4: Restore the original project's code if we renamed it. This
+  // happens AFTER project.delete above so the unique-on-code constraint
+  // doesn't block the restore (the test project no longer holds the code).
   if (originalProjectCode) {
     await prisma.project.update({
       where: { id: originalProjectCode },
       data: { code: 'FMKSA-2026-001' },
-    }).catch(() => {});
+    });
   }
 
-  // Clean up entity
+  // Step 5: Clean up the test entity (no FK referrers remain after project.delete)
   const ent = await prisma.entity.findFirst({ where: { code: `ENT-DEMO-${ts}` } });
-  if (ent) await prisma.entity.delete({ where: { id: ent.id } }).catch(() => {});
+  if (ent) await prisma.entity.delete({ where: { id: ent.id } });
 });
 
 // ---------------------------------------------------------------------------
