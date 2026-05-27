@@ -135,7 +135,7 @@ that the rule needs a verifiable artifact (pre-action checklist, CI gate,
 explicit recon step) — not just text in CLAUDE.md. Without operationalisation,
 the rule is decorative.
 
-##### Methodology-insufficiency class (catches 20–21)
+##### Methodology-insufficiency class (catches 20, 21, 23)
 
 20. **State A locally may not equal State A in CI; reproduce methodology hit a
     wall.** PIC-76 Phase A attempted local State-A reproduction of the CI
@@ -147,12 +147,29 @@ the rule is decorative.
     push-as-CI-trigger presupposition didn't survive contact with repo CI
     configuration (workflows trigger on `pull_request` + push-to-main, not
     arbitrary branch pushes). Resolved by Option-A draft PR convention.
+23. **β4 hygiene estimate didn't survive typecheck — methodology fired on its
+    own canonicalization PR.** During this PR's Phase B execution, β4
+    (`packages/db/tests/seed/idempotency.test.ts` singleton standardization)
+    was estimated as "~2 line change" without verifying type compatibility
+    between the `@fmksa/db` extended singleton
+    (`.$extends(signedImmutability).$extends(noDeleteOnImmutable).$extends(noDirectStatusWrite)`)
+    and the raw `PrismaClient` parameter types in seed function signatures.
+    Typecheck rejected the change. β4 deferred to a standalone follow-up
+    ticket per Karpathy "Surgical Changes" + `feedback_stop_broadening.md`
+    discipline. **Self-referential worked example:** catch 23 fired during
+    the canonicalization PR for catches 20–21 (its own structural class),
+    demonstrating SR-3 verification-before-prescription operates even on
+    the PR that introduces it — the strongest possible evidence that
+    methodology has stopped being aspirational. Operationalized via: SR-3
+    (this PR's introduction).
 
 **Operating discipline (methodology-insufficiency class):** when a prescribed
 verification step can't reach the actual failure state, escalate to probe at
 the actual failure surface — don't iterate on a method that can't reach State A.
 Mark unverified prescriptions in PD rulings as `ASSUMED — verify before
-executing` so the gap is visible at execution time.
+executing` so the gap is visible at execution time. **Class is recurrence-prone**
+— three entries (20, 21, 23) in three sessions; SR-3 canonicalization is the
+binding operational response.
 
 ##### Scope-overgeneralized-retraction class (catch 22)
 
@@ -172,7 +189,9 @@ is the canonical architectural fix for this class — see also SR-Canonical-Patt
 for codification.
 
 **Canonicalized 2026-05-27 in PIC-72 cluster 6/7/1.c** (single PR umbrella with
-SR-3 introduction, Canonical Patterns codification, PIC-19 closure, β4 hygiene).
+SR-3 introduction, Canonical Patterns codification, PIC-19 closure, and catch 23
+inline as SR-3's first post-introduction worked example; β4 deferred to standalone
+Phase 2 backlog ticket per Karpathy "Surgical Changes").
 
 ### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
 
@@ -220,7 +239,7 @@ presuppositions) by catching wrong-mechanism presuppositions.
 4. Mark unverified mechanism prescriptions as `ASSUMED — verify before
    executing` so the gap is visible at execution time, not at failure time.
 
-**Provenance — three catches surfaced during PIC-75 → PIC-76 execution
+**Provenance — four catches surfaced during PIC-75 → PIC-76 → cluster 6/7/1.c
 (2026-05-27):**
 
 - **Catch 20** (methodology-insufficiency): PIC-76 Phase A attempted local
@@ -238,6 +257,13 @@ presuppositions) by catching wrong-mechanism presuppositions.
   runners in parallel processes; process-isolation guarantees do not compose
   across runners. F3 (per-package test DBs, see `docs/architecture.md` § β1)
   is the canonical architectural fix.
+- **Catch 23** (methodology-insufficiency, self-referential): β4 hygiene
+  estimated as "~2 line change" without verifying `@fmksa/db` extended
+  singleton vs raw `PrismaClient` parameter type compatibility; typecheck
+  rejected at execution. β4 deferred to standalone follow-up ticket. See
+  SR-1 extension methodology-insufficiency subsection for full provenance.
+  **Fired during SR-3's own canonicalization PR** — the strongest possible
+  evidence that the rule is binding, not aspirational.
 
 **Relationship to SR-1 extension:** SR-1 extension catches wrong-identifier
 presuppositions (PR numbers, script names, file paths, branch names). SR-3
