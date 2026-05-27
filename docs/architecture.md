@@ -178,28 +178,90 @@ Surfaces NOT yet multi-tenant-scoped but candidates for the same compound-key tr
 
 Each future multi-tenant extension follows the PIC-75 pattern: introduce `orgId` with singleton `@default`, add compound uniqueness, document the entity-class semantic in this section, eventually remove the `@default`.
 
-### β1 — Row-counts CI failure (UNRESOLVED, deferred to PIC-76)
+### β1 — Row-counts CI failure (RESOLVED in PIC-76)
 
 PIC-75 Phase B investigation showed `tests/seed/idempotency.test.ts > produces
 identical row counts across all seeded tables` passes locally (State B: no
 pre-seed before TRUNCATE→runFullSeed→snapshot pattern) but fails in CI
 (State A: cluster 2's `db:seed` step runs before tests). The schema migration
-landed in this PR resolved the demo-project-integrity SUITE FAIL but did NOT
+landed in PIC-75 resolved the demo-project-integrity SUITE FAIL but did NOT
 resolve row-counts.
 
-The original "concurrent-execution pollution" hypothesis (PIC-72 catch 17)
-was retracted by PIC-75 Phase A (catch 18) because `packages/db/vitest.config.ts`
-already has `fileParallelism: false`.
+#### Mechanism captured (PIC-76 probe PR #54)
 
-The most likely actual mechanisms per PIC-75 Phase A surface map:
-- `cleanTestData` (16 tables) vs idempotency TRUNCATE (13 tables) scope mismatch
-- `demo-project-integrity.test.ts` afterAll's `.catch(() => {})` silent FK leak
+PIC-76 Phase A failed to reproduce locally even with pristine DB + full
+db:seed + full test suite (catch 20 — local State A ≠ CI State A). A
+verbose-instrumentation probe PR (closed not merged) captured the actual
+mechanism via `pg_stat_activity` at 6 checkpoints in idempotency.test.ts's
+beforeAll:
 
-Both fall in PIC-76 scope (test-isolation hygiene β-track, filing pending PD ruling).
+- `pid=98 active: UPDATE vendor_contracts SET status` ← @fmksa/core procurement test
+- `pid=98 idle: UPDATE variations SET status` ← @fmksa/core commercial test
+- `pid=106 INSERT INTO audit_logs` ← @fmksa/core override/workflow test
 
-**Catch 19 lesson:** local State B stress test (42/42 across 3 runs) does NOT
-predict CI State A behavior. Always verify CI parity before claiming "resolved"
-for state-dependent failures.
+**Root cause (catch 22):** `pnpm turbo run test` ran @fmksa/db + @fmksa/core
+packages **concurrently** (default `concurrency=10`) against the same shared
+`fmksa_test` Postgres DB. vitest's `fileParallelism: false` only governs
+intra-process; turbo's inter-package parallelism is what produced the
+peer-package writes during idempotency.test.ts's snapshot window.
+
+#### Fix (F3 — per-package test DBs)
+
+Each test package now has its own Postgres database, eliminating the shared
+resource that cross-package concurrency could pollute:
+
+| Package | Test DB |
+|---|---|
+| `@fmksa/db` | `fmksa_test_db` |
+| `@fmksa/core` | `fmksa_test_core` |
+| Future packages | `fmksa_test_<package-name>` |
+
+CI workflow: explicit per-package test steps with `DATABASE_URL` set per-step.
+Replaces single `pnpm turbo run test` invocation. Sequential invocations +
+per-step DB = no cross-package concurrency surface against shared state.
+
+Per-package vitest `setup-test-db.ts` reads priority order:
+`DATABASE_URL_TEST_<PKG>` → `DATABASE_URL_TEST` → `DATABASE_URL`. Local-dev
+backward compatible; explicit per-step `DATABASE_URL` in CI.
+
+`infra/docker/postgres/init.sql` creates `fmksa_test_db` + `fmksa_test_core`
+at container init for local-dev parity. PIC-37/PIC-38 guardrails extended
+to accept `_test_<pkg>` suffixes alongside legacy `_test`.
+
+#### Defensive improvements landed alongside F3 (PIC-76)
+
+- **β2** — `helpers/test-data.ts cleanTestData` scope intentionality
+  documented inline. The 16-vs-13 table scope difference vs idempotency's
+  inline TRUNCATE is INTENTIONAL (transactional clean preserving reference
+  data vs full wipe re-seed). β2 was ruled out as β1 mechanism via
+  mathematical impossibility; now documentation-only.
+- **β3** — `demo-project-integrity.test.ts` afterAll FK-aware ordering.
+  Removes all `.catch(() => {})` silent-failure patterns. Raw-SQL DELETE
+  on posting_events FIRST (bypasses no-delete-on-immutable middleware,
+  established pattern). Future FK constraint additions will surface
+  loudly, not silently leak.
+- **β4** — `idempotency.test.ts` uses `new PrismaClient()` while peer test
+  files use singleton from `@fmksa/db`. NOT on β1 critical path; deferred
+  to cluster 6/7/1.c sweep (catalog only — no fix in this cluster).
+
+#### Methodology lessons (registered as catches 17-22 for cluster 6/7/1.c canonicalization)
+
+- **Catch 17** — concurrent-execution pollution hypothesis (RETRACTED by 18)
+- **Catch 18** — pattern-register-entry revision through deeper recon
+- **Catch 19** — local State B stress test does NOT predict CI State A;
+  always verify CI parity before claiming "resolved" for state-dependent
+  failures
+- **Catch 20** — methodology-discipline insufficiency: prescribed verification
+  step is necessary but not sufficient when CI environment has unmeasured
+  divergence; escalate to probe at the actual failure surface
+- **Catch 21** — PD prompt presupposed push triggers CI; reality required
+  draft PR (workflow only runs on push-to-main + pull_request)
+- **Catch 22** — vitest's `fileParallelism: false` intra-process guarantee
+  does NOT compose with turbo's inter-package parallelism. **Process-
+  isolation guarantees do not compose across runners.** When two
+  parallelism layers stack against a shared resource (DB, FS, port), the
+  inner layer's guarantee can become irrelevant. F3 fixes by removing the
+  shared resource (separate DBs).
 
 ---
 
