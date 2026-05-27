@@ -58,7 +58,16 @@ function redactPassword(url: string): string {
 }
 
 // 1. Try process.env first; fall back to packages/db/.env.
-let testUrl = process.env.DATABASE_URL_TEST;
+// F3 (PIC-76): priority order:
+//   1. DATABASE_URL_TEST_DB — per-package F3 override (used by local dev)
+//   2. DATABASE_URL_TEST — legacy global test override
+//   3. DATABASE_URL — explicit CI per-step override (CI workflow sets this)
+// Any of these is accepted iff it points at a *_test or *_test_<pkg> DB
+// per the isTestDatabaseUrl guardrail.
+let testUrl =
+  process.env.DATABASE_URL_TEST_DB ??
+  process.env.DATABASE_URL_TEST ??
+  process.env.DATABASE_URL;
 
 if (!testUrl) {
   const envPath = resolve(__dirname, '..', '.env');

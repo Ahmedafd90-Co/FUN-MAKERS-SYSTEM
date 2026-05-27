@@ -79,9 +79,32 @@ export async function createTestDocumentWithVersion(
 }
 
 /**
- * Clean all test data. Uses raw TRUNCATE to avoid both FK ordering headaches
- * and the no-delete-on-immutable middleware. TRUNCATE ... CASCADE handles
+ * Clean transactional test data while preserving seeded reference data.
+ * Uses raw TRUNCATE to avoid both FK ordering headaches and the
+ * no-delete-on-immutable middleware. TRUNCATE ... CASCADE handles
  * dependencies automatically.
+ *
+ * Scope rationale (β2 documentation per PIC-76, 2026-05-27):
+ *
+ * This function TRUNCATEs 16 tables — transactional + workflow + audit data.
+ * It deliberately PRESERVES the 5 reference-data tables (users, roles,
+ * permissions, currencies, countries) plus 5 reference-derived tables
+ * (user_roles, role_permissions, status_dictionaries, app_settings,
+ * notification_templates) that are populated once by db:seed. Middleware
+ * tests calling this helper don't need to re-seed reference data — they
+ * test middleware behavior on transactional tables.
+ *
+ * Distinct from `packages/db/tests/seed/idempotency.test.ts`'s inline
+ * TRUNCATE (13 tables) which DOES wipe reference tables because that test's
+ * beforeAll explicitly re-runs the full seed sequence. The two scopes are
+ * intentionally different per design intent:
+ *   - cleanTestData (here) = transactional clean, preserve reference data
+ *   - idempotency.test.ts TRUNCATE = full wipe, re-seed everything
+ *
+ * Under PIC-76 F3 per-package test DBs, neither scope leaks across packages
+ * since @fmksa/db tests run against `fmksa_test_db` and @fmksa/core tests
+ * run against `fmksa_test_core`. The scope distinction now only affects
+ * intra-package consistency.
  *
  * PIC-37: assertTestDb() at the top is the inline guardrail — even if the
  * vitest setup file is bypassed, this function refuses to TRUNCATE against

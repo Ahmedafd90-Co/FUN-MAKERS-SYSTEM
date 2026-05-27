@@ -9,21 +9,27 @@
  * skips the setup file (e.g. by running `vitest run` with a different config),
  * the inline assertion still aborts the run.
  *
- * Fail-loud by design: throws on any URL whose database NAME doesn't end in
- * `_test`. The check parses the URL and inspects the pathname's last segment,
- * so `_test` appearing in username, host, or query string does not falsely pass.
+ * Accepted DB-name shapes (PIC-76 F3 extends PIC-38):
+ * - Ends with `_test` (legacy: `fmksa_test`)
+ * - Matches `_test_<suffix>` where suffix is alphanumeric (F3: per-package
+ *   test DBs like `fmksa_test_db`, `fmksa_test_core`)
+ *
+ * Rejected: anything else, including `_dev` databases. The check parses the
+ * URL and inspects pathname's last segment, so `_test` appearing in username,
+ * host, or query string does not falsely pass.
  */
 
 /**
  * Returns true iff `rawUrl` parses as a URL whose pathname's last segment
- * (the database name in postgres connection strings) ends with `_test`.
+ * (the database name in postgres connection strings) is a test DB.
  * Returns false on any parse error or any non-test database.
  */
 export function isTestDatabaseUrl(rawUrl: string): boolean {
   try {
     const u = new URL(rawUrl);
     const dbName = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
-    return dbName.endsWith('_test');
+    // Legacy shape (`*_test`) OR PIC-76 F3 per-package shape (`*_test_<pkg>`)
+    return dbName.endsWith('_test') || /_test_[a-z0-9]+$/.test(dbName);
   } catch {
     return false;
   }

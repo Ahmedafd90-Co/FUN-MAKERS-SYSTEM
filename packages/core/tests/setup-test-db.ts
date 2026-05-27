@@ -54,7 +54,18 @@ function redactPassword(url: string): string {
   return url.replace(/:[^:@/]+@/, ':***@');
 }
 
-let testUrl = process.env.DATABASE_URL_TEST;
+// F3 (PIC-76): priority order:
+//   1. DATABASE_URL_TEST_CORE — per-package F3 override (used by local dev)
+//   2. DATABASE_URL_TEST — legacy global test override
+//   3. DATABASE_URL — explicit CI per-step override (CI workflow sets this)
+// @fmksa/core tests previously shared `fmksa_test` with @fmksa/db, allowing
+// turbo's cross-package concurrency to pollute @fmksa/db's idempotency.test.ts
+// snapshots. Catch 22 lesson: process-isolation guarantees don't compose
+// across runners. See docs/architecture.md § β1.
+let testUrl =
+  process.env.DATABASE_URL_TEST_CORE ??
+  process.env.DATABASE_URL_TEST ??
+  process.env.DATABASE_URL;
 
 if (!testUrl) {
   // packages/core/tests/setup-test-db.ts → packages/db/.env
