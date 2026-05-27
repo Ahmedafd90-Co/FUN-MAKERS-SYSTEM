@@ -312,3 +312,78 @@ be removed when multi-tenancy ships (service code will then be required to
 supply `orgId` from the request context). See `docs/architecture.md` §
 "Multi-Tenancy Schema Primitives" for the full design rationale per entity
 class + the future-multi-tenant migration path.
+
+### SR-Canonical-Patterns — Codified architectural patterns (PIC-72 cluster 6/7/1.c, 2026-05-27)
+
+When an architectural decision becomes canonical (used in production,
+validated by recon, surviving multiple incidents), codify it here as a named
+pattern with a single canonical reference location. New code that touches
+the same surface must follow the pattern; deviations require explicit PD
+ruling. This rule indexes cross-cutting *patterns* — reusable solution
+shapes — distinct from SR-Sentinel / SR-Multi-Tenancy which govern specific
+identifiers and tenant invariants.
+
+#### F3 — Per-package test DB isolation (PIC-76, 2026-05-27)
+
+**Pattern:** when a workspace package owns tests that mutate database
+state, the package runs against its own dedicated test database
+(`fmksa_test_<pkg>`, e.g. `fmksa_test_db`, `fmksa_test_core`). Turbo
+executes per-package vitest runners in parallel processes; shared test DB
+→ cross-package write races.
+
+**Canonical reference:** `docs/architecture.md` § β1 (F3 mechanism).
+Surface locations:
+
+- `.github/workflows/ci.yml` — per-package `DATABASE_URL_TEST_<PKG>` env +
+  `CREATE DATABASE` step + sequential per-package test steps.
+- `infra/docker/postgres/init.sql` — local-dev parity DBs.
+- `packages/<pkg>/tests/setup-test-db.ts` — priority order
+  `DATABASE_URL_TEST_<PKG>` → `DATABASE_URL_TEST` → `DATABASE_URL`.
+- `packages/<pkg>/tests/helpers/assert-test-db.ts` — PIC-37/PIC-38
+  guardrail accepts `_test` + `_test_<pkg>` regex.
+
+**Operational rule for new packages:**
+
+- Adding a new workspace package with tests that mutate DB → create
+  `fmksa_test_<pkg>` (init.sql + CI workflow + per-package setup)
+  following the existing `@fmksa/db` and `@fmksa/core` shape.
+- Adding a new test file to an existing package → no schema work; existing
+  per-package DB carries it.
+- Adding a non-DB-touching package → no test-DB work; vitest runs in
+  process without DB.
+
+**Provenance:** catch 22 (scope-overgeneralized-retraction) demonstrated
+that vitest `fileParallelism: false` doesn't compose across turbo-parallel
+package runners. F3 is the architectural fix; landed in PIC-76 PR #55 at
+commit `6d7133a`.
+
+#### Multi-tenancy compound keys (PIC-75, 2026-05-27)
+
+**Pattern:** project-scoped models with sequential `referenceNumber` use
+compound `@@unique([orgId, projectId, referenceNumber])` rather than global
+`@unique([referenceNumber])`. Tenant-scoped invoice models (TaxInvoice) use
+compound `@@unique([orgId, referenceNumber])` (no `projectId`) for ZATCA
+Phase 2.
+
+**Canonical reference:** SR-Multi-Tenancy above (PIC-75 worked example).
+Surface location: `packages/db/prisma/schema.prisma`.
+
+**Operational rule for new models:**
+
+- Project-scoped + sequential `referenceNumber` → compound
+  `@@unique([orgId, projectId, referenceNumber])` + `orgId String
+  @default("00000000-0000-0000-0000-000000000001") @map("org_id")`.
+- Tenant-scoped (per-tenant sequential, not per-project) → compound
+  `@@unique([orgId, referenceNumber])`.
+- Dual identifiers (customer-facing globally-unique + internal sequential)
+  → customer-facing stays global `@unique`; internal sequential becomes
+  per-tenant project-scoped compound.
+
+**Provenance:** PIC-75 (2026-05-27); SR-Multi-Tenancy above documents the
+full per-entity rationale and `docs/architecture.md` §
+"Multi-Tenancy Schema Primitives" the implementation details.
+
+**First application:** SR-Canonical-Patterns introduced 2026-05-27 in
+PIC-72 cluster 6/7/1.c. Indexes patterns landed in earlier cluster work;
+future patterns added here as they mature from one-off decisions to
+reusable shapes.
