@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import {
   createTaxInvoice,
@@ -10,24 +10,64 @@ import {
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { createIpc, transitionIpc } from '../../src/commercial/ipc/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
+import {
+  workflowInstanceService,
+  workflowStepService,
+  registerConvergenceHandlers,
+} from '../../src/workflow';
+
+/**
+ * PIC-78 α-rewrite (2026-05-28):
+ *
+ * The beforeAll parent IPA→IPC chain is driven via the workflow engine
+ * (workflowStepService) instead of transitionIpa/transitionIpc review/approve,
+ * which are refused post-8656e57. submit (auto-start) + IPC sign remain
+ * transition calls. TaxInvoice's own transitions are NOT workflow-managed and
+ * are unchanged. Templates stay ACTIVE (legacy deactivation dropped).
+ *
+ * driveWorkflow(recordType, recordId) is generic + role-keyed off
+ * step.approverRuleJson.roleCode.
+ */
+
+const ROLES_NEEDED = [
+  'qs_commercial',
+  'project_manager',
+  'contracts_manager',
+  'finance',
+  'project_director',
+  'document_controller',
+] as const;
 
 describe('TaxInvoice Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   let signedIpc: { id: string };
   const ts = Date.now();
-  const deactivatedTemplateIds: string[] = [];
+  /** Map from role code → userId created for this test's project */
+  const roleUsers: Record<string, string> = {};
+
+  /**
+   * α-helper: drive a workflow (ipa/ipc) through ALL steps via the engine →
+   * approved_internal converges. Role-keyed off step.approverRuleJson.roleCode.
+   */
+  async function driveWorkflow(recordType: string, recordId: string) {
+    const instance = await workflowInstanceService.getInstanceByRecord(recordType, recordId);
+    if (!instance) throw new Error(`No workflow instance for ${recordType} ${recordId}`);
+    for (const step of instance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: instance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: ${step.name}`,
+      });
+    }
+  }
 
   beforeAll(async () => {
     registerCommercialEventTypes();
-
-    // Deactivate all commercial workflow templates so manual transitions work (legacy path)
-    const templates = await prisma.workflowTemplate.findMany({
-      where: { recordType: { in: ['ipa', 'ipc', 'variation'] }, isActive: true },
-    });
-    for (const t of templates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-      deactivatedTemplateIds.push(t.id);
-    }
+    registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-TI-${ts}`, name: 'TaxInvoice Test Entity', type: 'parent', status: 'active' },
@@ -44,7 +84,38 @@ describe('TaxInvoice Service', () => {
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
 
-    // Create IPA and transition to approved_internal
+    // Create role users + project assignments for ipa_standard + ipc_standard approver roles
+    for (const roleCode of ROLES_NEEDED) {
+      const role = await prisma.role.findUnique({ where: { code: roleCode } });
+      if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
+      const user = await prisma.user.create({
+        data: {
+          name: `Test ${roleCode} ${ts}`,
+          email: `test-ti-${roleCode}-${ts}@test.com`,
+          passwordHash: 'test-hash',
+          status: 'active',
+        },
+      });
+      await prisma.userRole.create({
+        data: {
+          userId: user.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      await prisma.projectAssignment.create({
+        data: {
+          userId: user.id, projectId: testProject.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      roleUsers[roleCode] = user.id;
+    }
+
+    // Create IPA and drive to approved_internal via the workflow engine
     const ipa = await createIpa({
       projectId: testProject.id,
       periodNumber: 1,
@@ -59,11 +130,10 @@ describe('TaxInvoice Service', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
 
-    // Create IPC and transition to signed
+    // Create IPC and drive to signed (workflow → approved_internal, then sign)
     const ipc = await createIpc({
       projectId: testProject.id,
       ipaId: ipa.id,
@@ -74,11 +144,19 @@ describe('TaxInvoice Service', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await transitionIpc(ipc.id, 'submit', 'test-user'); // auto-starts IPC workflow
+    await driveWorkflow('ipc', ipc.id); // → approved_internal converges
     await transitionIpc(ipc.id, 'sign', 'test-user');
     signedIpc = { id: ipc.id };
+  });
+
+  afterAll(async () => {
+    // Clear the workflow FK chain. workflow_actions is APPEND-ONLY (deleteMany
+    // blocked by middleware) → raw SQL.
+    await (prisma as any).$executeRawUnsafe(
+      `DELETE FROM workflow_actions WHERE instance_id IN (SELECT id FROM workflow_instances WHERE project_id = '${testProject.id}')`,
+    );
+    await prisma.workflowInstance.deleteMany({ where: { projectId: testProject.id } });
   });
 
   const makeInput = (overrides = {}) => ({
@@ -113,9 +191,8 @@ describe('TaxInvoice Service', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    await transitionIpa(ipa2.id, 'submit', 'test-user');
-    await transitionIpa(ipa2.id, 'review', 'test-user');
-    await transitionIpa(ipa2.id, 'approve', 'test-user');
+    await transitionIpa(ipa2.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa2.id); // → approved_internal converges
 
     const draftIpc = await createIpc({
       projectId: testProject.id,

@@ -254,7 +254,7 @@ describe('Variation Service', () => {
   // API carries no domain data. updateVariation only works in draft/returned.
   // There is no reachable post-8656e57 code path for this behavior. PIC-79
   // carries the product decision on where displaced assessment data lives.
-  it.skip('assessment fields populated at review and approve [PIC-79: orphaned by 8656e57]', async () => {
+  it.skip('assessment fields populated at review and approve [PIC-79-ORPHAN: assessment-data via transition orphaned by 8656e57]', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO assessment' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
 
@@ -276,7 +276,7 @@ describe('Variation Service', () => {
   // 9. Assessment fields remain null when not provided
   //
   // SKIPPED pending PIC-79 — same orphaned-feature root cause as test 8.
-  it.skip('assessment fields remain null when not provided in transition data [PIC-79: orphaned by 8656e57]', async () => {
+  it.skip('assessment fields remain null when not provided in transition data [PIC-79-ORPHAN: assessment-data via transition orphaned by 8656e57]', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO no assessment' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
 
