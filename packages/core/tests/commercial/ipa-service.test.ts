@@ -106,18 +106,26 @@ describe('IPA Service', () => {
   });
 
   /**
-   * α-helper: drive workflow through ipa_standard template steps until the
-   * specified outcomeType ('sign' = approved_internal converged; 'issue' =
-   * issued converged). Returns after the final approveStep call.
+   * α-helper: drive workflow through ALL ipa_standard template steps. The
+   * workflow reaches 'approved' only after every approvable step (including
+   * the optional Issue step) completes — at which point the convergence
+   * handler writes entity.status = 'approved_internal'. (PA3 V-2 data: driving
+   * only through the 'sign' step left the workflow in_progress / entity at
+   * 'submitted'; driving all steps converged to 'approved_internal'.)
+   *
+   * The 'issued' entity state is a SEPARATE post-workflow transition
+   * (`transitionIpa('issue', ...)`) — NOT a workflow-managed action and NOT
+   * auto-fired by the workflow Issue step. Callers needing 'issued' invoke it
+   * explicitly after this helper returns.
    *
    * Template `ipa_standard` (5 steps):
    *   1. QS/Commercial Prepare (qs_commercial) — review
    *   2. PM Review (project_manager) — review
    *   3. Contracts Manager Review (contracts_manager) — review
-   *   4. PD Sign (project_director) — sign  ← approved_internal converges here
-   *   5. Issue (document_controller) — issue ← issued converges here (optional)
+   *   4. PD Sign (project_director) — sign
+   *   5. Issue (document_controller) — issue (optional)
    */
-  async function driveIpaWorkflow(ipaId: string, untilOutcome: 'sign' | 'issue') {
+  async function driveIpaWorkflow(ipaId: string) {
     const instance = await workflowInstanceService.getInstanceByRecord('ipa', ipaId);
     if (!instance) throw new Error(`No workflow instance found for IPA ${ipaId}`);
     const stepApprovers: Record<string, string> = {
@@ -135,7 +143,6 @@ describe('IPA Service', () => {
         actorUserId: stepApprovers[step.name]!,
         comment: `α-rewrite: ${step.name} approved`,
       });
-      if (step.outcomeType === untilOutcome) break;
     }
   }
 
@@ -159,7 +166,7 @@ describe('IPA Service', () => {
   it('full lifecycle with posting at approved_internal', async () => {
     const ipa = await createIpa(makeInput({ periodNumber: 4 }), 'test-user');
     await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts ipa_standard workflow
-    await driveIpaWorkflow(ipa.id, 'sign'); // approves steps 1-4 (PD Sign → approved_internal converges)
+    await driveIpaWorkflow(ipa.id); // approve all steps → workflow.approved → approved_internal converges
 
     const updated = await prisma.ipa.findUniqueOrThrow({ where: { id: ipa.id } });
     expect(updated.status).toBe('approved_internal');
@@ -174,9 +181,11 @@ describe('IPA Service', () => {
   it('assigns reference number at issued', async () => {
     const ipa = await createIpa(makeInput({ periodNumber: 5 }), 'test-user');
     await transitionIpa(ipa.id, 'submit', 'test-user');
-    await driveIpaWorkflow(ipa.id, 'issue'); // approves steps 1-5 (Issue → issued converges + ref number assigned)
+    await driveIpaWorkflow(ipa.id); // workflow.approved → approved_internal converges
 
-    const issued = await prisma.ipa.findUniqueOrThrow({ where: { id: ipa.id } });
+    // 'issued' is a POST-workflow lifecycle transition (not workflow-managed);
+    // transitionIpa('issue') self-wraps via runAsWorkflowEngine — not a third bypass.
+    const issued = await transitionIpa(ipa.id, 'issue', roleUsers.document_controller!);
     expect(issued.status).toBe('issued');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-IPA-\\d{3}$`));
   });
