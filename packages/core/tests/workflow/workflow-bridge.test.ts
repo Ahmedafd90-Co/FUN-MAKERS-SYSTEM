@@ -195,9 +195,13 @@ afterAll(async () => {
   // template-scoped cleanup above misses them. Delete project-wide, leaf → root:
   //   workflow_actions → workflow_instances → project.
   // (workflow_steps excluded: they FK to templates, not instances.)
-  await prisma.workflowAction.deleteMany({
-    where: { instance: { projectId: testProject.id } },
-  });
+  //
+  // workflow_actions is APPEND-ONLY (no-delete-on-immutable middleware rejects
+  // deleteMany) — use raw SQL to bypass the Prisma extension, matching the
+  // template-scoped cleanup above. workflow_instances is mutable → deleteMany OK.
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM workflow_actions WHERE instance_id IN (SELECT id FROM workflow_instances WHERE project_id = '${testProject.id}')`,
+  );
   await prisma.workflowInstance.deleteMany({
     where: { projectId: testProject.id },
   });
