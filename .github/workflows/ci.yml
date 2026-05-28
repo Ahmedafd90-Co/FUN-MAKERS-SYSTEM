@@ -242,12 +242,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
 
-      # Test is temporarily non-blocking. Integration tests have pre-existing
-      # seed-data debt (missing baseline currencies / workflow templates on
-      # the ephemeral CI DB) that is being addressed in a separate cleanup
-      # lane on chore/brand-adaptation-ci-cleanup. This flag will be removed
-      # once that cleanup lands on main — Test will then become a required
-      # check again. Typecheck and Build remain authoritative gates.
+      # Test is a BLOCKING gate as of PIC-72 cluster 1.b (2026-05-28): the
+      # continue-on-error flags were removed once the pre-existing test debt
+      # cleared — @fmksa/db 42/42 (PIC-76 F3 per-package DBs) and @fmksa/core
+      # 0 failed / 45 skipped (PIC-73 + PIC-78 α-rewrites). The 6 PIC-79-ORPHAN
+      # skips still pass (skipped != failed) but no longer surface as a CI
+      # signal; PIC-79 enforcement is the ticket + grep anchor (note 3f5be662).
       #
       # F3 (PIC-76): explicit per-package test invocations. Replaces single
       # `pnpm turbo run test` which previously ran @fmksa/db + @fmksa/core
@@ -257,13 +257,11 @@ jobs:
       # vitest's intra-process `fileParallelism: false` still applies within
       # each package; turbo's cross-package parallelism is what we're undoing.
       - name: Run @fmksa/db tests
-        continue-on-error: true
         env:
           DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
         run: pnpm --filter @fmksa/db test
 
       - name: Run @fmksa/core tests
-        continue-on-error: true
         env:
           DATABASE_URL: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
         run: pnpm --filter @fmksa/core test
