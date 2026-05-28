@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import {
   createCorrespondence,
@@ -8,23 +8,51 @@ import {
   deleteCorrespondence,
 } from '../../src/commercial/correspondence/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
+import {
+  workflowInstanceService,
+  workflowStepService,
+  registerConvergenceHandlers,
+} from '../../src/workflow';
+
+/**
+ * PIC-78 α-rewrite (2026-05-28):
+ *
+ * The workflow-managed action `approve` (∈ CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS
+ * = ['approve','reject','return']) is driven via the workflow engine instead of
+ * transitionCorrespondence, which refuses it post-8656e57. submit (auto-starts
+ * workflow) and all post-workflow lifecycle transitions (sign / issue / close /
+ * mark_response_due / mark_responded / evaluate / accept / acknowledge / recover)
+ * remain transitionCorrespondence calls — non-WMA, self-wrap via runAsWorkflowEngine.
+ *
+ * driveCorrespondenceWorkflow is role-keyed off each step's approverRuleJson.roleCode
+ * — template-agnostic, so it handles every subtype template (letter_standard 3-step
+ * no-sign, claim_with_finance 5-step, etc.) uniformly. All subtypes converge to
+ * approved_internal via handleCorrespondenceApproved on workflow.approved.
+ *
+ * No domain-payload orphan here (unlike variation): transitionCorrespondence carries
+ * no per-transition domain data — signature is (id, action, actorUserId, comment?,
+ * projectId?). Standard α-rewrite.
+ */
+
+const ROLES_NEEDED = [
+  'qs_commercial',
+  'project_manager',
+  'contracts_manager',
+  'finance',
+  'cost_controller',
+  'project_director',
+  'document_controller',
+] as const;
 
 describe('Correspondence Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
-  const deactivatedTemplateIds: string[] = [];
+  /** Map from role code → userId created for this test's project */
+  const roleUsers: Record<string, string> = {};
 
   beforeAll(async () => {
     registerCommercialEventTypes();
-
-    // Deactivate correspondence workflow templates so manual transitions work (legacy path)
-    const templates = await prisma.workflowTemplate.findMany({
-      where: { recordType: 'correspondence', isActive: true },
-    });
-    for (const t of templates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-      deactivatedTemplateIds.push(t.id);
-    }
+    registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-COR-${ts}`, name: 'Correspondence Test Entity', type: 'parent', status: 'active' },
@@ -40,12 +68,36 @@ describe('Correspondence Service', () => {
       },
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
-  });
 
-  afterAll(async () => {
-    // Reactivate correspondence templates
-    for (const id of deactivatedTemplateIds) {
-      await prisma.workflowTemplate.update({ where: { id }, data: { isActive: true } });
+    // Create role users + project assignments for all correspondence template approver roles
+    for (const roleCode of ROLES_NEEDED) {
+      const role = await prisma.role.findUnique({ where: { code: roleCode } });
+      if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
+      const user = await prisma.user.create({
+        data: {
+          name: `Test ${roleCode} ${ts}`,
+          email: `test-cor-${roleCode}-${ts}@test.com`,
+          passwordHash: 'test-hash',
+          status: 'active',
+        },
+      });
+      await prisma.userRole.create({
+        data: {
+          userId: user.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      await prisma.projectAssignment.create({
+        data: {
+          userId: user.id, projectId: testProject.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      roleUsers[roleCode] = user.id;
     }
   });
 
@@ -57,13 +109,33 @@ describe('Correspondence Service', () => {
     recipientName: 'Test Recipient',
     recipientOrg: 'Test Org',
     currency: 'SAR',
-    // Subtype-specific defaults
     ...(subtype === 'notice' ? { noticeType: 'general' as const, contractClause: 'Clause 1', responseDeadline: new Date(Date.now() + 86400000).toISOString() } : {}),
     ...(subtype === 'claim' ? { claimType: 'additional_cost' as const, claimedAmount: 50000, claimedTimeDays: 30 } : {}),
     ...(subtype === 'back_charge' ? { targetName: 'Subcontractor A', category: 'defect' as const, chargedAmount: 25000, evidenceDescription: 'Defective work on Zone B' } : {}),
     ...(subtype === 'letter' ? { letterType: 'instruction' as const } : {}),
     ...overrides,
   });
+
+  /**
+   * α-helper: drive correspondence workflow through ALL steps via the workflow
+   * engine → approved_internal converges. Role-keyed off step.approverRuleJson.roleCode
+   * (template-agnostic across subtype templates).
+   */
+  async function driveCorrespondenceWorkflow(correspondenceId: string) {
+    const instance = await workflowInstanceService.getInstanceByRecord('correspondence', correspondenceId);
+    if (!instance) throw new Error(`No workflow instance for correspondence ${correspondenceId}`);
+    for (const step of instance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: instance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: ${step.name} approved`,
+      });
+    }
+  }
 
   // 1. Letter lifecycle WITHOUT signing (optional signing for letters)
   it('letter lifecycle without signing: create -> submit -> approve -> issue -> close', async () => {
@@ -72,7 +144,8 @@ describe('Correspondence Service', () => {
     expect(corr.subtype).toBe('letter');
 
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    const approved = await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
+    const approved = await getCorrespondence(corr.id, testProject.id);
     expect(approved.status).toBe('approved_internal');
 
     // Letter can skip signing and go directly to issued
@@ -87,7 +160,7 @@ describe('Correspondence Service', () => {
   it('letter lifecycle with signing: create -> submit -> approve -> sign -> issue -> close', async () => {
     const corr = await createCorrespondence(makeInput('letter', { subject: 'Letter with sign' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.status).toBe('issued');
@@ -102,7 +175,7 @@ describe('Correspondence Service', () => {
     expect(corr.subtype).toBe('notice');
 
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.status).toBe('issued');
@@ -123,7 +196,7 @@ describe('Correspondence Service', () => {
     expect(corr.subtype).toBe('claim');
 
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     await transitionCorrespondence(corr.id, 'issue', 'test-user');
 
@@ -148,7 +221,7 @@ describe('Correspondence Service', () => {
     expect(corr.subtype).toBe('back_charge');
 
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     await transitionCorrespondence(corr.id, 'issue', 'test-user');
 
@@ -171,7 +244,7 @@ describe('Correspondence Service', () => {
   it('claim cannot use notice-specific action mark_response_due', async () => {
     const corr = await createCorrespondence(makeInput('claim', { subject: 'Claim isolation' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     await transitionCorrespondence(corr.id, 'issue', 'test-user');
 
@@ -184,7 +257,7 @@ describe('Correspondence Service', () => {
   it('letter does not fire posting events at issued', async () => {
     const corr = await createCorrespondence(makeInput('letter', { subject: 'Letter no posting' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'issue', 'test-user');
 
     const claimEvent = await prisma.postingEvent.findFirst({
@@ -200,7 +273,7 @@ describe('Correspondence Service', () => {
   it('notice does not fire posting events at issued', async () => {
     const corr = await createCorrespondence(makeInput('notice', { subject: 'Notice no posting' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     await transitionCorrespondence(corr.id, 'issue', 'test-user');
 
@@ -218,7 +291,7 @@ describe('Correspondence Service', () => {
   it('letter reference number uses LTR type code', async () => {
     const corr = await createCorrespondence(makeInput('letter', { subject: 'Letter ref' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-LTR-\\d{3}$`));
   });
@@ -226,7 +299,7 @@ describe('Correspondence Service', () => {
   it('notice reference number uses NTC type code', async () => {
     const corr = await createCorrespondence(makeInput('notice', { subject: 'Notice ref' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-NTC-\\d{3}$`));
@@ -235,7 +308,7 @@ describe('Correspondence Service', () => {
   it('claim reference number uses CLM type code', async () => {
     const corr = await createCorrespondence(makeInput('claim', { subject: 'Claim ref' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-CLM-\\d{3}$`));
@@ -244,7 +317,7 @@ describe('Correspondence Service', () => {
   it('back_charge reference number uses BCH type code', async () => {
     const corr = await createCorrespondence(makeInput('back_charge', { subject: 'BC ref' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'approve', 'test-user');
+    await driveCorrespondenceWorkflow(corr.id);
     await transitionCorrespondence(corr.id, 'sign', 'test-user');
     const issued = await transitionCorrespondence(corr.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-BCH-\\d{3}$`));
@@ -288,7 +361,17 @@ describe('Correspondence Service', () => {
   it('terminal status cannot be transitioned', async () => {
     const corr = await createCorrespondence(makeInput('letter', { subject: 'Terminal test' }), 'test-user');
     await transitionCorrespondence(corr.id, 'submit', 'test-user');
-    await transitionCorrespondence(corr.id, 'reject', 'test-user');
+
+    // Reject at first workflow step → workflow.rejected → convergence writes status='rejected'
+    const instance = await workflowInstanceService.getInstanceByRecord('correspondence', corr.id);
+    const firstStep = instance!.template.steps[0]!;
+    const firstRule = firstStep.approverRuleJson as { type: string; roleCode: string };
+    await workflowStepService.rejectStep({
+      instanceId: instance!.id,
+      stepId: firstStep.id,
+      actorUserId: roleUsers[firstRule.roleCode]!,
+      comment: 'α-rewrite: rejected at first step',
+    });
 
     await expect(
       transitionCorrespondence(corr.id, 'submit', 'test-user'),
