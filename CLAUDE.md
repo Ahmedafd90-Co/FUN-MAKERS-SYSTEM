@@ -135,7 +135,7 @@ that the rule needs a verifiable artifact (pre-action checklist, CI gate,
 explicit recon step) — not just text in CLAUDE.md. Without operationalisation,
 the rule is decorative.
 
-##### Methodology-insufficiency class (catches 20, 21, 23)
+##### Methodology-insufficiency class (catches 20, 21, 23, 24)
 
 20. **State A locally may not equal State A in CI; reproduce methodology hit a
     wall.** PIC-76 Phase A attempted local State-A reproduction of the CI
@@ -162,14 +162,29 @@ the rule is decorative.
     the PR that introduces it — the strongest possible evidence that
     methodology has stopped being aspirational. Operationalized via: SR-3
     (this PR's introduction).
+24. **Sample-verification at typecheck level masked runtime-level
+    architectural misalignment (PIC-73 PR #57, 2026-05-28).** PA4's three
+    fix shapes (Class A β / Class B regex / Class C FK) typechecked clean;
+    Class A β failed at runtime because `runAsWorkflowEngine` wrapping at
+    test level doesn't bypass the post-8656e57 service-layer Step 6 guard —
+    an explicit architectural hard rule from `no-direct-status-write.ts`
+    ("THERE ARE ONLY TWO BYPASSES. Do not add a third"). The verification
+    was at the wrong abstraction layer for the question being asked
+    (does the bypass mechanism reach the actual guard?). SR-3 + V-2 (draft
+    PR + CI watch) caught the misalignment before merge — bad merge
+    prevented; only 4 of 44 fails fixed (Class B regex). PR #57 reset to
+    Step 1 partial; α-rewrite deferred to PIC-78. Operationalized via
+    SR-3 mechanics step 5 (verification-at-prescription-layer; see SR-3
+    below).
 
 **Operating discipline (methodology-insufficiency class):** when a prescribed
 verification step can't reach the actual failure state, escalate to probe at
 the actual failure surface — don't iterate on a method that can't reach State A.
 Mark unverified prescriptions in PD rulings as `ASSUMED — verify before
 executing` so the gap is visible at execution time. **Class is recurrence-prone**
-— three entries (20, 21, 23) in three sessions; SR-3 canonicalization is the
-binding operational response.
+— four entries (20, 21, 23, 24) across four sessions; SR-3 canonicalization
+plus mechanics step 5 (verification-at-prescription-layer) is the binding
+operational response.
 
 ##### Scope-overgeneralized-retraction class (catch 22)
 
@@ -192,6 +207,12 @@ for codification.
 SR-3 introduction, Canonical Patterns codification, PIC-19 closure, and catch 23
 inline as SR-3's first post-introduction worked example; β4 deferred to standalone
 Phase 2 backlog ticket per Karpathy "Surgical Changes").
+
+**Extended 2026-05-28:** catch 24 added as 4th methodology-insufficiency entry
+plus SR-3 mechanics step 5 (verification-at-prescription-layer) via standalone
+canonicalization PR following PIC-73 PR #57's runtime-layer finding. Pattern
+register now at 13 catches across 5 structural classes (drift / revision /
+recurrence / methodology-insufficiency / scope-overgeneralized-retraction).
 
 ### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
 
@@ -238,9 +259,20 @@ presuppositions) by catching wrong-mechanism presuppositions.
    compose across runners by default.
 4. Mark unverified mechanism prescriptions as `ASSUMED — verify before
    executing` so the gap is visible at execution time, not at failure time.
+5. **Match verification layer to prescription layer.** Typecheck-layer
+   prescriptions (type changes, signature widening, import substitution)
+   are verified at typecheck. Semantic-layer prescriptions (behavioral
+   assertions, runtime guards, test contract changes) require runtime
+   verification — V-2 (draft PR + CI watch) is the minimum when local
+   runtime is blocked (catch 20 / F3 DB pattern). Architectural-layer
+   prescriptions (bypass mechanisms, escape hatches, design pattern
+   changes) require reading the source's design documentation FIRST,
+   then runtime + architectural-boundary verification. Verifying at a
+   layer below the prescription's layer is a false-confidence trap
+   (catch 24).
 
-**Provenance — four catches surfaced during PIC-75 → PIC-76 → cluster 6/7/1.c
-(2026-05-27):**
+**Provenance — five catches surfaced during PIC-75 → PIC-76 → cluster 6/7/1.c
+→ PIC-73 PR #57 (2026-05-27 → 2026-05-28):**
 
 - **Catch 20** (methodology-insufficiency): PIC-76 Phase A attempted local
   State-A reproduction of the CI catch-22 mechanism. Single-package vitest
@@ -264,6 +296,16 @@ presuppositions) by catching wrong-mechanism presuppositions.
   SR-1 extension methodology-insufficiency subsection for full provenance.
   **Fired during SR-3's own canonicalization PR** — the strongest possible
   evidence that the rule is binding, not aspirational.
+- **Catch 24** (methodology-insufficiency): PIC-73 PR #57 — typecheck-level
+  sample-verification masked runtime-level architectural misalignment. β
+  proposal (`runAsWorkflowEngine` wrap) typechecked clean but failed at
+  runtime against the post-8656e57 service-layer Step 6 guard
+  (`no-direct-status-write.ts` hard rule: "TWO BYPASSES. Do not add a
+  third"). V-2 (draft PR + CI watch) caught the misalignment; PR #57
+  reset to Step 1 partial (Class B regex only); α-rewrite deferred to
+  PIC-78. See SR-1 extension methodology-insufficiency subsection for
+  full provenance. **Drove SR-3 mechanics step 5** (verification-at-
+  prescription-layer) as the binding operational response.
 
 **Relationship to SR-1 extension:** SR-1 extension catches wrong-identifier
 presuppositions (PR numbers, script names, file paths, branch names). SR-3
