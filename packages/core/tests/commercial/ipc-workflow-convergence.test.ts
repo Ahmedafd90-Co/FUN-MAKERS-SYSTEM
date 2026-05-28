@@ -58,14 +58,9 @@ describe('IPC Workflow Convergence Proof', () => {
     registerCommercialEventTypes();
     registerConvergenceHandlers();
 
-    // Deactivate IPA templates so parent IPA can be manually approved
-    const ipaTemplates = await prisma.workflowTemplate.findMany({
-      where: { recordType: 'ipa', isActive: true },
-    });
-    for (const t of ipaTemplates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-      deactivatedIpaTemplateIds.push(t.id);
-    }
+    // PIC-78 α-rewrite: IPA templates stay ACTIVE — the parent IPA is driven
+    // through its workflow (not manually approved) post-8656e57. See beforeAll
+    // IPA setup below.
 
     // Ensure IPC templates ARE active (they should be by default)
     await prisma.workflowTemplate.updateMany({
@@ -129,7 +124,8 @@ describe('IPC Workflow Convergence Proof', () => {
       roleUsers[roleCode] = user.id;
     }
 
-    // Create an IPA and manually transition to approved_internal
+    // Create an IPA and drive it to approved_internal via the workflow engine
+    // (post-8656e57: review/approve are workflow-managed; manual transitions throw).
     const ipa = await createIpa({
       projectId: testProject.id,
       periodNumber: 1,
@@ -144,10 +140,21 @@ describe('IPC Workflow Convergence Proof', () => {
       currency: 'SAR',
     }, roleUsers.qs_commercial!);
 
-    await transitionIpa(ipa.id, 'submit', roleUsers.qs_commercial!);
-    await transitionIpa(ipa.id, 'review', roleUsers.qs_commercial!);
-    await transitionIpa(ipa.id, 'approve', roleUsers.qs_commercial!);
-    approvedIpa = { id: ipa.id };
+    await transitionIpa(ipa.id, 'submit', roleUsers.qs_commercial!); // auto-starts IPA workflow
+    const ipaInstance = await workflowInstanceService.getInstanceByRecord('ipa', ipa.id);
+    if (!ipaInstance) throw new Error(`No workflow instance for parent IPA ${ipa.id}`);
+    for (const step of ipaInstance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (IPA step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: ipaInstance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: parent IPA ${step.name} approved`,
+      });
+    }
+    approvedIpa = { id: ipa.id }; // converged to approved_internal
   });
 
   afterAll(async () => {
