@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@fmksa/db';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { createIpc, transitionIpc } from '../../src/commercial/ipc/service';
@@ -8,24 +8,118 @@ import { createTaxInvoice, transitionTaxInvoice } from '../../src/commercial/tax
 import { createCorrespondence, transitionCorrespondence } from '../../src/commercial/correspondence/service';
 import { getCommercialDashboard } from '../../src/commercial/dashboard/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
+import {
+  workflowInstanceService,
+  workflowStepService,
+  registerConvergenceHandlers,
+} from '../../src/workflow';
+
+/**
+ * PIC-78 α-rewrite (2026-05-28):
+ *
+ * Workflow-managed actions (review/approve/reject/return) across IPA, IPC,
+ * Variation and Correspondence are driven via the workflow engine
+ * (workflowStepService) instead of transitionXxx, which refuses them
+ * unconditionally post-8656e57. submit (auto-starts workflow) and post-workflow
+ * lifecycle transitions (sign / issue / client_pending / client_approved /
+ * close) remain transitionXxx calls — non-WMA, self-wrap via runAsWorkflowEngine.
+ * TaxInvoice and CostProposal are NOT workflow-managed — their transitions are
+ * unchanged.
+ *
+ * Templates stay ACTIVE (legacy deactivation pattern dropped). Role users +
+ * project assignments created for all 6 commercial approver roles on BOTH
+ * testProject and the per-test refProject (Test 8) so approver resolution
+ * succeeds for workflow steps.
+ *
+ * driveWorkflow(recordType, recordId) is generic + role-keyed off
+ * step.approverRuleJson.roleCode — drives every commercial template uniformly.
+ *
+ * Test 2 SPLIT (PD ruling): 2a keeps the 2 posting-event assertions via the
+ * workflow path; 2b (assessment fields) it.skip pending PIC-79. Test 10
+ * it.skip pending PIC-79 (assessment-data-via-transition orphaned by 8656e57).
+ */
+
+const ROLES_NEEDED = [
+  'qs_commercial',
+  'project_manager',
+  'contracts_manager',
+  'finance',
+  'project_director',
+  'document_controller',
+] as const;
 
 describe('Commercial Lifecycle Integration', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
-  /** IDs of templates deactivated for this test (legacy manual path) */
-  const deactivatedTemplateIds: string[] = [];
+  /** Map from role code → userId created for this test's testProject */
+  const roleUsers: Record<string, string> = {};
+  /** refProject ids needing workflow FK cleanup (Test 8 creates its own project) */
+  const refProjectIds: string[] = [];
+
+  /** Create role users + a userRole + a projectAssignment for each commercial
+   * approver role against the given project. Returns the role→userId map (for
+   * testProject this populates the shared `roleUsers`; secondary projects reuse
+   * the same users and only add projectAssignments). */
+  async function ensureRoleUsers(projectId: string, label: string): Promise<void> {
+    for (const roleCode of ROLES_NEEDED) {
+      const role = await prisma.role.findUnique({ where: { code: roleCode } });
+      if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
+      let userId = roleUsers[roleCode];
+      if (!userId) {
+        const user = await prisma.user.create({
+          data: {
+            name: `Test ${roleCode} ${ts}`,
+            email: `test-int-${roleCode}-${ts}@test.com`,
+            passwordHash: 'test-hash',
+            status: 'active',
+          },
+        });
+        await prisma.userRole.create({
+          data: {
+            userId: user.id, roleId: role.id,
+            effectiveFrom: new Date('2020-01-01'),
+            assignedBy: 'test-setup',
+            assignedAt: new Date(),
+          },
+        });
+        roleUsers[roleCode] = user.id;
+        userId = user.id;
+      }
+      await prisma.projectAssignment.create({
+        data: {
+          userId, projectId, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: `test-setup-${label}`,
+          assignedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * α-helper: drive a workflow (ipa/ipc/variation/correspondence) through ALL
+   * steps via the engine → approved_internal converges. Role-keyed off
+   * step.approverRuleJson.roleCode (template-agnostic).
+   */
+  async function driveWorkflow(recordType: string, recordId: string) {
+    const instance = await workflowInstanceService.getInstanceByRecord(recordType, recordId);
+    if (!instance) throw new Error(`No workflow instance for ${recordType} ${recordId}`);
+    for (const step of instance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: instance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: ${step.name}`,
+      });
+    }
+  }
 
   beforeAll(async () => {
     registerCommercialEventTypes();
-
-    // Deactivate all commercial workflow templates so manual transitions work (legacy path)
-    const templates = await prisma.workflowTemplate.findMany({
-      where: { recordType: { in: ['ipa', 'ipc', 'variation', 'correspondence'] }, isActive: true },
-    });
-    for (const t of templates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-      deactivatedTemplateIds.push(t.id);
-    }
+    registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-INT-${ts}`, name: 'Integration Test Entity', type: 'parent', status: 'active' },
@@ -47,11 +141,23 @@ describe('Commercial Lifecycle Integration', () => {
       },
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
+
+    // Role users + project assignments for all commercial approver roles
+    await ensureRoleUsers(testProject.id, 'main');
   });
 
-  // NOTE: templates are NOT reactivated in afterAll — this avoids a race
-  // condition with other parallel test files that also deactivate templates.
-  // The test DB state for templates is restored by the vitest global setup.
+  afterAll(async () => {
+    // Clear the workflow FK chain before any project teardown. workflow_actions
+    // is APPEND-ONLY (prisma.workflowAction.deleteMany is blocked by middleware),
+    // so delete via raw SQL. Covers testProject + every refProject (Test 8/12).
+    const projectIds = [testProject.id, ...refProjectIds];
+    for (const pid of projectIds) {
+      await (prisma as any).$executeRawUnsafe(
+        `DELETE FROM workflow_actions WHERE instance_id IN (SELECT id FROM workflow_instances WHERE project_id = '${pid}')`,
+      );
+      await prisma.workflowInstance.deleteMany({ where: { projectId: pid } });
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -104,17 +210,15 @@ describe('Commercial Lifecycle Integration', () => {
   // ---------------------------------------------------------------------------
 
   it('Test 1: IPA -> IPC -> TaxInvoice chain fires 3 posting events', async () => {
-    // IPA: create -> submit -> review -> approve (fires IPA_APPROVED)
+    // IPA: create -> submit -> (workflow) -> approved_internal (fires IPA_APPROVED)
     const ipa = await createIpa(makeIpaInput(), 'test-user');
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
 
-    // IPC: create(ipaId) -> submit -> review -> approve -> sign (fires IPC_SIGNED)
+    // IPC: create(ipaId) -> submit -> (workflow) -> approved_internal -> sign (fires IPC_SIGNED)
     const ipc = await createIpc(makeIpcInput(ipa.id), 'test-user');
-    await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await transitionIpc(ipc.id, 'submit', 'test-user'); // auto-starts IPC workflow
+    await driveWorkflow('ipc', ipc.id); // → approved_internal converges
     await transitionIpc(ipc.id, 'sign', 'test-user');
 
     // TaxInvoice: create(ipcId) -> submit -> approve -> issue (fires TAX_INVOICE_ISSUED)
@@ -156,7 +260,42 @@ describe('Commercial Lifecycle Integration', () => {
   // Test 2: Variation (VO) lifecycle with client approval posting
   // ---------------------------------------------------------------------------
 
-  it('Test 2: VO lifecycle fires VARIATION_APPROVED_INTERNAL and VARIATION_APPROVED_CLIENT', async () => {
+  it('Test 2a: VO lifecycle fires VARIATION_APPROVED_INTERNAL and VARIATION_APPROVED_CLIENT', async () => {
+    const vo = await createVariation({
+      projectId: testProject.id,
+      subtype: 'vo',
+      title: 'Test VO Integration',
+      description: 'VO for integration test',
+      reason: 'Scope change',
+      costImpact: 60000,
+      currency: 'SAR',
+    }, 'test-user');
+
+    // submit -> (workflow) -> approved_internal (fires VARIATION_APPROVED_INTERNAL)
+    await transitionVariation(vo.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveWorkflow('variation', vo.id); // → approved_internal converges
+
+    // sign -> issue -> client_pending -> client_approved (fires VARIATION_APPROVED_CLIENT)
+    await transitionVariation(vo.id, 'sign', 'test-user');
+    await transitionVariation(vo.id, 'issue', 'test-user');
+    await transitionVariation(vo.id, 'client_pending', 'test-user');
+    await transitionVariation(vo.id, 'client_approved', 'test-user');
+
+    // Verify 2 posting events
+    const internalEvent = await prisma.postingEvent.findFirst({
+      where: { sourceRecordId: vo.id, eventType: 'VARIATION_APPROVED_INTERNAL' },
+    });
+    expect(internalEvent).toBeTruthy();
+
+    const clientEvent = await prisma.postingEvent.findFirst({
+      where: { sourceRecordId: vo.id, eventType: 'VARIATION_APPROVED_CLIENT' },
+    });
+    expect(clientEvent).toBeTruthy();
+  });
+
+  // SKIP pending PIC-79: assessment-data-via-transition orphaned by 8656e57
+  // (review/approve now workflow-managed). See PIC-79.
+  it.skip('Test 2b: VO assessment fields populated on review and approve [PIC-79-ORPHAN]', async () => {
     const vo = await createVariation({
       projectId: testProject.id,
       subtype: 'vo',
@@ -220,9 +359,9 @@ describe('Commercial Lifecycle Integration', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    // submit -> approve -> sign -> issue (fires CLAIM_ISSUED)
-    await transitionCorrespondence(claim.id, 'submit', 'test-user');
-    await transitionCorrespondence(claim.id, 'approve', 'test-user');
+    // submit -> (workflow) -> approved_internal -> sign -> issue (fires CLAIM_ISSUED)
+    await transitionCorrespondence(claim.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveWorkflow('correspondence', claim.id); // → approved_internal converges
     await transitionCorrespondence(claim.id, 'sign', 'test-user');
     await transitionCorrespondence(claim.id, 'issue', 'test-user');
 
@@ -254,9 +393,9 @@ describe('Commercial Lifecycle Integration', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    // submit -> approve -> sign -> issue (fires BACK_CHARGE_ISSUED)
-    await transitionCorrespondence(bc.id, 'submit', 'test-user');
-    await transitionCorrespondence(bc.id, 'approve', 'test-user');
+    // submit -> (workflow) -> approved_internal -> sign -> issue (fires BACK_CHARGE_ISSUED)
+    await transitionCorrespondence(bc.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveWorkflow('correspondence', bc.id); // → approved_internal converges
     await transitionCorrespondence(bc.id, 'sign', 'test-user');
     await transitionCorrespondence(bc.id, 'issue', 'test-user');
 
@@ -290,9 +429,8 @@ describe('Commercial Lifecycle Integration', () => {
   it('Test 6: TaxInvoice creation rejects when parent IPC is still in draft', async () => {
     // Need an approved IPA first to create an IPC
     const ipa = await createIpa(makeIpaInput(), 'test-user');
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
 
     // IPC stays in draft — createTaxInvoice should throw
     const draftIpc = await createIpc(makeIpcInput(ipa.id), 'test-user');
@@ -316,10 +454,9 @@ describe('Commercial Lifecycle Integration', () => {
       currency: 'SAR',
     }, 'test-user');
 
-    // Full lifecycle to issued
-    await transitionVariation(co.id, 'submit', 'test-user');
-    await transitionVariation(co.id, 'review', 'test-user');
-    await transitionVariation(co.id, 'approve', 'test-user');
+    // Full lifecycle to issued (workflow-driven approval)
+    await transitionVariation(co.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveWorkflow('variation', co.id); // → approved_internal converges
     await transitionVariation(co.id, 'sign', 'test-user');
     await transitionVariation(co.id, 'issue', 'test-user');
 
@@ -349,6 +486,9 @@ describe('Commercial Lifecycle Integration', () => {
         createdBy: 'test',
       },
     });
+    refProjectIds.push(refProject.id);
+    // Workflow approver resolution checks this project's assignments.
+    await ensureRoleUsers(refProject.id, 'ref');
 
     const refNumbers: string[] = [];
     for (let i = 1; i <= 3; i++) {
@@ -365,9 +505,8 @@ describe('Commercial Lifecycle Integration', () => {
         netClaimed: 9000,
         currency: 'SAR',
       }, 'test-user');
-      await transitionIpa(ipa.id, 'submit', 'test-user');
-      await transitionIpa(ipa.id, 'review', 'test-user');
-      await transitionIpa(ipa.id, 'approve', 'test-user');
+      await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+      await driveWorkflow('ipa', ipa.id); // → approved_internal converges
       const issued = await transitionIpa(ipa.id, 'issue', 'test-user');
       refNumbers.push(issued.referenceNumber!);
     }
@@ -388,31 +527,37 @@ describe('Commercial Lifecycle Integration', () => {
 
   it('Test 9: Audit log entries recorded for all transitions', async () => {
     const ipa = await createIpa(makeIpaInput(), 'test-user');
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
 
     const auditEntries = await prisma.auditLog.findMany({
       where: { resourceType: 'ipa', resourceId: ipa.id },
       orderBy: { createdAt: 'asc' },
     });
 
-    // At minimum: create + submit + review + approve = 4 entries
-    // (plus posting_event_posted audit entry in a separate resource)
+    // α-rewrite: under the workflow-driven path the per-step approvals are
+    // audited under resourceType 'workflow_instance' (not 'ipa'). The 'ipa'
+    // resource records: create + submit + the convergence status write
+    // (ipa.transition.workflow_approved). There is NO ipa.transition.approve /
+    // .review on the workflow path.
     expect(auditEntries.length).toBeGreaterThanOrEqual(3);
 
-    // Verify expected actions exist
     const actions = auditEntries.map((e) => e.action);
     expect(actions).toContain('ipa.create');
     expect(actions).toContain('ipa.transition.submit');
-    expect(actions).toContain('ipa.transition.approve');
+    expect(actions).toContain('ipa.transition.workflow_approved');
+
+    // Final IPA status is approved_internal (convergence wrote it).
+    const finalIpa = await prisma.ipa.findUniqueOrThrow({ where: { id: ipa.id } });
+    expect(finalIpa.status).toBe('approved_internal');
   });
 
   // ---------------------------------------------------------------------------
   // Test 10: Variation assessment fields populated on review/approve
   // ---------------------------------------------------------------------------
 
-  it('Test 10: Variation assessment fields populated on review and approve', async () => {
+  // SKIP pending PIC-79: variation assessment-data orphaned by 8656e57. See PIC-79.
+  it.skip('Test 10: Variation assessment fields populated on review and approve [PIC-79-ORPHAN]', async () => {
     const vo = await createVariation({
       projectId: testProject.id,
       subtype: 'vo',
@@ -500,6 +645,7 @@ describe('Commercial Lifecycle Integration', () => {
         createdBy: 'test',
       },
     });
+    refProjectIds.push(dashProject.id); // workflow FK cleanup in afterAll
 
     // IPA: netClaimed = 100000 (approved -> counted in totalClaimed)
     const ipa = await createIpa({
@@ -515,9 +661,9 @@ describe('Commercial Lifecycle Integration', () => {
       netClaimed: 100000,
       currency: 'SAR',
     }, 'test-user');
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await ensureRoleUsers(dashProject.id, 'dash'); // workflow approver resolution
+    await transitionIpa(ipa.id, 'submit', 'test-user'); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
 
     // IPC: netCertified = 80000 (signed -> counted in totalCertified)
     const ipc = await createIpc({
@@ -529,12 +675,15 @@ describe('Commercial Lifecycle Integration', () => {
       certificationDate: new Date().toISOString(),
       currency: 'SAR',
     }, 'test-user');
-    await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await transitionIpc(ipc.id, 'submit', 'test-user'); // auto-starts IPC workflow
+    await driveWorkflow('ipc', ipc.id); // → approved_internal converges
     await transitionIpc(ipc.id, 'sign', 'test-user');
 
-    // Variation: costImpact = 50000, approvedCostImpact = 40000
+    // Variation: costImpact = 50000. NOTE: under the α-rewrite the workflow
+    // engine carries no domain payload, so approvedCostImpact stays NULL
+    // (PIC-79 orphan). The dashboard's variationVariance.totalApproved reads
+    // approvedCostImpact, so it computes 0 (full reduction) on this path — the
+    // assertions below reflect that reality, not the pre-8656e57 40000.
     const vo = await createVariation({
       projectId: dashProject.id,
       subtype: 'vo',
@@ -544,12 +693,8 @@ describe('Commercial Lifecycle Integration', () => {
       costImpact: 50000,
       currency: 'SAR',
     }, 'test-user');
-    await transitionVariation(vo.id, 'submit', 'test-user');
-    await transitionVariation(vo.id, 'review', 'test-user');
-    await transitionVariation(vo.id, 'approve', 'test-user', undefined, {
-      approvedCostImpact: 40000,
-      approvedTimeImpactDays: 5,
-    });
+    await transitionVariation(vo.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveWorkflow('variation', vo.id); // → approved_internal converges
 
     // CostProposal: estimatedCost = 30000, approvedCost = 25000
     const cp = await createCostProposal({
@@ -583,16 +728,48 @@ describe('Commercial Lifecycle Integration', () => {
     expect(parseFloat(dashboard.varianceAnalytics.ipaVariance.reductionAmount)).toBe(20000);
     expect(dashboard.varianceAnalytics.ipaVariance.reductionPercent).toBe(20);
 
-    // Variation variance: submitted=50000, approved=40000, reduction=10000, 20%
+    // Variation variance — submitted side only. totalSubmitted = costImpact,
+    // set at create, so it stays valid under the α-rewrite.
+    // The approved side (totalApproved/reductionAmount/reductionPercent) reads
+    // Variation.approvedCostImpact, orphaned by 8656e57 → split into Test 12b
+    // (it.skip → PIC-79). Do NOT assert degraded values here.
     expect(parseFloat(dashboard.varianceAnalytics.variationVariance.totalSubmitted)).toBe(50000);
-    expect(parseFloat(dashboard.varianceAnalytics.variationVariance.totalApproved)).toBe(40000);
-    expect(parseFloat(dashboard.varianceAnalytics.variationVariance.reductionAmount)).toBe(10000);
-    expect(dashboard.varianceAnalytics.variationVariance.reductionPercent).toBe(20);
 
     // CostProposal variance: estimated=30000, approved=25000, reduction=5000, ~16.67%
     expect(parseFloat(dashboard.varianceAnalytics.costProposalVariance.totalEstimated)).toBe(30000);
     expect(parseFloat(dashboard.varianceAnalytics.costProposalVariance.totalApproved)).toBe(25000);
     expect(parseFloat(dashboard.varianceAnalytics.costProposalVariance.reductionAmount)).toBe(5000);
     expect(dashboard.varianceAnalytics.costProposalVariance.reductionPercent).toBeCloseTo(16.67, 1);
+  });
+
+  // PIC-79-ORPHAN: dashboard variationVariance approved-side (totalApproved /
+  // reductionAmount / reductionPercent) derives from Variation.approvedCostImpact,
+  // orphaned by 8656e57 (assessment-data-via-transition removed; review/approve are
+  // now workflow-managed and the engine carries no domain payload). Pre-guard, a VO
+  // with approvedCostImpact=40000 over submitted 50000 yielded totalApproved=40000,
+  // reductionAmount=10000, reductionPercent=20. Split from Test 12 (which keeps the
+  // valid ipa/CostProposal/totalSubmitted variance coverage as passing α-rewrite) so
+  // the orphaned approved-side assertion stays visibly deferred, not silently dropped.
+  // Restored by PIC-79. Do NOT rewrite to assert degraded values.
+  it.skip('Test 12b: dashboard variationVariance approved-side reflects approvedCostImpact [PIC-79-ORPHAN]', async () => {
+    const entity = await prisma.entity.create({
+      data: { code: `ENT-VV-${ts}`, name: 'VV Test Entity', type: 'parent', status: 'active' },
+    });
+    const proj = await prisma.project.create({
+      data: {
+        code: `PROJ-VV-${ts}`, name: 'VV Test', entityId: entity.id,
+        status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
+      },
+    });
+    const vo = await createVariation({
+      projectId: proj.id, subtype: 'vo', title: 'VV', description: 'x', reason: 'x',
+      costImpact: 50000, currency: 'SAR',
+    }, 'test-user');
+    await transitionVariation(vo.id, 'submit', 'test-user');
+    // Pre-8656e57: drive to approved WITH approvedCostImpact=40000 — now orphaned (no path).
+    const dashboard = await getCommercialDashboard(proj.id);
+    expect(parseFloat(dashboard.varianceAnalytics.variationVariance.totalApproved)).toBe(40000);
+    expect(parseFloat(dashboard.varianceAnalytics.variationVariance.reductionAmount)).toBe(10000);
+    expect(dashboard.varianceAnalytics.variationVariance.reductionPercent).toBe(20);
   });
 });

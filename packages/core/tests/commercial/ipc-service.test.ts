@@ -3,25 +3,65 @@ import { prisma } from '@fmksa/db';
 import { createIpc, transitionIpc, getIpc, listIpcs, deleteIpc } from '../../src/commercial/ipc/service';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
+import {
+  workflowInstanceService,
+  workflowStepService,
+  registerConvergenceHandlers,
+} from '../../src/workflow';
+
+/**
+ * PIC-78 α-rewrite (2026-05-28):
+ *
+ * Workflow-managed actions (review/approve/reject ∈ IPC_WORKFLOW_MANAGED_ACTIONS)
+ * driven via the workflow engine for both the parent-IPA setup (beforeAll) and
+ * the IPC test subjects. submit (auto-start) + post-workflow lifecycle
+ * (sign/issue/close) remain transitionIpc/transitionIpa calls.
+ *
+ * driveWorkflow(recordType, recordId) is generic + role-keyed off
+ * step.approverRuleJson.roleCode — drives ipa_standard (5-step) and ipc_standard
+ * (6-step incl Finance Check) uniformly. No domain-payload orphan (IPC/IPA
+ * transitions carry no per-transition domain data).
+ */
+
+const ROLES_NEEDED = [
+  'qs_commercial',
+  'project_manager',
+  'contracts_manager',
+  'finance',
+  'project_director',
+  'document_controller',
+] as const;
 
 describe('IPC Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   let approvedIpa: { id: string };
   const ts = Date.now();
-  /** IDs of workflow templates deactivated for this test (legacy manual path) */
-  const deactivatedTemplateIds: string[] = [];
+  /** Map from role code → userId created for this test's project */
+  const roleUsers: Record<string, string> = {};
+
+  /**
+   * α-helper: drive a workflow (ipa or ipc) through ALL steps via the engine →
+   * approved_internal converges. Role-keyed off step.approverRuleJson.roleCode.
+   */
+  async function driveWorkflow(recordType: 'ipa' | 'ipc', recordId: string) {
+    const instance = await workflowInstanceService.getInstanceByRecord(recordType, recordId);
+    if (!instance) throw new Error(`No workflow instance for ${recordType} ${recordId}`);
+    for (const step of instance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: instance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: ${step.name} approved`,
+      });
+    }
+  }
 
   beforeAll(async () => {
     registerCommercialEventTypes();
-
-    // Deactivate IPA + IPC workflow templates so manual transitions work (legacy path)
-    const templates = await prisma.workflowTemplate.findMany({
-      where: { recordType: { in: ['ipa', 'ipc'] }, isActive: true },
-    });
-    for (const t of templates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-      deactivatedTemplateIds.push(t.id);
-    }
+    registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-IPC-${ts}`, name: 'IPC Test Entity', type: 'parent', status: 'active' },
@@ -38,7 +78,38 @@ describe('IPC Service', () => {
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
 
-    // Create an IPA and transition it to approved_internal so IPC can be created against it
+    // Create role users + project assignments for ipa_standard + ipc_standard approver roles
+    for (const roleCode of ROLES_NEEDED) {
+      const role = await prisma.role.findUnique({ where: { code: roleCode } });
+      if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
+      const user = await prisma.user.create({
+        data: {
+          name: `Test ${roleCode} ${ts}`,
+          email: `test-ipc-${roleCode}-${ts}@test.com`,
+          passwordHash: 'test-hash',
+          status: 'active',
+        },
+      });
+      await prisma.userRole.create({
+        data: {
+          userId: user.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      await prisma.projectAssignment.create({
+        data: {
+          userId: user.id, projectId: testProject.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      roleUsers[roleCode] = user.id;
+    }
+
+    // Create an IPA and drive it to approved_internal so IPC can be created against it
     const ipa = await createIpa({
       projectId: testProject.id,
       periodNumber: 1,
@@ -51,19 +122,15 @@ describe('IPC Service', () => {
       currentClaim: 90000,
       netClaimed: 90000,
       currency: 'SAR',
-    }, 'test-user');
+    }, roleUsers.qs_commercial!);
 
-    await transitionIpa(ipa.id, 'submit', 'test-user');
-    await transitionIpa(ipa.id, 'review', 'test-user');
-    await transitionIpa(ipa.id, 'approve', 'test-user');
+    await transitionIpa(ipa.id, 'submit', roleUsers.qs_commercial!); // auto-starts IPA workflow
+    await driveWorkflow('ipa', ipa.id); // → approved_internal converges
     approvedIpa = { id: ipa.id };
   });
 
   afterAll(async () => {
-    // Reactivate templates for other tests
-    for (const id of deactivatedTemplateIds) {
-      await prisma.workflowTemplate.update({ where: { id }, data: { isActive: true } });
-    }
+    // No template deactivation to reverse (templates stay active under α-pattern).
   });
 
   const makeInput = (overrides = {}) => ({
@@ -124,9 +191,8 @@ describe('IPC Service', () => {
 
   it('full lifecycle: draft -> submitted -> under_review -> approved_internal -> signed -> issued -> closed', async () => {
     const ipc = await createIpc(makeInput(), 'test-user');
-    await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await transitionIpc(ipc.id, 'submit', 'test-user'); // auto-starts IPC workflow
+    await driveWorkflow('ipc', ipc.id); // → approved_internal converges
     await transitionIpc(ipc.id, 'sign', 'test-user');
     await transitionIpc(ipc.id, 'issue', 'test-user');
     const closed = await transitionIpc(ipc.id, 'close', 'test-user');
@@ -136,8 +202,7 @@ describe('IPC Service', () => {
   it('IPC_SIGNED posting event fires at signed transition', async () => {
     const ipc = await createIpc(makeInput(), 'test-user');
     await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await driveWorkflow('ipc', ipc.id);
     await transitionIpc(ipc.id, 'sign', 'test-user');
 
     const postingEvent = await prisma.postingEvent.findFirst({
@@ -149,8 +214,7 @@ describe('IPC Service', () => {
   it('assigns reference number at issued', async () => {
     const ipc = await createIpc(makeInput(), 'test-user');
     await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'approve', 'test-user');
+    await driveWorkflow('ipc', ipc.id);
     await transitionIpc(ipc.id, 'sign', 'test-user');
     const issued = await transitionIpc(ipc.id, 'issue', 'test-user');
     expect(issued.status).toBe('issued');
@@ -160,8 +224,18 @@ describe('IPC Service', () => {
   it('terminal status cannot be transitioned', async () => {
     const ipc = await createIpc(makeInput(), 'test-user');
     await transitionIpc(ipc.id, 'submit', 'test-user');
-    await transitionIpc(ipc.id, 'review', 'test-user');
-    await transitionIpc(ipc.id, 'reject', 'test-user');
+
+    // Reject at first workflow step → workflow.rejected → convergence writes status='rejected'
+    const instance = await workflowInstanceService.getInstanceByRecord('ipc', ipc.id);
+    const firstStep = instance!.template.steps[0]!;
+    const firstRule = firstStep.approverRuleJson as { type: string; roleCode: string };
+    await workflowStepService.rejectStep({
+      instanceId: instance!.id,
+      stepId: firstStep.id,
+      actorUserId: roleUsers[firstRule.roleCode]!,
+      comment: 'α-rewrite: rejected at first step',
+    });
+
     await expect(transitionIpc(ipc.id, 'submit', 'test-user')).rejects.toThrow();
   });
 

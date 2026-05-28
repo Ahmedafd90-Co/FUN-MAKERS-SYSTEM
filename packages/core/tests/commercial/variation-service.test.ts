@@ -8,21 +8,47 @@ import {
   deleteVariation,
 } from '../../src/commercial/variation/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
+import {
+  workflowInstanceService,
+  workflowStepService,
+  registerConvergenceHandlers,
+} from '../../src/workflow';
+
+/**
+ * PIC-78 α-rewrite (2026-05-28):
+ *
+ * Workflow-managed actions (review/approve/reject/return ∈
+ * VARIATION_WORKFLOW_MANAGED_ACTIONS) are driven via the workflow engine
+ * (workflowStepService) instead of transitionVariation, which refuses them
+ * unconditionally post-8656e57. Post-workflow lifecycle transitions
+ * (sign / issue / client_pending / client_approved / close) remain
+ * transitionVariation calls — they self-wrap via runAsWorkflowEngine and are
+ * NOT a third bypass.
+ *
+ * Two tests SKIPPED pending PIC-79: the assessment-data-on-transition feature
+ * (assessedCostImpact / approvedCostImpact passed to review/approve) was
+ * orphaned by 8656e57 — no reachable code path post-guard. PIC-79 carries the
+ * product decision on where displaced assessment data lives. See it.skip below.
+ */
+
+const ROLES_NEEDED = [
+  'qs_commercial',
+  'project_manager',
+  'contracts_manager',
+  'finance',
+  'project_director',
+  'document_controller',
+] as const;
 
 describe('Variation Service', () => {
   let testProject: { id: string; code: string; entityId: string };
   const ts = Date.now();
+  /** Map from role code → userId created for this test's project */
+  const roleUsers: Record<string, string> = {};
 
   beforeAll(async () => {
     registerCommercialEventTypes();
-
-    // Deactivate Variation workflow templates so manual transitions work (legacy path)
-    const varTemplates = await prisma.workflowTemplate.findMany({
-      where: { recordType: 'variation', isActive: true },
-    });
-    for (const t of varTemplates) {
-      await prisma.workflowTemplate.update({ where: { id: t.id }, data: { isActive: false } });
-    }
+    registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
       data: { code: `ENT-VAR-${ts}`, name: 'Variation Test Entity', type: 'parent', status: 'active' },
@@ -38,6 +64,37 @@ describe('Variation Service', () => {
       },
     });
     testProject = { id: project.id, code: project.code, entityId: entity.id };
+
+    // Create role users + project assignments for variation_standard approver roles
+    for (const roleCode of ROLES_NEEDED) {
+      const role = await prisma.role.findUnique({ where: { code: roleCode } });
+      if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
+      const user = await prisma.user.create({
+        data: {
+          name: `Test ${roleCode} ${ts}`,
+          email: `test-var-${roleCode}-${ts}@test.com`,
+          passwordHash: 'test-hash',
+          status: 'active',
+        },
+      });
+      await prisma.userRole.create({
+        data: {
+          userId: user.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      await prisma.projectAssignment.create({
+        data: {
+          userId: user.id, projectId: testProject.id, roleId: role.id,
+          effectiveFrom: new Date('2020-01-01'),
+          assignedBy: 'test-setup',
+          assignedAt: new Date(),
+        },
+      });
+      roleUsers[roleCode] = user.id;
+    }
   });
 
   const makeVoInput = (overrides = {}) => ({
@@ -67,6 +124,28 @@ describe('Variation Service', () => {
     ...overrides,
   });
 
+  /**
+   * α-helper: drive the variation workflow through ALL steps via the workflow
+   * engine. workflow.approved fires after every approvable step completes;
+   * the convergence handler then writes variation.status = 'approved_internal'.
+   * Role-keyed off each step's approverRuleJson.roleCode (template-agnostic).
+   */
+  async function driveVariationWorkflow(variationId: string) {
+    const instance = await workflowInstanceService.getInstanceByRecord('variation', variationId);
+    if (!instance) throw new Error(`No workflow instance for variation ${variationId}`);
+    for (const step of instance.template.steps) {
+      const rule = step.approverRuleJson as { type: string; roleCode: string };
+      const approverId = roleUsers[rule.roleCode];
+      if (!approverId) throw new Error(`No role user for ${rule.roleCode} (step ${step.name})`);
+      await workflowStepService.approveStep({
+        instanceId: instance.id,
+        stepId: step.id,
+        actorUserId: approverId,
+        comment: `α-rewrite: ${step.name} approved`,
+      });
+    }
+  }
+
   // 1. Create VO in draft status
   it('creates VO in draft status', async () => {
     const variation = await createVariation(makeVoInput(), 'test-user');
@@ -83,13 +162,13 @@ describe('Variation Service', () => {
     expect(variation.projectId).toBe(testProject.id);
   });
 
-  // 3. VO full lifecycle: draft -> submitted -> under_review -> approved_internal -> signed -> issued -> client_pending -> client_approved -> closed
+  // 3. VO full lifecycle: draft -> submitted -> (workflow) -> approved_internal -> signed -> issued -> client_pending -> client_approved -> closed
   it('VO full lifecycle through client_approved -> closed', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO lifecycle' }), 'test-user');
 
-    await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    const approved = await transitionVariation(variation.id, 'approve', 'test-user');
+    await transitionVariation(variation.id, 'submit', 'test-user'); // auto-starts workflow
+    await driveVariationWorkflow(variation.id); // → approved_internal converges
+    const approved = await getVariation(variation.id, testProject.id);
     expect(approved.status).toBe('approved_internal');
 
     await transitionVariation(variation.id, 'sign', 'test-user');
@@ -108,8 +187,7 @@ describe('Variation Service', () => {
   it('CO cannot transition to client_pending from issued', async () => {
     const variation = await createVariation(makeCoInput({ title: 'CO no client' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'approve', 'test-user');
+    await driveVariationWorkflow(variation.id);
     await transitionVariation(variation.id, 'sign', 'test-user');
     await transitionVariation(variation.id, 'issue', 'test-user');
 
@@ -122,8 +200,7 @@ describe('Variation Service', () => {
   it('VARIATION_APPROVED_INTERNAL fires at approved_internal', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO posting internal' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'approve', 'test-user');
+    await driveVariationWorkflow(variation.id);
 
     const postingEvent = await prisma.postingEvent.findFirst({
       where: { sourceRecordId: variation.id, eventType: 'VARIATION_APPROVED_INTERNAL' },
@@ -136,8 +213,7 @@ describe('Variation Service', () => {
   it('VARIATION_APPROVED_CLIENT fires at client_approved', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO posting client' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'approve', 'test-user');
+    await driveVariationWorkflow(variation.id);
     await transitionVariation(variation.id, 'sign', 'test-user');
     await transitionVariation(variation.id, 'issue', 'test-user');
     await transitionVariation(variation.id, 'client_pending', 'test-user');
@@ -154,8 +230,7 @@ describe('Variation Service', () => {
   it('reference number uses VO type code for vo subtype', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO ref num' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'approve', 'test-user');
+    await driveVariationWorkflow(variation.id);
     await transitionVariation(variation.id, 'sign', 'test-user');
     const issued = await transitionVariation(variation.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-VO-\\d{3}$`));
@@ -164,19 +239,25 @@ describe('Variation Service', () => {
   it('reference number uses CO type code for change_order subtype', async () => {
     const variation = await createVariation(makeCoInput({ title: 'CO ref num' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'approve', 'test-user');
+    await driveVariationWorkflow(variation.id);
     await transitionVariation(variation.id, 'sign', 'test-user');
     const issued = await transitionVariation(variation.id, 'issue', 'test-user');
     expect(issued.referenceNumber).toMatch(new RegExp(`^${testProject.code}-CO-\\d{3}$`));
   });
 
   // 8. Assessment fields populated at review (assessed) and approve (approved)
-  it('assessment fields populated at review and approve', async () => {
+  //
+  // SKIPPED pending PIC-79. The assessment-data-on-transition feature
+  // (assessedCostImpact/approvedCostImpact passed to review/approve) was
+  // orphaned by 8656e57: review/approve are now workflow-managed and refuse
+  // the assessmentData payload at the service layer, and the workflow-step
+  // API carries no domain data. updateVariation only works in draft/returned.
+  // There is no reachable post-8656e57 code path for this behavior. PIC-79
+  // carries the product decision on where displaced assessment data lives.
+  it.skip('assessment fields populated at review and approve [PIC-79-ORPHAN: assessment-data via transition orphaned by 8656e57]', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO assessment' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
 
-    // Review with assessment data
     const reviewed = await transitionVariation(
       variation.id, 'review', 'test-user', undefined,
       { assessedCostImpact: 45000, assessedTimeImpactDays: 25 },
@@ -184,7 +265,6 @@ describe('Variation Service', () => {
     expect(Number(reviewed.assessedCostImpact)).toBe(45000);
     expect(reviewed.assessedTimeImpactDays).toBe(25);
 
-    // Approve with approved data
     const approved = await transitionVariation(
       variation.id, 'approve', 'test-user', undefined,
       { approvedCostImpact: 42000, approvedTimeImpactDays: 20 },
@@ -194,7 +274,9 @@ describe('Variation Service', () => {
   });
 
   // 9. Assessment fields remain null when not provided
-  it('assessment fields remain null when not provided in transition data', async () => {
+  //
+  // SKIPPED pending PIC-79 — same orphaned-feature root cause as test 8.
+  it.skip('assessment fields remain null when not provided in transition data [PIC-79-ORPHAN: assessment-data via transition orphaned by 8656e57]', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO no assessment' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
 
@@ -211,8 +293,17 @@ describe('Variation Service', () => {
   it('terminal status cannot be transitioned', async () => {
     const variation = await createVariation(makeVoInput({ title: 'VO terminal' }), 'test-user');
     await transitionVariation(variation.id, 'submit', 'test-user');
-    await transitionVariation(variation.id, 'review', 'test-user');
-    await transitionVariation(variation.id, 'reject', 'test-user');
+
+    // Reject at first workflow step → workflow.rejected → convergence writes status='rejected'
+    const instance = await workflowInstanceService.getInstanceByRecord('variation', variation.id);
+    const firstStep = instance!.template.steps[0]!;
+    const firstRule = firstStep.approverRuleJson as { type: string; roleCode: string };
+    await workflowStepService.rejectStep({
+      instanceId: instance!.id,
+      stepId: firstStep.id,
+      actorUserId: roleUsers[firstRule.roleCode]!,
+      comment: 'α-rewrite: rejected at first step',
+    });
 
     await expect(
       transitionVariation(variation.id, 'submit', 'test-user'),
