@@ -189,6 +189,19 @@ afterAll(async () => {
     where: { projectId: testProject.id },
   });
 
+  // PIC-78 Class C: clear the full workflow FK chain before deleting the project.
+  // Transition auto-start resolves the SEEDED template (ipa_standard / rfq_standard),
+  // so instances reference seeded templates, not this test's custom templates — the
+  // template-scoped cleanup above misses them. Delete project-wide, leaf → root:
+  //   workflow_actions → workflow_instances → project.
+  // (workflow_steps excluded: they FK to templates, not instances.)
+  await prisma.workflowAction.deleteMany({
+    where: { instance: { projectId: testProject.id } },
+  });
+  await prisma.workflowInstance.deleteMany({
+    where: { projectId: testProject.id },
+  });
+
   await prisma.projectAssignment.deleteMany({
     where: { projectId: testProject.id },
   });
