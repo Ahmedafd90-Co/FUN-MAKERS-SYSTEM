@@ -100,7 +100,7 @@ export default function DrawingRegisterPage() {
         <p className="text-sm text-destructive">Error loading drawings: {list.error.message}</p>
       )}
       {list.data && list.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No drawings yet. Click "New Drawing" to create one.</p>
+        <p className="text-sm text-muted-foreground">No drawings yet. Click &quot;New Drawing&quot; to create one.</p>
       )}
       {list.data && list.data.length > 0 && (
         <div className="rounded-md border">

@@ -75,7 +75,7 @@ export function CreditNoteForm({ projectId }: Props) {
   // Filter SIs by selected vendor (ergonomic — scope the picker to the chosen vendor)
   const eligibleInvoices =
     (invoicesQuery.data ?? []).filter(
-      (si: any) => !formData.vendorId || si.vendorId === formData.vendorId,
+      (si) => !formData.vendorId || si.vendorId === formData.vendorId,
     ) ?? [];
 
   // Submit mutation
@@ -135,7 +135,7 @@ export function CreditNoteForm({ projectId }: Props) {
                 // If the selected SI no longer matches the new vendor, clear it
                 if (formData.supplierInvoiceId) {
                   const stillMatches = (invoicesQuery.data ?? []).some(
-                    (si: any) =>
+                    (si) =>
                       si.id === formData.supplierInvoiceId &&
                       si.vendorId === v,
                   );
@@ -147,7 +147,7 @@ export function CreditNoteForm({ projectId }: Props) {
                 <SelectValue placeholder="Select vendor" />
               </SelectTrigger>
               <SelectContent>
-                {(vendorsQuery.data ?? []).map((v: any) => (
+                {(vendorsQuery.data ?? []).map((v) => (
                   <SelectItem key={v.vendorId} value={v.vendorId}>
                     {v.vendor.name}
                   </SelectItem>
@@ -261,9 +261,9 @@ export function CreditNoteForm({ projectId }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                {eligibleInvoices.map((si: any) => (
+                {eligibleInvoices.map((si) => (
                   <SelectItem key={si.id} value={si.id}>
-                    {si.invoiceNumber} — {si.currency} {si.totalAmount}
+                    {si.invoiceNumber} — {si.currency} {String(si.totalAmount)}
                   </SelectItem>
                 ))}
               </SelectContent>

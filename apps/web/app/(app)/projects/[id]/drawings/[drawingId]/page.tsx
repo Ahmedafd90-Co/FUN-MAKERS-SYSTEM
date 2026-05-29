@@ -150,7 +150,7 @@ export default function DrawingDetailPage() {
         <h2 className="mb-2 text-lg font-medium">Revisions</h2>
         {d.revisions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No revisions yet. Click "New Revision" to add the first one.
+            No revisions yet. Click &quot;New Revision&quot; to add the first one.
           </p>
         ) : (
           <div className="rounded-md border">
