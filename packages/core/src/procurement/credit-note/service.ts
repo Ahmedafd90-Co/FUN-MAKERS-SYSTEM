@@ -5,12 +5,14 @@
  */
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CreditNoteStatus } from '@fmksa/db';
-import { auditService } from '../../audit/service';
+import { auditService, type TransactionClient } from '../../audit/service';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
   DuplicateInstanceError,
   resolveTemplate,
+  dispatchDeferred,
+  type DeferredWorkflowEvent,
 } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { assertProjectScope } from '../../scope-binding';
@@ -41,37 +43,48 @@ export async function createCreditNote(
   },
   actorUserId: string,
 ) {
-  const record = await prisma.creditNote.create({
-    data: {
-      projectId: input.projectId,
-      vendorId: input.vendorId,
-      subtype: input.subtype as any,
-      creditNoteNumber: input.creditNoteNumber,
-      supplierInvoiceId: input.supplierInvoiceId ?? null,
-      purchaseOrderId: input.purchaseOrderId ?? null,
-      correspondenceId: input.correspondenceId ?? null,
-      amount: input.amount,
-      currency: input.currency,
-      reason: input.reason,
-      receivedDate: new Date(input.receivedDate),
-      status: 'received',
-      createdBy: actorUserId,
-    },
+  // PIC-80: entity create + audit + workflow seed atomic; emit deferred to post-commit.
+  const { record, deferred } = await prisma.$transaction(async (tx) => {
+    const record = await (tx as any).creditNote.create({
+      data: {
+        projectId: input.projectId,
+        vendorId: input.vendorId,
+        subtype: input.subtype as any,
+        creditNoteNumber: input.creditNoteNumber,
+        supplierInvoiceId: input.supplierInvoiceId ?? null,
+        purchaseOrderId: input.purchaseOrderId ?? null,
+        correspondenceId: input.correspondenceId ?? null,
+        amount: input.amount,
+        currency: input.currency,
+        reason: input.reason,
+        receivedDate: new Date(input.receivedDate),
+        status: 'received',
+        createdBy: actorUserId,
+      },
+    });
+
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'credit_note.create',
+        resourceType: 'credit_note',
+        resourceId: record.id,
+        projectId: input.projectId,
+        beforeJson: null,
+        afterJson: record as any,
+      },
+      tx,
+    );
+
+    // PIC-35 Step 5: auto-seed workflow_instance at entity-create (on tx).
+    const deferred = await autoSeedCreditNoteWorkflow(record.id, input.projectId, actorUserId, tx);
+
+    return { record, deferred };
   });
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'credit_note.create',
-    resourceType: 'credit_note',
-    resourceId: record.id,
-    projectId: input.projectId,
-    beforeJson: null,
-    afterJson: record as any,
-  });
-
-  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
-  await autoSeedCreditNoteWorkflow(record.id, input.projectId, actorUserId);
+  // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
+  await dispatchDeferred(deferred);
 
   return record;
 }
@@ -80,29 +93,32 @@ async function autoSeedCreditNoteWorkflow(
   recordId: string,
   projectId: string,
   actorUserId: string,
-): Promise<void> {
+  tx: TransactionClient,
+): Promise<DeferredWorkflowEvent | null> {
   try {
     const resolution = await resolveTemplate('credit_note', projectId);
     if (!resolution) {
       console.warn(
         `[credit-note-workflow] No template configured for credit_note in project ${projectId}; workflow_instance not seeded for ${recordId}`,
       );
-      return;
+      return null;
     }
-    await workflowInstanceService.startInstance({
+    const { deferredEvent } = await workflowInstanceService.startInstanceDeferred({
       templateCode: resolution.code,
       recordType: 'credit_note',
       recordId,
       projectId,
       startedBy: actorUserId,
       resolutionSource: resolution.source,
+      tx,
     });
+    return deferredEvent;
   } catch (err) {
     if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
       console.warn(
         `[credit-note-workflow] Skipped workflow auto-seed for CreditNote ${recordId}: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
     throw err;
   }
