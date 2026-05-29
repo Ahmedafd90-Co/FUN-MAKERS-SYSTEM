@@ -109,7 +109,7 @@ export default function ExpenseListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.map((exp: any) => (
+              {paged.map((exp) => (
                 <TableRow
                   key={exp.id}
                   className="cursor-pointer hover:bg-muted/50"

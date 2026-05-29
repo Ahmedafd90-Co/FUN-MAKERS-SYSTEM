@@ -171,7 +171,7 @@ export default function IpcListPage() {
                       href={`/projects/${projectId}/commercial/ipa/${ipc.ipaId}`}
                       className="hover:underline"
                     >
-                      {(ipc as any).ipa?.referenceNumber ?? ipc.ipaId.slice(0, 8) + '…'}
+                      {ipc.ipa?.referenceNumber ?? ipc.ipaId.slice(0, 8) + '…'}
                     </Link>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
