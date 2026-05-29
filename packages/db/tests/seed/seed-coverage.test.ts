@@ -25,7 +25,7 @@ import { seedAppSettings } from '../../src/seed/app-settings';
 import { seedStatusDictionaries } from '../../src/seed/status-dictionaries';
 import { seedPermissions } from '../../src/seed/permissions';
 import { seedRoles } from '../../src/seed/roles';
-import { seedRolePermissions } from '../../src/seed/role-permissions';
+import { seedRolePermissions, seedMasterAdminAllPermissions } from '../../src/seed/role-permissions';
 import { seedCommercialPermissions } from '../../src/seed/commercial-permissions';
 import { seedCommercialRolePermissions } from '../../src/seed/commercial-role-permissions';
 import { seedProcurementPermissions } from '../../src/seed/procurement-permissions';
@@ -59,6 +59,15 @@ async function runPermissionSeeds() {
   await seedLayer1Permissions(prisma);
   await seedLayer1RolePermissions(prisma);
   await seedQaTestRolePermissions(prisma);
+
+  // Cluster 4: prove the centralized master_admin grant is LOAD-BEARING.
+  // Nuke master_admin's grants first, then let seedMasterAdminAllPermissions
+  // (runs last, mirroring index.ts) restore them from the full catalog. The
+  // :98 / :141 assertions can then only pass if the centralized fn actually
+  // re-grants every code — NOT residual rows left by a prior CI `db:seed` step
+  // (the catch-24 masking layer that made this fix unverifiable by CI alone).
+  await prisma.rolePermission.deleteMany({ where: { role: { code: 'master_admin' } } });
+  await seedMasterAdminAllPermissions(prisma);
 }
 
 beforeAll(async () => {

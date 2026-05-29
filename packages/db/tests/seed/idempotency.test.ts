@@ -7,7 +7,7 @@ import { seedAppSettings } from '../../src/seed/app-settings';
 import { seedStatusDictionaries } from '../../src/seed/status-dictionaries';
 import { seedPermissions } from '../../src/seed/permissions';
 import { seedRoles } from '../../src/seed/roles';
-import { seedRolePermissions } from '../../src/seed/role-permissions';
+import { seedRolePermissions, seedMasterAdminAllPermissions } from '../../src/seed/role-permissions';
 import { seedNotificationTemplates } from '../../src/seed/notification-templates';
 import { seedSampleEntity } from '../../src/seed/sample-entity';
 import { seedSampleProject } from '../../src/seed/sample-project';
@@ -37,6 +37,14 @@ async function runFullSeed() {
   await seedSampleEntity(prisma);
   await seedSampleProject(prisma);
   await seedMasterAdmin(prisma);
+
+  // Cluster 4: master_admin full grant runs last (mirrors index.ts; keeps this
+  // helper production-faithful now that seedRolePermissions no longer wildcards
+  // master_admin). delete-then-reseed stays idempotent across the two runFullSeed
+  // runs this test makes — delete removes the prior run's rows, reseed restores
+  // the same set, so row counts match.
+  await prisma.rolePermission.deleteMany({ where: { role: { code: 'master_admin' } } });
+  await seedMasterAdminAllPermissions(prisma);
 }
 
 /** Snapshot row counts for all seeded tables. */
