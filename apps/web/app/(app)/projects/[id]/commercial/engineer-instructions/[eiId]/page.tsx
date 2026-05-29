@@ -161,7 +161,14 @@ export default function EngineerInstructionDetailPage() {
   ) => {
     setLoadingAction(action);
     try {
-      const input: Record<string, unknown> = {
+      // EI transition schema is inline in the router (not in @fmksa/contracts).
+      // Derive the input type from the mutation itself rather than extracting
+      // the schema — extraction is architectural cleanup, out of CI-cleanup
+      // scope per branch operating rule.
+      type TransitionEiInput = Parameters<
+        typeof transitionMut.mutateAsync
+      >[0];
+      const input: TransitionEiInput = {
         projectId: params.id,
         id: params.eiId,
         action,
@@ -170,7 +177,7 @@ export default function EngineerInstructionDetailPage() {
       if (action === 'convert' && convertVariationId) {
         input.variationId = convertVariationId;
       }
-      await transitionMut.mutateAsync(input as any);
+      await transitionMut.mutateAsync(input);
     } finally {
       setLoadingAction(null);
       setConfirmAction(null);
@@ -194,7 +201,7 @@ export default function EngineerInstructionDetailPage() {
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight">
-              {(data as any).referenceNumber ?? 'Engineer Instruction'}
+              {data.referenceNumber ?? 'Engineer Instruction'}
             </h1>
             <CommercialStatusBadge status={data.status} />
           </div>
@@ -237,7 +244,7 @@ export default function EngineerInstructionDetailPage() {
           label="Estimated Value"
           value={
             data.estimatedValue != null
-              ? `${formatMoney(data.estimatedValue)} ${(data as any).currency ?? 'SAR'}`
+              ? `${formatMoney(data.estimatedValue)} ${data.currency ?? 'SAR'}`
               : 'Not set'
           }
           emphasis={data.estimatedValue != null}
@@ -247,7 +254,7 @@ export default function EngineerInstructionDetailPage() {
           label="Reserve Amount"
           value={
             reserveAmount != null
-              ? `${formatMoney(reserveAmount)} ${(data as any).currency ?? 'SAR'}`
+              ? `${formatMoney(reserveAmount)} ${data.currency ?? 'SAR'}`
               : 'Not calculated'
           }
           emphasis={reserveAmount != null}
@@ -264,44 +271,44 @@ export default function EngineerInstructionDetailPage() {
           <CardTitle className="text-sm">Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Currency" value={(data as any).currency ?? 'SAR'} />
+          <Field label="Currency" value={data.currency ?? 'SAR'} />
           <Field
             label="Created"
             value={new Date(data.createdAt).toLocaleDateString()}
           />
-          {(data as any).referenceNumber && (
+          {data.referenceNumber && (
             <Field
               label="Reference #"
-              value={(data as any).referenceNumber}
+              value={data.referenceNumber}
             />
           )}
         </CardContent>
       </Card>
 
       {/* ── Description & Notes ── */}
-      {((data as any).description || (data as any).notes) && (
+      {(data.description || data.notes) && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Description &amp; Notes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(data as any).description && (
+            {data.description && (
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Description
                 </p>
                 <p className="text-sm whitespace-pre-wrap">
-                  {(data as any).description}
+                  {data.description}
                 </p>
               </div>
             )}
-            {(data as any).notes && (
+            {data.notes && (
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Notes
                 </p>
                 <p className="text-sm whitespace-pre-wrap">
-                  {(data as any).notes}
+                  {data.notes}
                 </p>
               </div>
             )}
@@ -310,14 +317,14 @@ export default function EngineerInstructionDetailPage() {
       )}
 
       {/* ── Linked Variation ── */}
-      {(data as any).variationId && (
+      {data.variationId && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Linked Variation</CardTitle>
           </CardHeader>
           <CardContent>
             <Link
-              href={`/projects/${params.id}/commercial/variations/${(data as any).variationId}`}
+              href={`/projects/${params.id}/commercial/variations/${data.variationId}`}
               className="text-sm font-medium text-primary hover:underline"
             >
               View Variation &rarr;

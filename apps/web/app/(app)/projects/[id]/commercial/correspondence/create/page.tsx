@@ -23,6 +23,7 @@ import {
   CardDescription,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateCorrespondenceInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Subtype configuration
@@ -90,9 +91,13 @@ export default function CreateCorrespondencePage() {
     if (!canSubmit || subtype === '') return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    // Select-driven enum fields are stored as `string` in React state but the
+    // schema narrows each to a literal union. Cast at assignment where the
+    // Select's options already match the schema's allowed values. Previously
+    // `as any` on the whole input hid these narrowings.
+    const input: CreateCorrespondenceInput = {
       projectId,
-      subtype,
+      subtype: subtype as CreateCorrespondenceInput['subtype'],
       subject: subject.trim(),
       body: body.trim(),
       recipientName: recipientName.trim(),
@@ -103,26 +108,29 @@ export default function CreateCorrespondencePage() {
 
     // Subtype-specific fields
     if (subtype === 'letter' && letterType) {
-      input.letterType = letterType;
+      input.letterType = letterType as CreateCorrespondenceInput['letterType'];
     }
     if (subtype === 'notice') {
-      if (noticeType) input.noticeType = noticeType;
+      if (noticeType)
+        input.noticeType = noticeType as CreateCorrespondenceInput['noticeType'];
       if (contractClause.trim()) input.contractClause = contractClause.trim();
       if (responseDeadline) input.responseDeadline = new Date(responseDeadline).toISOString();
     }
     if (subtype === 'claim') {
-      if (claimType) input.claimType = claimType;
+      if (claimType)
+        input.claimType = claimType as CreateCorrespondenceInput['claimType'];
       if (claimedAmount) input.claimedAmount = parseFloat(claimedAmount);
       if (claimedTimeDays) input.claimedTimeDays = parseInt(claimedTimeDays, 10);
     }
     if (subtype === 'back_charge') {
       if (targetName.trim()) input.targetName = targetName.trim();
-      if (bcCategory) input.category = bcCategory;
+      if (bcCategory)
+        input.category = bcCategory as CreateCorrespondenceInput['category'];
       if (chargedAmount) input.chargedAmount = parseFloat(chargedAmount);
       if (evidenceDescription.trim()) input.evidenceDescription = evidenceDescription.trim();
     }
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (

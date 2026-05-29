@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateCostProposalInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Create Cost Proposal Page
@@ -50,7 +51,7 @@ export default function CreateCostProposalPage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.costProposal.create.useMutation({
     onSuccess: (data) => {
@@ -69,7 +70,7 @@ export default function CreateCostProposalPage() {
     if (!canSubmit) return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    const input: CreateCostProposalInput = {
       projectId,
       revisionNumber: parseInt(revisionNumber, 10),
       estimatedCost: parseFloat(estimatedCost),
@@ -82,7 +83,7 @@ export default function CreateCostProposalPage() {
     if (methodology.trim()) input.methodology = methodology.trim();
     if (costBreakdown.trim()) input.costBreakdown = costBreakdown.trim();
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (

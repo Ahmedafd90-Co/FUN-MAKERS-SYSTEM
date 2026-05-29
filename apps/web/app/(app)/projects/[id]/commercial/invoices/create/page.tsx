@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateTaxInvoiceInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Create Tax Invoice Page
@@ -54,7 +55,7 @@ export default function CreateTaxInvoicePage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.taxInvoice.create.useMutation({
     onSuccess: (data) => {
@@ -98,7 +99,7 @@ export default function CreateTaxInvoicePage() {
     if (!canSubmit) return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    const input: CreateTaxInvoiceInput = {
       projectId,
       ipcId,
       invoiceNumber: invoiceNumber.trim(),
@@ -115,7 +116,7 @@ export default function CreateTaxInvoicePage() {
     if (dueDate) input.dueDate = new Date(dueDate).toISOString();
     if (buyerTaxId.trim()) input.buyerTaxId = buyerTaxId.trim();
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (

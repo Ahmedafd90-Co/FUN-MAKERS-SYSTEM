@@ -76,10 +76,7 @@ export default function IpcDetailPage() {
 
   // IPA label — prefer referenceNumber, fall back to period-based label so
   // the link never reads "Linked IPA" in the UI.
-  const ipaData = (data as any).ipa as
-    | { referenceNumber: string | null; periodNumber: number }
-    | null
-    | undefined;
+  const ipaData = data.ipa;
   const ipaRef: string | null = ipaData
     ? (ipaData.referenceNumber ?? `Period ${ipaData.periodNumber}`)
     : null;

@@ -462,7 +462,7 @@ export function DashboardCards({ projectId }: { projectId: string }) {
           <Card className="bg-muted/20">
             <CardContent className="pt-4">
               <div className="space-y-2.5">
-                {summary.data.recentActivity.map((entry: any) => (
+                {summary.data.recentActivity.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-foreground/80 truncate">
                       {humanizeAction(entry.action)}
