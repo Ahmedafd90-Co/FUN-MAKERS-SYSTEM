@@ -10,9 +10,10 @@
  */
 
 import { prisma } from '@fmksa/db';
-import { auditService } from '../audit/service';
+import { auditService, type TransactionClient } from '../audit/service';
 import { workflowTemplateService } from './templates';
 import * as workflowEvents from './events';
+import type { DeferredWorkflowEvent } from './deferred';
 import type { ResolutionSource } from './template-resolution';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,125 @@ export type SlaInfo = {
 };
 
 // ---------------------------------------------------------------------------
+// Shared start-instance internals (PIC-80) — used by both startInstance (own
+// $transaction + inline emit) and startInstanceDeferred (caller's tx + deferred
+// emit), so the two paths share one validation + one set of DB writes.
+// ---------------------------------------------------------------------------
+
+type StartInstanceParams = {
+  templateCode: string;
+  recordType: string;
+  recordId: string;
+  projectId: string;
+  startedBy: string;
+  resolutionSource?: ResolutionSource;
+};
+
+/** Validate template active + project exists + no duplicate in-progress instance. Throws the same errors as before. */
+async function validateStartInstance(params: StartInstanceParams) {
+  const { templateCode, recordType, recordId, projectId } = params;
+
+  const template = await workflowTemplateService.findActiveByCode(templateCode);
+  if (!template) {
+    throw new TemplateNotActiveError(templateCode);
+  }
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  const existingInstance = await prisma.workflowInstance.findFirst({
+    where: { recordType, recordId, status: { in: ['in_progress', 'returned'] } },
+  });
+  if (existingInstance) {
+    throw new DuplicateInstanceError(recordType, recordId);
+  }
+
+  const firstStep = template.steps[0];
+  if (!firstStep) {
+    throw new Error(`Template "${templateCode}" has no steps.`);
+  }
+
+  return { template, firstStep };
+}
+
+/** The instance + action + audit DB writes, on the given client (base or a tx). */
+async function writeStartInstanceRows(
+  client: any,
+  params: StartInstanceParams,
+  template: any,
+  firstStep: any,
+  now: Date,
+) {
+  const { recordType, recordId, projectId, startedBy, resolutionSource } = params;
+
+  const instance = await client.workflowInstance.create({
+    data: {
+      templateId: template.id,
+      recordType,
+      recordId,
+      projectId,
+      status: 'in_progress',
+      currentStepId: firstStep.id,
+      startedBy,
+      startedAt: now,
+    },
+  });
+
+  await client.workflowAction.create({
+    data: {
+      instanceId: instance.id,
+      stepId: firstStep.id,
+      actorUserId: startedBy,
+      action: 'started',
+      actedAt: now,
+      metadataJson: resolutionSource ? { resolutionSource } : undefined,
+    },
+  });
+
+  await auditService.log(
+    {
+      actorUserId: startedBy,
+      actorSource: 'user',
+      action: 'workflow.instance_started',
+      resourceType: 'workflow_instance',
+      resourceId: instance.id,
+      projectId,
+      beforeJson: {},
+      afterJson: {
+        templateCode: template.code,
+        recordType,
+        recordId,
+        status: 'in_progress',
+        currentStep: firstStep.name,
+      },
+    },
+    client,
+  );
+
+  return instance;
+}
+
+/** Build the 'workflow.started' event payload (shared by inline + deferred emit). */
+function buildStartedPayload(
+  instanceId: string,
+  params: StartInstanceParams,
+  template: any,
+  firstStep: any,
+) {
+  return {
+    instanceId,
+    templateCode: template.code,
+    recordType: params.recordType,
+    recordId: params.recordId,
+    projectId: params.projectId,
+    actorUserId: params.startedBy,
+    stepName: firstStep.name,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
@@ -80,117 +200,56 @@ export const workflowInstanceService = {
    * - Publishes 'workflow.started' event
    * - Returns instance with current step info
    */
-  async startInstance(input: {
-    templateCode: string;
-    recordType: string;
-    recordId: string;
-    projectId: string;
-    startedBy: string;
-    /** How the template was resolved — stored in the 'started' action metadata for provenance. */
-    resolutionSource?: ResolutionSource;
-  }) {
-    const { templateCode, recordType, recordId, projectId, startedBy, resolutionSource } = input;
-
-    // Find active template
-    const template = await workflowTemplateService.findActiveByCode(templateCode);
-    if (!template) {
-      throw new TemplateNotActiveError(templateCode);
-    }
-
-    // Validate project exists
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-    });
-    if (!project) {
-      throw new ProjectNotFoundError(projectId);
-    }
-
-    // Check for existing in-progress instance
-    const existingInstance = await prisma.workflowInstance.findFirst({
-      where: {
-        recordType,
-        recordId,
-        status: { in: ['in_progress', 'returned'] },
-      },
-    });
-    if (existingInstance) {
-      throw new DuplicateInstanceError(recordType, recordId);
-    }
-
-    // First step (sorted by orderIndex)
-    const firstStep = template.steps[0];
-    if (!firstStep) {
-      throw new Error(
-        `Template "${templateCode}" has no steps.`,
-      );
-    }
-
+  async startInstance(input: StartInstanceParams) {
+    const { template, firstStep } = await validateStartInstance(input);
     const now = new Date();
 
-    const result = await (prisma as any).$transaction(async (tx: any) => {
-      // Create instance
-      const instance = await tx.workflowInstance.create({
-        data: {
-          templateId: template.id,
-          recordType,
-          recordId,
-          projectId,
-          status: 'in_progress',
-          currentStepId: firstStep.id,
-          startedBy,
-          startedAt: now,
-        },
-      });
-
-      // Write the 'started' action — include resolution provenance in metadata
-      await tx.workflowAction.create({
-        data: {
-          instanceId: instance.id,
-          stepId: firstStep.id,
-          actorUserId: startedBy,
-          action: 'started',
-          actedAt: now,
-          metadataJson: resolutionSource ? { resolutionSource } : undefined,
-        },
-      });
-
-      // Audit log
-      await auditService.log(
-        {
-          actorUserId: startedBy,
-          actorSource: 'user',
-          action: 'workflow.instance_started',
-          resourceType: 'workflow_instance',
-          resourceId: instance.id,
-          projectId,
-          beforeJson: {},
-          afterJson: {
-            templateCode: template.code,
-            recordType,
-            recordId,
-            status: 'in_progress',
-            currentStep: firstStep.name,
-          },
-        },
-        tx,
-      );
-
-      return instance;
-    });
+    // Own $transaction (unchanged behavior), then inline post-commit emit.
+    const result = await (prisma as any).$transaction(async (txClient: any) =>
+      writeStartInstanceRows(txClient, input, template, firstStep, now),
+    );
 
     // Publish event (outside transaction)
-    await workflowEvents.emit('workflow.started', {
-      instanceId: result.id,
-      templateCode: template.code,
-      recordType,
-      recordId,
-      projectId,
-      actorUserId: startedBy,
-      stepName: firstStep.name,
-    });
+    await workflowEvents.emit(
+      'workflow.started',
+      buildStartedPayload(result.id, input, template, firstStep),
+    );
 
     // Return with template and step info
     return this.getInstance(result.id);
+  },
+
+  /**
+   * PIC-80: transaction-injected, deferred-emit variant of startInstance.
+   *
+   * Same validation + instance/action/audit writes, but on the CALLER'S
+   * transaction (`input.tx`) so they commit/roll back atomically with the
+   * caller's other writes (e.g. the entity create — closing the orphan window).
+   * Does NOT emit 'workflow.started' inline: returns a DeferredWorkflowEvent for
+   * the caller to dispatch via `dispatchDeferred` AFTER the tx commits, so a
+   * rollback can't leak the email side effect (no false atomicity).
+   *
+   * Additive sibling rather than an optional `tx` on startInstance: object
+   * literals can't carry the method overload that an optional-tx param needs to
+   * keep startInstance's strongly-typed return (relied on by an existing test
+   * caller) — a union return would force narrowing at every call site. This
+   * keeps startInstance byte-identical for its 14 existing callers.
+   */
+  async startInstanceDeferred(
+    input: StartInstanceParams & { tx: TransactionClient },
+  ): Promise<{ instanceId: string; deferredEvent: DeferredWorkflowEvent }> {
+    const { template, firstStep } = await validateStartInstance(input);
+    const now = new Date();
+
+    const instance = await writeStartInstanceRows(input.tx, input, template, firstStep, now);
+
+    return {
+      instanceId: instance.id as string,
+      deferredEvent: {
+        name: 'workflow.started',
+        payload: buildStartedPayload(instance.id, input, template, firstStep),
+      },
+    };
   },
 
   /**
