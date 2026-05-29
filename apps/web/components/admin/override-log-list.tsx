@@ -119,7 +119,7 @@ export function OverrideLogList() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((entry: any) => (
+                {items.map((entry) => (
                   <tr
                     key={entry.id}
                     onClick={() => setDetailId(entry.id)}

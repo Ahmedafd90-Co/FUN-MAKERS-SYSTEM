@@ -37,21 +37,21 @@ export async function listOverrideLogs(filters: OverrideLogFilters = {}) {
   }
 
   const [items, total] = await Promise.all([
-    (prisma as any).overrideLog.findMany({
+    prisma.overrideLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip,
       take,
       include: { auditLog: { select: { action: true, resourceType: true, resourceId: true } } },
     }),
-    (prisma as any).overrideLog.count({ where }),
+    prisma.overrideLog.count({ where }),
   ]);
 
   return { items, total };
 }
 
 export async function getOverrideLog(id: string) {
-  return (prisma as any).overrideLog.findUnique({
+  return prisma.overrideLog.findUnique({
     where: { id },
     include: { auditLog: true },
   });
