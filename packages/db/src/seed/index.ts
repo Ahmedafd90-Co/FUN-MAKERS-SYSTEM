@@ -21,7 +21,7 @@ import { seedAppSettings } from './app-settings';
 import { seedStatusDictionaries } from './status-dictionaries';
 import { seedPermissions } from './permissions';
 import { seedRoles } from './roles';
-import { seedRolePermissions } from './role-permissions';
+import { seedRolePermissions, seedMasterAdminAllPermissions } from './role-permissions';
 import { seedNotificationTemplates } from './notification-templates';
 import { seedSampleEntity } from './sample-entity';
 import { seedSampleProject } from './sample-project';
@@ -80,6 +80,11 @@ async function main() {
   // QA test grants run LAST so the view_only_demo runtime query captures every
   // *.view code added by all preceding domain seeds.
   await seedQaTestRolePermissions(prisma);
+  // master_admin full grant — same "run last" pattern (cluster 4 / Option B):
+  // every permission catalog (base, commercial, procurement, layer1) is now
+  // seeded, so grant master_admin the COMPLETE catalog. Replaces the early '*'
+  // expansion in seedRolePermissions; supersedes per-domain master_admin grants.
+  await seedMasterAdminAllPermissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
   await seedDocumentsWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);
