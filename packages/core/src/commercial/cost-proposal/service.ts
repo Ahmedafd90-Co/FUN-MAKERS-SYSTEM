@@ -1,12 +1,14 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CostProposalStatus } from '@fmksa/db';
 import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput } from '@fmksa/contracts';
-import { auditService } from '../../audit/service';
+import { auditService, type TransactionClient } from '../../audit/service';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
   DuplicateInstanceError,
   resolveTemplate,
+  dispatchDeferred,
+  type DeferredWorkflowEvent,
 } from '../../workflow';
 import { generateReferenceNumber } from '../reference-number/service';
 import { COST_PROPOSAL_TRANSITIONS, COST_PROPOSAL_TERMINAL_STATUSES } from './transitions';
@@ -33,38 +35,52 @@ const ACTION_TO_STATUS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export async function createCostProposal(input: CreateCostProposalInput, actorUserId: string) {
-  const cp = await prisma.costProposal.create({
-    data: {
-      projectId: input.projectId,
-      variationId: input.variationId ?? null,
-      status: 'draft',
-      revisionNumber: input.revisionNumber,
-      estimatedCost: input.estimatedCost,
-      estimatedTimeDays: input.estimatedTimeDays ?? null,
-      methodology: input.methodology ?? null,
-      costBreakdown: input.costBreakdown ?? null,
-      currency: input.currency,
-      createdBy: actorUserId,
-    },
+  // PIC-80: entity create + audit + workflow_instance auto-seed are ONE atomic
+  // unit. If the workflow seed fails, the cost_proposal create rolls back too —
+  // no orphaned entity. The 'workflow.started' emit (→ email, non-rollback-able)
+  // is DEFERRED out of the transaction and dispatched only AFTER commit.
+  const { cp, deferred } = await prisma.$transaction(async (tx) => {
+    const cp = await (tx as any).costProposal.create({
+      data: {
+        projectId: input.projectId,
+        variationId: input.variationId ?? null,
+        status: 'draft',
+        revisionNumber: input.revisionNumber,
+        estimatedCost: input.estimatedCost,
+        estimatedTimeDays: input.estimatedTimeDays ?? null,
+        methodology: input.methodology ?? null,
+        costBreakdown: input.costBreakdown ?? null,
+        currency: input.currency,
+        createdBy: actorUserId,
+      },
+    });
+
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'cost_proposal.create',
+        resourceType: 'cost_proposal',
+        resourceId: cp.id,
+        projectId: input.projectId,
+        beforeJson: null,
+        afterJson: cp as any,
+      },
+      tx,
+    );
+
+    // PIC-35 Step 5: auto-seed workflow_instance at entity-create so the
+    // workflow→entity status convergence has an instance to converge from.
+    // No-op if no template is configured (returns null). Runs on `tx` so the
+    // instance create is atomic with the cost_proposal create.
+    const deferred = await autoSeedCostProposalWorkflow(cp.id, input.projectId, actorUserId, tx);
+
+    return { cp, deferred };
   });
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'cost_proposal.create',
-    resourceType: 'cost_proposal',
-    resourceId: cp.id,
-    projectId: input.projectId,
-    beforeJson: null,
-    afterJson: cp as any,
-  });
-
-  // PIC-35 Step 5: auto-seed workflow_instance at entity-create so the
-  // workflow→entity status convergence has an instance to converge from.
-  // Brings cost_proposal in line with the 8 auto-start entities' "every
-  // workflow-driven entity has a workflow_instance from creation" invariant.
-  // No-op if no template is configured for the project — log warning only.
-  await autoSeedCostProposalWorkflow(cp.id, input.projectId, actorUserId);
+  // PIC-80 outbox-ready dispatch seam: publish 'workflow.started' exactly once,
+  // AFTER the transaction commits. This single call is the future-outbox swap point.
+  await dispatchDeferred(deferred);
 
   return cp;
 }
@@ -73,29 +89,32 @@ async function autoSeedCostProposalWorkflow(
   recordId: string,
   projectId: string,
   actorUserId: string,
-): Promise<void> {
+  tx: TransactionClient,
+): Promise<DeferredWorkflowEvent | null> {
   try {
     const resolution = await resolveTemplate('cost_proposal', projectId);
     if (!resolution) {
       console.warn(
         `[cost-proposal-workflow] No template configured for cost_proposal in project ${projectId}; workflow_instance not seeded for ${recordId}`,
       );
-      return;
+      return null;
     }
-    await workflowInstanceService.startInstance({
+    const { deferredEvent } = await workflowInstanceService.startInstanceDeferred({
       templateCode: resolution.code,
       recordType: 'cost_proposal',
       recordId,
       projectId,
       startedBy: actorUserId,
       resolutionSource: resolution.source,
+      tx,
     });
+    return deferredEvent;
   } catch (err) {
     if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
       console.warn(
         `[cost-proposal-workflow] Skipped workflow auto-seed for CostProposal ${recordId}: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
     throw err;
   }
