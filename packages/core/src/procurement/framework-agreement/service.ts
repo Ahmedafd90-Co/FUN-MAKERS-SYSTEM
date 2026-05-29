@@ -6,12 +6,14 @@
 import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { FrameworkAgreementStatus } from '@fmksa/db';
 import type { CreateFrameworkAgreementInput, UpdateFrameworkAgreementInput, EntityListFilterInput } from '@fmksa/contracts';
-import { auditService } from '../../audit/service';
+import { auditService, type TransactionClient } from '../../audit/service';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
   DuplicateInstanceError,
   resolveTemplate,
+  dispatchDeferred,
+  type DeferredWorkflowEvent,
 } from '../../workflow';
 import { FRAMEWORK_AGREEMENT_TRANSITIONS, FRAMEWORK_AGREEMENT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextAgreementNumber, EDITABLE_STATUSES } from './validation';
@@ -25,7 +27,7 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
   const MAX_RETRIES = 1;
   let attempt = 0;
 
-  const record = await (async () => {
+  const { record, deferred } = await (async () => {
     while (true) {
       try {
         return await prisma.$transaction(async (tx) => {
@@ -35,7 +37,7 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
           });
           const agreementNumber = nextAgreementNumber(last?.agreementNumber ?? null);
 
-          return (tx as any).frameworkAgreement.create({
+          const created = await (tx as any).frameworkAgreement.create({
             data: {
               entityId: input.entityId,
               vendorId: input.vendorId,
@@ -64,6 +66,32 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
             },
             include: { items: true },
           });
+
+          // PIC-80: audit + workflow seed share this transaction (atomic with the
+          // create + the P2002-retried agreementNumber). FrameworkAgreement is
+          // entity-scoped — projectId may be null; the seed is conditional and the
+          // deferred descriptor is null when there's no project (no orphan risk:
+          // no workflow_instance is expected without a project).
+          await auditService.log(
+            {
+              actorUserId,
+              actorSource: 'user',
+              action: 'framework_agreement.create',
+              resourceType: 'framework_agreement',
+              resourceId: created.id,
+              projectId: input.projectId ?? null,
+              beforeJson: null,
+              afterJson: created as any,
+            },
+            tx,
+          );
+
+          let deferred: DeferredWorkflowEvent | null = null;
+          if (input.projectId) {
+            deferred = await autoSeedFrameworkAgreementWorkflow(created.id, input.projectId, actorUserId, tx);
+          }
+
+          return { record: created, deferred };
         });
       } catch (err: unknown) {
         if (
@@ -79,25 +107,9 @@ export async function createFrameworkAgreement(input: CreateFrameworkAgreementIn
     }
   })();
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'framework_agreement.create',
-    resourceType: 'framework_agreement',
-    resourceId: record.id,
-    projectId: input.projectId ?? null,
-    beforeJson: null,
-    afterJson: record as any,
-  });
-
-  // PIC-35 Step 5: auto-seed workflow_instance at entity-create. FrameworkAgreement
-  // is entity-scoped, so projectId can be null — workflow_instance requires
-  // projectId, so we skip the auto-seed in that case (the agreement still
-  // exists, just without convergence wiring; entity.status remains the
-  // source of truth for those rows).
-  if (input.projectId) {
-    await autoSeedFrameworkAgreementWorkflow(record.id, input.projectId, actorUserId);
-  }
+  // PIC-80 outbox-ready seam: emit 'workflow.started' after commit (no-op when
+  // deferred is null — no project, so no workflow was seeded).
+  await dispatchDeferred(deferred);
 
   return record;
 }
@@ -106,29 +118,32 @@ async function autoSeedFrameworkAgreementWorkflow(
   recordId: string,
   projectId: string,
   actorUserId: string,
-): Promise<void> {
+  tx: TransactionClient,
+): Promise<DeferredWorkflowEvent | null> {
   try {
     const resolution = await resolveTemplate('framework_agreement', projectId);
     if (!resolution) {
       console.warn(
         `[framework-agreement-workflow] No template configured for framework_agreement in project ${projectId}; workflow_instance not seeded for ${recordId}`,
       );
-      return;
+      return null;
     }
-    await workflowInstanceService.startInstance({
+    const { deferredEvent } = await workflowInstanceService.startInstanceDeferred({
       templateCode: resolution.code,
       recordType: 'framework_agreement',
       recordId,
       projectId,
       startedBy: actorUserId,
       resolutionSource: resolution.source,
+      tx,
     });
+    return deferredEvent;
   } catch (err) {
     if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
       console.warn(
         `[framework-agreement-workflow] Skipped workflow auto-seed for FrameworkAgreement ${recordId}: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
     throw err;
   }

@@ -6,12 +6,14 @@
 import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { VendorContractStatus } from '@fmksa/db';
 import type { CreateVendorContractInput, UpdateVendorContractInput, ProcurementListFilterInput } from '@fmksa/contracts';
-import { auditService } from '../../audit/service';
+import { auditService, type TransactionClient } from '../../audit/service';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
   DuplicateInstanceError,
   resolveTemplate,
+  dispatchDeferred,
+  type DeferredWorkflowEvent,
 } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { VENDOR_CONTRACT_TRANSITIONS, VENDOR_CONTRACT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
@@ -26,7 +28,7 @@ export async function createVendorContract(input: CreateVendorContractInput, act
   const MAX_RETRIES = 1;
   let attempt = 0;
 
-  const record = await (async () => {
+  const { record, deferred } = await (async () => {
     while (true) {
       try {
         return await prisma.$transaction(async (tx) => {
@@ -36,7 +38,7 @@ export async function createVendorContract(input: CreateVendorContractInput, act
           });
           const contractNumber = nextContractNumber(last?.contractNumber ?? null);
 
-          return (tx as any).vendorContract.create({
+          const created = await (tx as any).vendorContract.create({
             data: {
               projectId: input.projectId!,
               vendorId: input.vendorId,
@@ -54,6 +56,31 @@ export async function createVendorContract(input: CreateVendorContractInput, act
               createdBy: actorUserId,
             },
           });
+
+          // PIC-80: audit + conditional workflow seed share this transaction
+          // (atomic with the P2002-retried contractNumber + create). projectId is
+          // non-null on create but the seed stays guarded for symmetry with the
+          // framework-agreement entity-scoped pattern.
+          await auditService.log(
+            {
+              actorUserId,
+              actorSource: 'user',
+              action: 'vendor_contract.create',
+              resourceType: 'vendor_contract',
+              resourceId: created.id,
+              projectId: input.projectId ?? null,
+              beforeJson: null,
+              afterJson: created as any,
+            },
+            tx,
+          );
+
+          let deferred: DeferredWorkflowEvent | null = null;
+          if (input.projectId) {
+            deferred = await autoSeedVendorContractWorkflow(created.id, input.projectId, actorUserId, tx);
+          }
+
+          return { record: created, deferred };
         });
       } catch (err: unknown) {
         if (
@@ -69,21 +96,8 @@ export async function createVendorContract(input: CreateVendorContractInput, act
     }
   })();
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'vendor_contract.create',
-    resourceType: 'vendor_contract',
-    resourceId: record.id,
-    projectId: input.projectId ?? null,
-    beforeJson: null,
-    afterJson: record as any,
-  });
-
-  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
-  if (input.projectId) {
-    await autoSeedVendorContractWorkflow(record.id, input.projectId, actorUserId);
-  }
+  // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
+  await dispatchDeferred(deferred);
 
   return record;
 }
@@ -92,29 +106,32 @@ async function autoSeedVendorContractWorkflow(
   recordId: string,
   projectId: string,
   actorUserId: string,
-): Promise<void> {
+  tx: TransactionClient,
+): Promise<DeferredWorkflowEvent | null> {
   try {
     const resolution = await resolveTemplate('vendor_contract', projectId);
     if (!resolution) {
       console.warn(
         `[vendor-contract-workflow] No template configured for vendor_contract in project ${projectId}; workflow_instance not seeded for ${recordId}`,
       );
-      return;
+      return null;
     }
-    await workflowInstanceService.startInstance({
+    const { deferredEvent } = await workflowInstanceService.startInstanceDeferred({
       templateCode: resolution.code,
       recordType: 'vendor_contract',
       recordId,
       projectId,
       startedBy: actorUserId,
       resolutionSource: resolution.source,
+      tx,
     });
+    return deferredEvent;
   } catch (err) {
     if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
       console.warn(
         `[vendor-contract-workflow] Skipped workflow auto-seed for VendorContract ${recordId}: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
     throw err;
   }

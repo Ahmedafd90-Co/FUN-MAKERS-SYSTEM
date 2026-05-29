@@ -1,12 +1,14 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { TaxInvoiceStatus } from '@fmksa/db';
 import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, TaxInvoiceListInput } from '@fmksa/contracts';
-import { auditService } from '../../audit/service';
+import { auditService, type TransactionClient } from '../../audit/service';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
   DuplicateInstanceError,
   resolveTemplate,
+  dispatchDeferred,
+  type DeferredWorkflowEvent,
 } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
@@ -59,8 +61,11 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput, actorUserId
     );
   }
 
-  // Auto-generate invoiceNumber inside a transaction
-  const taxInvoice = await prisma.$transaction(async (tx) => {
+  // PIC-80: refnum + create + audit + workflow seed in ONE transaction so a seed
+  // failure rolls back the invoice create (no orphan). The invoice-number
+  // generation was already transactional; it now shares the tx with audit + seed.
+  // 'workflow.started' (→ email) is deferred and dispatched after commit.
+  const { taxInvoice, deferred } = await prisma.$transaction(async (tx) => {
     const invoiceNumber = await generateReferenceNumber(input.projectId, 'INVNUM', tx);
 
     const created = await (tx as any).taxInvoice.create({
@@ -83,22 +88,28 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput, actorUserId
       },
     });
 
-    return created;
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'tax_invoice.create',
+        resourceType: 'tax_invoice',
+        resourceId: created.id,
+        projectId: input.projectId,
+        beforeJson: null,
+        afterJson: created as any,
+      },
+      tx,
+    );
+
+    // PIC-35 Step 5: auto-seed workflow_instance at entity-create (on tx).
+    const deferred = await autoSeedTaxInvoiceWorkflow(created.id, input.projectId, actorUserId, tx);
+
+    return { taxInvoice: created, deferred };
   });
 
-  await auditService.log({
-    actorUserId,
-    actorSource: 'user',
-    action: 'tax_invoice.create',
-    resourceType: 'tax_invoice',
-    resourceId: taxInvoice.id,
-    projectId: input.projectId,
-    beforeJson: null,
-    afterJson: taxInvoice as any,
-  });
-
-  // PIC-35 Step 5: auto-seed workflow_instance at entity-create.
-  await autoSeedTaxInvoiceWorkflow(taxInvoice.id, input.projectId, actorUserId);
+  // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
+  await dispatchDeferred(deferred);
 
   return taxInvoice;
 }
@@ -107,29 +118,32 @@ async function autoSeedTaxInvoiceWorkflow(
   recordId: string,
   projectId: string,
   actorUserId: string,
-): Promise<void> {
+  tx: TransactionClient,
+): Promise<DeferredWorkflowEvent | null> {
   try {
     const resolution = await resolveTemplate('tax_invoice', projectId);
     if (!resolution) {
       console.warn(
         `[tax-invoice-workflow] No template configured for tax_invoice in project ${projectId}; workflow_instance not seeded for ${recordId}`,
       );
-      return;
+      return null;
     }
-    await workflowInstanceService.startInstance({
+    const { deferredEvent } = await workflowInstanceService.startInstanceDeferred({
       templateCode: resolution.code,
       recordType: 'tax_invoice',
       recordId,
       projectId,
       startedBy: actorUserId,
       resolutionSource: resolution.source,
+      tx,
     });
+    return deferredEvent;
   } catch (err) {
     if (err instanceof TemplateNotActiveError || err instanceof DuplicateInstanceError) {
       console.warn(
         `[tax-invoice-workflow] Skipped workflow auto-seed for TaxInvoice ${recordId}: ${(err as Error).message}`,
       );
-      return;
+      return null;
     }
     throw err;
   }

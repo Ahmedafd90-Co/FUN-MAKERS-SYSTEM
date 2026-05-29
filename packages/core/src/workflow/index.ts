@@ -38,3 +38,7 @@ export type { ResolutionSource, TemplateResolution } from './template-resolution
 export { registerConvergenceHandlers } from './convergence-handlers';
 
 export * as workflowEvents from './events';
+
+// PIC-80: outbox-ready deferred-emit dispatch seam + descriptor type.
+export { dispatchDeferred } from './deferred';
+export type { DeferredWorkflowEvent } from './deferred';

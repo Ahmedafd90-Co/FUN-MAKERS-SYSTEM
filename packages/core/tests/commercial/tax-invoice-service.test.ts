@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { prisma } from '@fmksa/db';
+import * as workflowEvents from '../../src/workflow/events';
 import {
   createTaxInvoice,
   transitionTaxInvoice,
@@ -296,6 +297,50 @@ describe('TaxInvoice Service', () => {
     expect(result.total).toBeGreaterThanOrEqual(1);
     for (const item of result.items) {
       expect(item.status).toBe('draft');
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // PIC-80 — atomic create + autoSeed (rollback + positive). Reuses the signed
+  // IPC + project from beforeAll. Extension-on-tx is a shared-engine property
+  // proven in PB1; not re-run per service. Handler calls are filtered by
+  // recordId so the file's convergence/posting handlers are left intact.
+  // ---------------------------------------------------------------------------
+
+  it('PIC-80 positive: create persists tax_invoice + workflow_instance and emits workflow.started exactly once', async () => {
+    const startedHandler = vi.fn(async (_payload: any) => {});
+    workflowEvents.on('workflow.started', startedHandler);
+
+    const inv = await createTaxInvoice(makeInput(), 'test-user');
+
+    const persisted = await prisma.taxInvoice.findUnique({ where: { id: inv.id } });
+    expect(persisted).not.toBeNull();
+
+    const instance = await prisma.workflowInstance.findFirst({ where: { recordType: 'tax_invoice', recordId: inv.id } });
+    expect(instance).not.toBeNull();
+    expect(instance!.status).toBe('in_progress');
+
+    const startedForThis = startedHandler.mock.calls.filter((c) => (c[0] as any)?.recordId === inv.id);
+    expect(startedForThis.length).toBe(1); // deferral didn't drop it; no double-emit
+  });
+
+  it('PIC-80 rollback: workflow-seed failure rolls back the tax_invoice create and emits nothing', async () => {
+    const before = await prisma.taxInvoice.count({ where: { projectId: testProject.id } });
+    const startedHandler = vi.fn(async (_payload: any) => {});
+    workflowEvents.on('workflow.started', startedHandler);
+    const seedSpy = vi
+      .spyOn(workflowInstanceService, 'startInstanceDeferred')
+      .mockRejectedValueOnce(new Error('seed boom (injected)'));
+
+    try {
+      await expect(createTaxInvoice(makeInput(), 'test-user')).rejects.toThrow(/seed boom/);
+
+      const after = await prisma.taxInvoice.count({ where: { projectId: testProject.id } });
+      expect(after).toBe(before); // refnum + create rolled back — no orphan
+      expect(seedSpy).toHaveBeenCalledTimes(1);
+      expect(startedHandler).toHaveBeenCalledTimes(0); // nothing emitted on the failed path
+    } finally {
+      seedSpy.mockRestore();
     }
   });
 });
