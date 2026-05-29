@@ -5,6 +5,7 @@ import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow';
 import * as workflowEvents from '../../src/workflow/events';
 import { createVendorContract } from '../../src/procurement/vendor-contract/service';
+import * as vcValidation from '../../src/procurement/vendor-contract/validation';
 
 /**
  * PIC-80 PB2 — atomic create+autoSeed for vendor_contract (rollback + positive).
@@ -95,18 +96,27 @@ describe('VendorContract atomic create+autoSeed (PIC-80)', () => {
     expect(startedForThis.length).toBe(1);
   });
 
-  it('rollback: a create+seed failure leaves no orphan and emits nothing', async () => {
+  it('rollback: create succeeds then seed fails → atomic rollback, no orphan, no emit', async () => {
     const before = await prisma.vendorContract.count({ where: { projectId: testProject.id } });
     const startedHandler = vi.fn(async (_payload: any) => {});
     workflowEvents.on('workflow.started', startedHandler);
-    // Inject a seed failure (mockRejectedValue survives the create's P2002-retry).
-    // vendor_contract uses a GLOBALLY-unique sequential contractNumber, so under
-    // parallel workers the create can P2002 before the seed; we assert the
-    // atomicity INVARIANT (no orphan + no emit on any create+seed failure). The
-    // strict seed-failure path is proven by the project-scoped services.
+    // PIC-80 catch-24 (ruling 33bcf637): the create MUST deterministically succeed so
+    // the seed-failure path is the one actually exercised. vendor_contract draws a
+    // globally-sequential contractNumber (findFirst max+1) which can P2002 under
+    // cross-test contention — that contention defeated the strict assertion before and
+    // is fixed in production separately (PIC-84, out of scope here). We isolate THIS
+    // test into a private numbering space by stubbing ONLY the number generator to a
+    // guaranteed-free, out-of-production-range value: the create still runs the REAL
+    // $transaction + REAL Prisma write — only the number value is controlled.
+    vi.spyOn(vcValidation, 'nextContractNumber').mockReturnValue('VC-99999999');
+    // makeInput() carries projectId (testProject.id) so the conditional autoSeed
+    // (`if (input.projectId)`) actually fires and can be forced to fail.
     vi.spyOn(workflowInstanceService, 'startInstanceDeferred').mockRejectedValue(new Error('seed boom (injected)'));
 
-    await expect(createVendorContract(makeInput() as any, testUser.id)).rejects.toThrow();
+    // Strict proof-of-path: can ONLY throw /seed boom/ if the create committed its rows
+    // and reached the (mocked-to-fail) seed. A P2002 here would be a loud failure
+    // (contention still present), never a false green.
+    await expect(createVendorContract(makeInput() as any, testUser.id)).rejects.toThrow(/seed boom/);
 
     const after = await prisma.vendorContract.count({ where: { projectId: testProject.id } });
     expect(after).toBe(before); // no orphan — atomic rollback

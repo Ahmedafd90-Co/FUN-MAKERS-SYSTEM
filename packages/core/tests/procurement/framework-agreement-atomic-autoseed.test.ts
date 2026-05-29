@@ -5,6 +5,7 @@ import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow';
 import * as workflowEvents from '../../src/workflow/events';
 import { createFrameworkAgreement } from '../../src/procurement/framework-agreement/service';
+import * as faValidation from '../../src/procurement/framework-agreement/validation';
 
 /**
  * PIC-80 PB2 — atomic create+autoSeed for framework_agreement (rollback + positive).
@@ -103,21 +104,27 @@ describe('FrameworkAgreement atomic create+autoSeed (PIC-80)', () => {
     expect(startedForThis.length).toBe(1);
   });
 
-  it('rollback: a create+seed failure leaves no orphan and emits nothing', async () => {
+  it('rollback: create succeeds then seed fails → atomic rollback, no orphan, no emit', async () => {
     const before = await prisma.frameworkAgreement.count({ where: { projectId: testProject.id } });
     const startedHandler = vi.fn(async (_payload: any) => {});
     workflowEvents.on('workflow.started', startedHandler);
-    // Inject a seed failure (mockRejectedValue = reject on every call, surviving
-    // the create's P2002-retry). NOTE: framework_agreement uses a GLOBALLY-unique
-    // sequential agreementNumber (findFirst max+1 + retry); under parallel test
-    // workers the create itself can P2002 before reaching the seed. We therefore
-    // assert the atomicity INVARIANT — any failure in the create+seed transaction
-    // leaves no orphan and emits nothing — not a specific error string. The strict
-    // seed-failure path is proven deterministically by the project-scoped services
-    // (cost-proposal / credit-note / tax-invoice).
+    // PIC-80 catch-24 (ruling 33bcf637): the create MUST deterministically succeed so
+    // the seed-failure path is the one actually exercised. framework_agreement draws a
+    // globally-sequential agreementNumber (findFirst max+1) which can P2002 under
+    // cross-test contention — that contention defeated the strict assertion before and
+    // is fixed in production separately (PIC-84, out of scope here). We isolate THIS
+    // test into a private numbering space by stubbing ONLY the number generator to a
+    // guaranteed-free, out-of-production-range value: the create still runs the REAL
+    // $transaction + REAL Prisma write — only the number value is controlled.
+    vi.spyOn(faValidation, 'nextAgreementNumber').mockReturnValue('FA-99999999');
+    // makeInput() carries projectId (testProject.id) so the conditional autoSeed
+    // (`if (input.projectId)`) actually fires and can be forced to fail.
     vi.spyOn(workflowInstanceService, 'startInstanceDeferred').mockRejectedValue(new Error('seed boom (injected)'));
 
-    await expect(createFrameworkAgreement(makeInput() as any, testUser.id)).rejects.toThrow();
+    // Strict proof-of-path: this can ONLY throw /seed boom/ if the create committed its
+    // rows and reached the (mocked-to-fail) seed. A P2002 here would mean the create
+    // never got there — a loud failure, never a false green.
+    await expect(createFrameworkAgreement(makeInput() as any, testUser.id)).rejects.toThrow(/seed boom/);
 
     const after = await prisma.frameworkAgreement.count({ where: { projectId: testProject.id } });
     expect(after).toBe(before); // no orphan — atomic rollback
