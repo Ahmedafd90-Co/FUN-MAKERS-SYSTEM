@@ -82,12 +82,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # TEMPORARILY non-blocking checks:
-      #   Lint — 98 pre-existing no-explicit-any errors across apps/web
-      #   Test — pre-existing seed-data debt on CI DB
-      # Both are being addressed on chore/brand-adaptation-ci-cleanup (PR #4).
-      # Both flags will be removed once that cleanup lands. The authoritative
-      # merge gates right now are Setup + Typecheck + Build.
+      # Lint is TEMPORARILY non-blocking — 98 pre-existing no-explicit-any
+      # errors across apps/web, being addressed on chore/brand-adaptation-ci-
+      # cleanup (PR #4). This flag will be removed once that cleanup lands.
+      # Authoritative merge gates: Setup, Typecheck, Build, Test. (Test was
+      # made blocking in PIC-72 cluster 1.b; Lint remains the only soft check
+      # pending the brand-adaptation / PR #4 arc.)
       - name: Run lint
         continue-on-error: true
         run: pnpm turbo run lint
