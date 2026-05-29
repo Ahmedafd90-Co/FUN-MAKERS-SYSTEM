@@ -3,16 +3,18 @@ import type { PrismaClient } from '@prisma/client';
 /**
  * Layer 1 role-permission mappings — PIC-26.
  *
- * PR-A2 (PIC-13) added 24 Layer 1 permission codes to the catalog but never
- * granted them to any role. The base `seedRolePermissions` runs BEFORE the
- * Layer 1 catalog is seeded, so its `'*'` for master_admin only captures
- * permissions that exist at that moment — Layer 1 codes added later are
- * silently missed. Symptom: Participants tab hidden for master_admin (May 5
- * smoke test). This file is the fix.
+ * Grants the non-master Layer 1 roles their per-surface permissions.
+ *
+ * Originally this file also carried a master_admin full-grant to work around
+ * the base `seedRolePermissions` `'*'` ordering bug — it ran BEFORE the Layer 1
+ * catalog seeded, so Layer 1 codes added later were silently missed (symptom:
+ * Participants tab hidden for master_admin, May 5 smoke test). Cluster 4 fixed
+ * that bug at its root: master_admin's full grant is now centralized in
+ * `seedMasterAdminAllPermissions()` (runs LAST, after every catalog), so the
+ * per-domain master_admin entry here is no longer needed and has been removed.
  *
  * Mirrors the commercial-role-permissions.ts and procurement-role-permissions.ts
- * structure exactly (per-domain grant file, runs after the matching domain
- * catalog seed).
+ * structure (per-domain grant file, runs after the matching domain catalog seed).
  */
 
 function expand(family: string, actions: string[]): string[] {
@@ -20,32 +22,9 @@ function expand(family: string, actions: string[]): string[] {
 }
 
 const ROLE_LAYER1_PERMISSIONS: Record<string, string[]> = {
-  // Full grant — administers every Layer 1 surface.
-  master_admin: [
-    ...expand('project_participant', ['view', 'create', 'edit', 'delete']),
-    ...expand('prime_contract', [
-      'view',
-      'create',
-      'edit',
-      'delete',
-      'sign',
-      'activate',
-      'complete',
-      'terminate',
-      'cancel',
-    ]),
-    ...expand('intercompany_contract', [
-      'view',
-      'create',
-      'edit',
-      'delete',
-      'sign',
-      'activate',
-      'close',
-      'cancel',
-    ]),
-    ...expand('entity_legal_details', ['view', 'edit', 'delete']),
-  ],
+  // master_admin intentionally omitted — full catalog grant is centralized in
+  // seedMasterAdminAllPermissions() (cluster 4 / Option B), which runs after
+  // the Layer 1 catalog seeds.
 
   // View-only — sees Layer 1 surfaces, cannot mutate. Mutation grants stay on
   // master_admin only for now; Layer 2 work refines per-role mutation rights.
@@ -118,6 +97,3 @@ export async function seedLayer1RolePermissions(prisma: PrismaClient) {
   }
   console.log(`  ✅ Layer 1 role-permission mappings seeded (${count} grants).`);
 }
-
-// Exported for the seed-coverage regression test (PIC-27).
-export { ROLE_LAYER1_PERMISSIONS };

@@ -7,15 +7,10 @@ function expand(family: string, actions: string[]): string[] {
 }
 
 const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
-  master_admin: [
-    ...expand('ipa', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('ipc', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('variation', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('cost_proposal', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('tax_invoice', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('correspondence', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...DASHBOARD_PERMS,
-  ],
+  // master_admin intentionally omitted — its full catalog grant is centralized
+  // in seedMasterAdminAllPermissions() (cluster 4 / Option B), which runs after
+  // this commercial catalog seeds. master_admin still receives every commercial
+  // permission without a per-domain catch-up entry (proven by seed-coverage.test.ts).
   project_director: [
     ...expand('ipa', ['view', 'review', 'approve', 'sign']),
     ...expand('ipc', ['view', 'review', 'approve', 'sign']),

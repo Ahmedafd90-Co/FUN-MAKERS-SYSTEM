@@ -24,11 +24,11 @@ type RolePermissionMap = Record<string, string[]>;
 // override.execute, user.*) remain master-admin-only by deliberate audit
 // scope.
 //
-// master_admin still gets ALL permissions via the '*' wildcard; the per-role
-// arrays below ADD non-master grants for the specific D3.02/D3.06 codes.
+// master_admin gets ALL permissions via the order-independent
+// seedMasterAdminAllPermissions() (runs LAST, after every domain catalog is
+// seeded) — it is deliberately ABSENT from this map. The per-role arrays here
+// ADD non-master grants for the specific D3.02/D3.06 codes.
 const ROLE_PERMISSION_MAP: RolePermissionMap = {
-  master_admin: ['*'], // Special: '*' means all permissions
-
   // D3.06 — Project lifecycle. PD ruling 2026-05-20: grant all three project verbs
   // to project_director. PD owns project lifecycle in Pico Play org reality.
   // D3.02 — document.sign for PD (high-authority signing).
@@ -84,9 +84,7 @@ export async function seedRolePermissions(prisma: PrismaClient) {
       continue;
     }
 
-    const permsToAssign = permCodes.includes('*')
-      ? allPermissions
-      : allPermissions.filter((p) => permCodes.includes(p.code));
+    const permsToAssign = allPermissions.filter((p) => permCodes.includes(p.code));
 
     for (const perm of permsToAssign) {
       await prisma.rolePermission.upsert({
@@ -98,4 +96,37 @@ export async function seedRolePermissions(prisma: PrismaClient) {
     }
   }
   console.log(`  ✓ ${count} role-permission mappings seeded`);
+}
+
+/**
+ * Master-admin full-permission grant — centralized and order-independent.
+ *
+ * Cluster 4 / Option B: replaces the early `master_admin: ['*']` expansion in
+ * seedRolePermissions (which only saw the base catalog at that early step and
+ * silently missed later-seeded domain catalogs — the bug the per-domain
+ * catch-up files worked around). Mirrors the seedQaTestRolePermissions
+ * "run last, query the full catalog" pattern: invoked after every permission
+ * catalog is seeded, so master_admin receives the COMPLETE catalog.
+ *
+ * Invariant enforced by seed-coverage.test.ts: master_admin must hold every
+ * permission code in the catalog.
+ */
+export async function seedMasterAdminAllPermissions(prisma: PrismaClient) {
+  console.log('  Seeding master_admin full-permission grant (centralized, runs last)...');
+  const role = await prisma.role.findFirst({ where: { code: 'master_admin' } });
+  if (!role) {
+    console.warn('  ⚠ Role master_admin not found, skipping full-permission grant');
+    return;
+  }
+  const allPermissions = await prisma.permission.findMany();
+  let count = 0;
+  for (const perm of allPermissions) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
+      create: { roleId: role.id, permissionId: perm.id },
+      update: {},
+    });
+    count++;
+  }
+  console.log(`  ✓ master_admin granted all ${count} catalog permissions`);
 }

@@ -5,29 +5,13 @@ function expand(resource: string, actions: string[]): string[] {
 }
 
 const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
-  master_admin: [
-    // PIC-27: explicit `delete` grants below — the seed-coverage regression
-    // test surfaced these 5 codes as orphaned in the catalog (declared in
-    // procurement-permissions.ts but no role ever held them). master_admin
-    // owns hard-delete authority across procurement, alongside the soft-delete
-    // `terminate` flow used by other roles.
-    ...expand('vendor', ['view', 'create', 'edit', 'delete', 'activate', 'suspend', 'blacklist']),
-    ...expand('vendor_contract', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
-    ...expand('framework_agreement', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'sign', 'terminate']),
-    // PIC-59: 'materialise' was added to the rfq actions catalog in PIC-53
-    // but never added to master_admin grants — PIC-27 seed-coverage test was
-    // failing on main because of this exact gap. Adding here closes the loop.
-    ...expand('rfq', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate']),
-    ...expand('quotation', ['view', 'create', 'edit', 'delete', 'review', 'shortlist', 'award', 'reject', 'terminate']),
-    ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'sign', 'issue']),
-    ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'prepare_payment']),
-    ...expand('expense', ['view', 'create', 'edit', 'submit', 'review', 'approve']),
-    ...expand('credit_note', ['view', 'create', 'edit', 'review', 'verify', 'apply']),
-    ...expand('procurement_dashboard', ['view']),
-    ...expand('procurement_category', ['view', 'manage']),
-    ...expand('item_catalog', ['view', 'manage']),
-    ...expand('project_vendor', ['view', 'manage']),
-  ],
+  // master_admin intentionally omitted — full catalog grant is centralized in
+  // seedMasterAdminAllPermissions() (cluster 4 / Option B), which runs after
+  // the procurement catalog seeds. This includes the procurement-only hard-delete
+  // codes (vendor.delete, vendor_contract.delete, framework_agreement.delete,
+  // rfq.delete, quotation.delete) that previously lived only on this entry —
+  // the centralized grant covers every catalog code, so seed-coverage's
+  // every-permission-granted guard (:75) still holds via master_admin.
   project_director: [
     ...expand('vendor', ['view']),
     ...expand('vendor_contract', ['view', 'approve', 'sign']),
