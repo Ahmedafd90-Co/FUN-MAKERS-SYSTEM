@@ -163,6 +163,24 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # PIC-91 (2026-05-30): MinIO service container — mirrors
+      # infra/docker/docker-compose.yml's minio service for local-CI parity.
+      # Document/storage tests (documents/*, audit/coverage MinIO-gated) require
+      # a live S3-compatible endpoint. Without this, ~43 tests are permanently
+      # skipped via describe.skipIf(!MINIO_AVAILABLE). MINIO_AVAILABLE gates on
+      # STORAGE_ENDPOINT and STORAGE_BUCKET being set (see STORAGE_* env below).
+      minio:
+        image: minio/minio:RELEASE.2024-01-01T16-36-33Z
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # F3 (PIC-76): per-package test DBs prevent cross-package turbo concurrency
       # pollution. Each vitest process routes to its own Postgres database via
@@ -174,6 +192,16 @@ jobs:
       DATABASE_URL_TEST_DB: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
       DATABASE_URL_TEST_CORE: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
       REDIS_URL: redis://localhost:6379
+      # PIC-91 (2026-05-30): MinIO storage env vars. STORAGE_ENDPOINT + STORAGE_BUCKET
+      # set MINIO_AVAILABLE=true so document/storage tests run instead of being
+      # skipped. NODE_ENV is not 'production' in CI so PIC-90's fail-loud check
+      # does not fire even though STORAGE_ACCESS_KEY/SECRET_KEY are the dev defaults.
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_BUCKET: fmksa-dev-documents
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_REGION: us-east-1
+      STORAGE_FORCE_PATH_STYLE: "true"
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -198,6 +226,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      # PIC-91 (2026-05-30): Create MinIO bucket. The MinIO service container
+      # starts but does not pre-create buckets. The minio/mc CLI creates the
+      # fmksa-dev-documents bucket so document/storage tests can upload and
+      # download. Runs after node/pnpm setup (mc is pulled from the minio/mc
+      # image; --network host reaches the service on localhost:9000).
+      - name: Create MinIO bucket
+        run: |
+          docker run --rm --network host \
+            minio/mc:latest \
+            alias set local http://localhost:9000 minioadmin minioadmin \
+            && docker run --rm --network host \
+            minio/mc:latest \
+            mb --ignore-existing local/fmksa-dev-documents
 
       # F3 (PIC-76): create per-package test DBs. The Postgres service container
       # only creates POSTGRES_DB=fmksa_test at startup; the per-package DBs
