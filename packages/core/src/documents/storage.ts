@@ -47,7 +47,7 @@ export interface StorageAdapter {
  *
  * PIC-90 (2026-05-30).
  */
-function validateStorageConfig(): void {
+export function validateStorageConfig(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
   // Skip during Next.js build-time static analysis — `next build` runs with

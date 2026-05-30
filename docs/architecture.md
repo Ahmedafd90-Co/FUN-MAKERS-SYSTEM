@@ -263,6 +263,40 @@ to accept `_test_<pkg>` suffixes alongside legacy `_test`.
   inner layer's guarantee can become irrelevant. F3 fixes by removing the
   shared resource (separate DBs).
 
+### Known-broken migration: `20260415120000_add_sheet_import_layer` (PIC-93, 2026-05-30)
+
+Migration `20260415120000_add_sheet_import_layer` fails with `prisma migrate deploy`
+when applied to a fresh database. The cause is an enum-ordering dependency between
+adjacent migrations:
+
+- `20260414120000_add_internal_budget_and_ei` **creates** the `budget_adjustment_type`
+  enum.
+- `20260415120000_add_sheet_import_layer` **alters** the same enum
+  (`ALTER TYPE "budget_adjustment_type" ADD VALUE 'line_import'`).
+
+Prisma's `migrate deploy` wraps each migration in its own transaction and runs them
+in timestamp order. The `ALTER TYPE` in `20260415...` requires the enum created by
+`20260414...` to already exist and be committed — but when replaying on a fresh DB,
+the two migrations execute close together and the ordering dependency causes a
+`type "budget_adjustment_type" does not exist` (SQLSTATE 42704) error before the
+alter can run.
+
+**Workaround (already in use in CI and fresh-env setup):** use `prisma db push
+--skip-generate` instead of `prisma migrate deploy`. `db push` diffs the current
+`schema.prisma` against the database state and applies the final schema directly,
+bypassing the broken migration chain entirely. This is correct for development and
+CI environments; the schema state is identical either way.
+
+**CI:** see `.github/workflows/ci.yml:258-261` for the comment and the `db push`
+steps. **Fresh-env setup** (local dev, staging provisioning) must also use
+`pnpm --filter @fmksa/db exec prisma db push` rather than
+`pnpm --filter @fmksa/db exec prisma migrate deploy`.
+
+The broken migration is tracked as technical debt to repair in place (option: squash
+migrations into a clean initial migration from current `schema.prisma`, or fix the
+enum-ordering split). A separate ticket should be filed for that migration repair
+before a multi-tenant staging environment is provisioned.
+
 ---
 
 ## Standing Rules
