@@ -50,6 +50,15 @@ export interface StorageAdapter {
 function validateStorageConfig(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
+  // Skip during Next.js build-time static analysis — `next build` runs with
+  // NODE_ENV=production but module-level code executes at build time (not
+  // request time). Storage credentials are only needed at runtime; throwing
+  // here would fail CI builds even when the runtime environment is correctly
+  // configured. NEXT_PHASE='phase-production-build' is set by Next.js during
+  // the build step and unset at runtime — this is the same pattern used by
+  // Auth.js and next-auth for deferred secret validation.
+  if (process.env.NEXT_PHASE === 'phase-production-build') return;
+
   const accessKey = process.env.STORAGE_ACCESS_KEY;
   const secretKey = process.env.STORAGE_SECRET_KEY;
 
