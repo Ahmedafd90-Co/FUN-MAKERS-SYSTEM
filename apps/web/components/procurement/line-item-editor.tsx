@@ -64,7 +64,8 @@ export function RfqLineItemEditor({ items, onChange }: RfqLineItemEditorProps) {
     if (field === 'quantity' || field === 'estimatedUnitPrice') {
       item[field] = raw === '' ? 0 : Number(raw);
     } else {
-      (item as any)[field] = raw;
+      // Narrowed: 'itemDescription' | 'unit' | 'itemCatalogId' — all string-typed.
+      item[field] = raw;
     }
     next[idx] = item;
     onChange(next);
@@ -192,7 +193,8 @@ export function QuotationLineItemEditor({ items, onChange }: QuotationLineItemEd
         item.totalPrice = Math.round(item.quantity * item.unitPrice * 100) / 100;
       }
     } else {
-      (item as any)[field] = raw;
+      // Narrowed: 'itemDescription' | 'unit' | 'rfqItemId' | 'notes' — all string-typed.
+      item[field] = raw;
     }
     next[idx] = item;
     onChange(next);

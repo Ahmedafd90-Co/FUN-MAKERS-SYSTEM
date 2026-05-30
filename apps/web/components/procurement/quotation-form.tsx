@@ -128,7 +128,7 @@ export function QuotationForm({ projectId, preselectedRfqId, existingQuotation }
     { enabled: !!form.rfqId },
   );
 
-  const rfqVendors = (selectedRfq?.rfqVendors ?? []).map((rv: any) => ({
+  const rfqVendors = (selectedRfq?.rfqVendors ?? []).map((rv) => ({
     vendorId: rv.vendorId ?? rv.vendor?.id,
     name: rv.vendor?.name ?? 'Unknown',
   }));
@@ -146,7 +146,7 @@ export function QuotationForm({ projectId, preselectedRfqId, existingQuotation }
     form.items.length === 0
   ) {
     setLastPrepopRfqId(form.rfqId);
-    const prepopulated: QuotationLineItem[] = selectedRfq.items.map((rfqItem: any) => ({
+    const prepopulated: QuotationLineItem[] = selectedRfq.items.map((rfqItem) => ({
       itemDescription: rfqItem.itemDescription,
       unit: rfqItem.unit,
       quantity: Number(rfqItem.quantity),
@@ -246,7 +246,7 @@ export function QuotationForm({ projectId, preselectedRfqId, existingQuotation }
                     <SelectValue placeholder="Select an issued RFQ" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(acceptingRfqs?.items ?? []).map((rfq: any) => (
+                    {(acceptingRfqs?.items ?? []).map((rfq) => (
                       <SelectItem key={rfq.id} value={rfq.id}>
                         {rfq.referenceNumber ?? rfq.rfqNumber} — {rfq.title}
                       </SelectItem>
@@ -266,7 +266,7 @@ export function QuotationForm({ projectId, preselectedRfqId, existingQuotation }
                     <SelectValue placeholder={form.rfqId ? 'Select vendor' : 'Select RFQ first'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {rfqVendors.map((v: any) => (
+                    {rfqVendors.map((v) => (
                       <SelectItem key={v.vendorId} value={v.vendorId}>
                         {v.name}
                       </SelectItem>
@@ -319,7 +319,7 @@ export function QuotationForm({ projectId, preselectedRfqId, existingQuotation }
                   <SelectValue placeholder="Select currency" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(currencies ?? []).map((c: any) => (
+                  {(currencies ?? []).map((c) => (
                     <SelectItem key={c.code} value={c.code}>
                       {c.name} ({c.code})
                     </SelectItem>

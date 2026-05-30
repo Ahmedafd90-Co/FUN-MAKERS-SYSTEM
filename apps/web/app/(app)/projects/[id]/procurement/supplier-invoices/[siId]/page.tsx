@@ -142,12 +142,12 @@ export default function SupplierInvoiceDetailPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1 min-w-0">
           <h1 className="text-xl font-semibold">
-            {(data as any).invoiceNumber ?? 'Supplier Invoice'}
+            {data.invoiceNumber ?? 'Supplier Invoice'}
           </h1>
           <div className="flex items-center gap-2">
             <ProcurementStatusBadge status={data.status} />
             <span className="text-sm text-muted-foreground">
-              {(data as any).vendor?.name ?? 'Unknown Vendor'}
+              {data.vendor?.name ?? 'Unknown Vendor'}
             </span>
           </div>
           <WorkflowStatusHint
@@ -189,23 +189,23 @@ export default function SupplierInvoiceDetailPage() {
           <CardTitle className="text-sm">Invoice Details</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Vendor" value={(data as any).vendor?.name ?? '-'} />
+          <Field label="Vendor" value={data.vendor?.name ?? '-'} />
           <Field label="Currency" value={data.currency} />
           <Field
             label="Gross Amount"
-            value={`${formatMoney((data as any).grossAmount)} ${data.currency}`}
+            value={`${formatMoney(data.grossAmount)} ${data.currency}`}
           />
           <Field
             label="VAT Rate"
             value={
-              (data as any).vatRate != null
-                ? formatRate((data as any).vatRate)
+              data.vatRate != null
+                ? formatRate(data.vatRate)
                 : '-'
             }
           />
           <Field
             label="VAT Amount"
-            value={`${formatMoney((data as any).vatAmount)} ${data.currency}`}
+            value={`${formatMoney(data.vatAmount)} ${data.currency}`}
           />
           <Field
             label="Total Amount"
@@ -214,16 +214,16 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Invoice Date"
             value={
-              (data as any).invoiceDate
-                ? new Date((data as any).invoiceDate).toLocaleDateString()
+              data.invoiceDate
+                ? new Date(data.invoiceDate).toLocaleDateString()
                 : '-'
             }
           />
           <Field
             label="Due Date"
             value={
-              (data as any).dueDate
-                ? new Date((data as any).dueDate).toLocaleDateString()
+              data.dueDate
+                ? new Date(data.dueDate).toLocaleDateString()
                 : '-'
             }
           />
@@ -243,21 +243,21 @@ export default function SupplierInvoiceDetailPage() {
           <Field
             label="Purchase Order"
             value={
-              (data as any).purchaseOrder ? (
+              data.purchaseOrder ? (
                 <Link
-                  href={`/projects/${params.id}/procurement/purchase-orders/${(data as any).purchaseOrderId}`}
+                  href={`/projects/${params.id}/procurement/purchase-orders/${data.purchaseOrderId}`}
                   className="text-primary hover:underline"
                 >
-                  {(data as any).purchaseOrder.poNumber ?? 'View PO'}
+                  {data.purchaseOrder.poNumber ?? 'View PO'}
                 </Link>
               ) : (
-                (data as any).noPOReason ?? 'None'
+                data.noPOReason ?? 'None'
               )
             }
           />
           <Field
             label="Budget Category"
-            value={(data as any).category?.name ?? ((data as any).categoryId ? 'Mapped' : 'Not mapped')}
+            value={data.category?.name ?? (data.categoryId ? 'Mapped' : 'Not mapped')}
           />
         </CardContent>
       </Card>

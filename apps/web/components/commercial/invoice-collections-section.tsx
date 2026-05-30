@@ -39,6 +39,11 @@ import {
   SheetFooter,
 } from '@fmksa/ui/components/sheet';
 
+import type {
+  GetOutstandingInput,
+  ListCollectionsInput,
+  RecordCollectionInput,
+} from '@fmksa/contracts';
 import { trpc } from '@/lib/trpc-client';
 import { formatMoney } from '@/components/commercial/shared';
 
@@ -88,14 +93,22 @@ export function InvoiceCollectionsSection({
   const utils = trpc.useUtils();
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // The `projectProcedure` middleware reads `projectId` from raw input for
+  // access control; the Zod schemas (GetOutstandingSchema / ListCollectionsSchema)
+  // don't currently declare it, so clients have to pass it alongside. Intersect
+  // the contract input with `{ projectId }` to make this explicit rather than
+  // hiding it behind `as any`. Follow-up: add `projectId` to the three
+  // invoice-collection schemas in packages/contracts for full consistency with
+  // every other projectProcedure input in this codebase — held out of this PR
+  // because it cascades through ~10 service-test call sites.
   const outstanding = trpc.commercial.invoiceCollection.outstanding.useQuery({
     taxInvoiceId: invoiceId,
     projectId,
-  } as any);
+  } as GetOutstandingInput & { projectId: string });
   const collections = trpc.commercial.invoiceCollection.list.useQuery({
     taxInvoiceId: invoiceId,
     projectId,
-  } as any);
+  } as ListCollectionsInput & { projectId: string });
 
   const totalAmount = parseFloat(String(invoiceTotalAmount)) || 0;
   const collectedAmount = parseFloat(outstanding.data?.collectedAmount ?? '0');
@@ -193,7 +206,7 @@ export function InvoiceCollectionsSection({
             <>
             {/* Mobile: stacked cards */}
             <div className="sm:hidden space-y-2">
-              {collections.data.map((c: any) => (
+              {collections.data.map((c) => (
                 <div key={c.id} className="rounded-md border p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-mono tabular-nums font-medium">
@@ -234,7 +247,7 @@ export function InvoiceCollectionsSection({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {collections.data.map((c: any) => (
+                  {collections.data.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="text-sm font-mono tabular-nums">
                         {new Date(c.collectionDate).toLocaleDateString()}
@@ -370,7 +383,7 @@ function RecordCollectionSheet({
       ...(paymentMethod ? { paymentMethod } : {}),
       ...(reference.trim() ? { reference: reference.trim() } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
-    } as any);
+    } as RecordCollectionInput & { projectId: string });
   }
 
   return (

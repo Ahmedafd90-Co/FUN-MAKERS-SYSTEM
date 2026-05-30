@@ -106,10 +106,7 @@ export default function CostProposalDetailPage() {
     data.approvedCost ?? data.assessedCost ?? data.estimatedCost;
 
   // Variation reference from the included relation
-  const linkedVar = (data as any).variation as
-    | { id: string; referenceNumber: string | null; subtype: string }
-    | null
-    | undefined;
+  const linkedVar = data.variation;
   const varLabel = linkedVar
     ? linkedVar.referenceNumber ?? `Linked ${linkedVar.subtype === 'change_order' ? 'CO' : 'VO'}`
     : null;

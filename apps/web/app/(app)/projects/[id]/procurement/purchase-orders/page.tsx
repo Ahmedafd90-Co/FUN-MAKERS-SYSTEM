@@ -103,7 +103,7 @@ export default function PurchaseOrderListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.map((po: any) => (
+              {paged.map((po) => (
                 <TableRow
                   key={po.id}
                   className="cursor-pointer hover:bg-muted/50"

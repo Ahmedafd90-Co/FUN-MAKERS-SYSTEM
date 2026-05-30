@@ -80,7 +80,7 @@ export function SupplierInvoiceForm({ projectId }: Props) {
   // Filter POs by selected vendor
   const eligiblePOs =
     (posQuery.data ?? []).filter(
-      (po: any) => !formData.vendorId || po.vendorId === formData.vendorId,
+      (po) => !formData.vendorId || po.vendorId === formData.vendorId,
     ) ?? [];
 
   // Auto-compute VAT amount + total when gross amount or rate changes.
@@ -202,7 +202,7 @@ export function SupplierInvoiceForm({ projectId }: Props) {
                 // Clear PO if it no longer matches new vendor
                 if (formData.purchaseOrderId) {
                   const stillMatches = (posQuery.data ?? []).some(
-                    (po: any) =>
+                    (po) =>
                       po.id === formData.purchaseOrderId &&
                       po.vendorId === v,
                   );
@@ -214,7 +214,7 @@ export function SupplierInvoiceForm({ projectId }: Props) {
                 <SelectValue placeholder="Select vendor" />
               </SelectTrigger>
               <SelectContent>
-                {(vendorsQuery.data ?? []).map((v: any) => (
+                {(vendorsQuery.data ?? []).map((v) => (
                   <SelectItem key={v.vendorId} value={v.vendorId}>
                     {v.vendor.name}
                   </SelectItem>
@@ -248,7 +248,7 @@ export function SupplierInvoiceForm({ projectId }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                {eligiblePOs.map((po: any) => (
+                {eligiblePOs.map((po) => (
                   <SelectItem key={po.id} value={po.id}>
                     {po.poNumber ?? po.referenceNumber ?? po.id} — {po.title}
                   </SelectItem>

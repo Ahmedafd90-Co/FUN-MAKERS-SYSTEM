@@ -23,6 +23,7 @@ import {
   CardDescription,
 } from '@fmksa/ui/components/card';
 import { trpc } from '@/lib/trpc-client';
+import type { CreateIpcInput } from '@fmksa/contracts';
 
 // ---------------------------------------------------------------------------
 // Create IPC Page
@@ -51,7 +52,7 @@ export default function CreateIpcPage() {
     take: 100,
     sortField: 'createdAt',
     sortDirection: 'desc',
-  } as any);
+  });
 
   const createMut = trpc.commercial.ipc.create.useMutation({
     onSuccess: (data) => {
@@ -73,7 +74,7 @@ export default function CreateIpcPage() {
     if (!canSubmit) return;
     setError(null);
 
-    const input: Record<string, unknown> = {
+    const input: CreateIpcInput = {
       projectId,
       ipaId,
       certifiedAmount: parseFloat(certifiedAmount),
@@ -86,7 +87,7 @@ export default function CreateIpcPage() {
     if (adjustments) input.adjustments = parseFloat(adjustments);
     if (remarks.trim()) input.remarks = remarks.trim();
 
-    createMut.mutate(input as any);
+    createMut.mutate(input);
   };
 
   return (

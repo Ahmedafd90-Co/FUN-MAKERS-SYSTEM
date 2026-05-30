@@ -167,7 +167,7 @@ export function PurchaseOrderForm({ projectId }: Props) {
                 <SelectValue placeholder="Select vendor" />
               </SelectTrigger>
               <SelectContent>
-                {(vendorsQuery.data ?? []).map((v: any) => (
+                {(vendorsQuery.data ?? []).map((v) => (
                   <SelectItem key={v.vendorId} value={v.vendorId}>
                     {v.vendor.name}
                   </SelectItem>

@@ -102,7 +102,7 @@ export default function CreditNoteListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.map((cn: any) => (
+              {paged.map((cn) => (
                 <TableRow
                   key={cn.id}
                   className="cursor-pointer hover:bg-muted/50"
