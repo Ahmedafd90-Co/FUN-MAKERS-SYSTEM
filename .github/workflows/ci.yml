@@ -170,23 +170,23 @@ jobs:
       # skipped via describe.skipIf(!MINIO_AVAILABLE). MINIO_AVAILABLE gates on
       # STORAGE_ENDPOINT and STORAGE_BUCKET being set (see STORAGE_* env below).
       minio:
-        # bitnami/minio starts the server automatically (no CMD override needed)
-        # and exposes port 9000 by default. Credentials are set via env vars.
-        # The minio/minio upstream image requires a 'server /data' CMD which
-        # GitHub Actions service containers can't inject cleanly; bitnami/minio
-        # bundles the entrypoint so it just starts — same approach used widely
-        # in GitHub Actions CI setups.
-        image: bitnami/minio:latest
+        image: minio/minio:RELEASE.2024-01-01T16-36-33Z
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
         ports:
           - 9000:9000
+        # GitHub Actions 'options' appends to `docker create` verbatim.
+        # Positional args after all flags become the container CMD.
+        # minio/minio's default entrypoint is /usr/bin/docker-entrypoint.sh
+        # which passes all args to the minio binary, so 'server /data'
+        # starts the object storage server at /data.
         options: >-
           --health-cmd "curl -sf http://localhost:9000/minio/health/live"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+          minio server /data
     env:
       # F3 (PIC-76): per-package test DBs prevent cross-package turbo concurrency
       # pollution. Each vitest process routes to its own Postgres database via
