@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { basename } from 'node:path';
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { createStorageAdapter } from './storage';
@@ -48,8 +49,13 @@ export async function uploadVersion(input: UploadVersionInput) {
   const lastVersionNo = document.versions[0]?.versionNo ?? 0;
   const versionNo = lastVersionNo + 1;
 
-  // Generate file key
-  const fileKey = `projects/${document.projectId}/documents/${documentId}/${versionNo}/${fileName}`;
+  // Generate file key.
+  // basename() strips any directory separators from the fileName so that a
+  // crafted multipart Content-Disposition like 'filename="../../admin.pdf"'
+  // produces a clean key component (S-3). The browser File API only returns
+  // the basename anyway; this guards against crafted raw multipart requests.
+  const safeFileName = basename(fileName);
+  const fileKey = `projects/${document.projectId}/documents/${documentId}/${versionNo}/${safeFileName}`;
 
   // Upload to storage
   await storage.upload({

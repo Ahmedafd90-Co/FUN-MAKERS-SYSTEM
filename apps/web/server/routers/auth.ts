@@ -2,6 +2,7 @@
  * Auth tRPC procedures — signIn, signOut, me.
  */
 import { TRPCError } from '@trpc/server';
+import { headers } from 'next/headers';
 import { SignInSchema, ChangePasswordSchema, AuthErrorCode } from '@fmksa/contracts';
 import {
   authService,
@@ -26,12 +27,26 @@ export const authRouter = router({
    */
   signIn: publicProcedure.input(SignInSchema).mutation(async ({ input }) => {
     try {
-      // Step 1: Validate credentials via core service
+      // Step 1: Validate credentials via core service.
+      // Extract real client IP from Next.js request headers for audit-log
+      // fidelity (S-2). x-forwarded-for is set by proxies/load-balancers;
+      // x-real-ip is a single-IP alternative set by some reverse proxies.
+      // Falls back to '0.0.0.0' only when no header is available (e.g. direct
+      // local connections). The Auth.js credentials provider fallback in
+      // lib/auth.ts:74 still uses '0.0.0.0' — a known limitation since
+      // Auth.js v5 Credentials.authorize() does not receive the Request object.
+      const reqHeaders = await headers();
+      const clientIp =
+        reqHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+        reqHeaders.get('x-real-ip') ??
+        '0.0.0.0';
+      const userAgent = reqHeaders.get('user-agent') ?? 'unknown';
+
       await authService.signIn(
         input.email,
         input.password,
-        '0.0.0.0', // IP — in production, extracted from headers
-        'trpc-client', // UA — in production, extracted from headers
+        clientIp,
+        userAgent,
       );
 
       // Step 2: Create the Auth.js session (sets JWT cookie)

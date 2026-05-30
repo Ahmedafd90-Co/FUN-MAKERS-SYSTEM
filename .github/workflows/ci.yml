@@ -163,6 +163,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # Note: MinIO is started as a `docker run -d` shell step (not a service
+      # container) because GitHub Actions service containers can't inject the
+      # required CMD ('server /data') — the runner always places it after the
+      # image name, producing a malformed docker create invocation. See the
+      # "Start MinIO" step below for the correct startup approach.
     env:
       # F3 (PIC-76): per-package test DBs prevent cross-package turbo concurrency
       # pollution. Each vitest process routes to its own Postgres database via
@@ -174,6 +179,16 @@ jobs:
       DATABASE_URL_TEST_DB: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_db?schema=public
       DATABASE_URL_TEST_CORE: postgresql://fmksa:fmksa@localhost:5432/fmksa_test_core?schema=public
       REDIS_URL: redis://localhost:6379
+      # PIC-91 (2026-05-30): MinIO storage env vars. STORAGE_ENDPOINT + STORAGE_BUCKET
+      # set MINIO_AVAILABLE=true so document/storage tests run instead of being
+      # skipped. NODE_ENV is not 'production' in CI so PIC-90's fail-loud check
+      # does not fire even though STORAGE_ACCESS_KEY/SECRET_KEY are the dev defaults.
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_BUCKET: fmksa-dev-documents
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_REGION: us-east-1
+      STORAGE_FORCE_PATH_STYLE: "true"
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -198,6 +213,37 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      # PIC-91 (2026-05-30): Start MinIO server + create bucket.
+      # MinIO requires 'server /data' as the CMD, which GitHub Actions service
+      # containers cannot inject cleanly (the runner places CMD-style args after
+      # the image name, breaking docker create). We use 'docker run -d' instead.
+      # minio/mc then creates the fmksa-dev-documents bucket so tests can upload.
+      - name: Start MinIO and create bucket
+        run: |
+          # Start MinIO with host networking so tests can reach it via localhost:9000
+          docker run -d --name minio \
+            --network host \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:RELEASE.2024-01-01T16-36-33Z \
+            server /data
+          # Wait for MinIO to be healthy before creating the bucket
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
+              echo "MinIO healthy after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+          # minio/mc needs host networking to reach localhost:9000.
+          # alias set and mb must run in a single container invocation
+          # because mc aliases are stored in the container's filesystem
+          # (/root/.mc/config.json) and are lost when the container exits.
+          docker run --rm --network host \
+            --entrypoint /bin/sh \
+            minio/mc:latest \
+            -c "mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb --ignore-existing local/fmksa-dev-documents"
 
       # F3 (PIC-76): create per-package test DBs. The Postgres service container
       # only creates POSTGRES_DB=fmksa_test at startup; the per-package DBs
