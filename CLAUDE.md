@@ -135,7 +135,7 @@ that the rule needs a verifiable artifact (pre-action checklist, CI gate,
 explicit recon step) — not just text in CLAUDE.md. Without operationalisation,
 the rule is decorative.
 
-##### Methodology-insufficiency class (catches 20, 21, 23, 24)
+##### Methodology-insufficiency class (catches 20, 21, 23, 24, 25)
 
 20. **State A locally may not equal State A in CI; reproduce methodology hit a
     wall.** PIC-76 Phase A attempted local State-A reproduction of the CI
@@ -176,13 +176,19 @@ the rule is decorative.
     Step 1 partial; α-rewrite deferred to PIC-78. Operationalized via
     SR-3 mechanics step 5 (verification-at-prescription-layer; see SR-3
     below).
+25. **CI gates on exit code, not stdout — verify at the operative layer (PIC-81,
+    2026-05-30).** turbo's truncated stdout showed 99 of 125 lint errors, framed
+    as "gate blind to 6 files"; an exit-code probe (a lone violation in any file →
+    `turbo run lint` exit 1) disproved it and vacated the prompt's own "blind gate"
+    premise before the gate flip. Same shape as catch 24 — verify at the layer the
+    consumer keys on. Output-display fidelity is a separate axis (PIC-86).
 
 **Operating discipline (methodology-insufficiency class):** when a prescribed
 verification step can't reach the actual failure state, escalate to probe at
 the actual failure surface — don't iterate on a method that can't reach State A.
 Mark unverified prescriptions in PD rulings as `ASSUMED — verify before
 executing` so the gap is visible at execution time. **Class is recurrence-prone**
-— four entries (20, 21, 23, 24) across four sessions; SR-3 canonicalization
+— five entries (20, 21, 23, 24, 25) across five sessions; SR-3 canonicalization
 plus mechanics step 5 (verification-at-prescription-layer) is the binding
 operational response.
 
@@ -210,8 +216,11 @@ Phase 2 backlog ticket per Karpathy "Surgical Changes").
 
 **Extended 2026-05-28:** catch 24 added as 4th methodology-insufficiency entry
 plus SR-3 mechanics step 5 (verification-at-prescription-layer) via standalone
-canonicalization PR following PIC-73 PR #57's runtime-layer finding. Pattern
-register now at 13 catches across 5 structural classes (drift / revision /
+canonicalization PR following PIC-73 PR #57's runtime-layer finding.
+
+**Extended 2026-05-30:** catch 25 (CI gates on exit code, not stdout; verify at
+the operative layer — PIC-81) added to the methodology-insufficiency class.
+Pattern register now at 14 catches across 5 structural classes (drift / revision /
 recurrence / methodology-insufficiency / scope-overgeneralized-retraction).
 
 ### SR-2 — PIC-50 atomic-add convention (extended 2026-05-20 with re-seed step)
@@ -318,20 +327,24 @@ at this rule; SR-3 is the canonical mechanism-side companion.
 **First application:** SR-3 introduced 2026-05-27 in PIC-72 cluster 6/7/1.c,
 landed in the same single-PR umbrella as the SR-1 extension canonicalization.
 
-### SR-Sentinel — PR #4 untouched
+### SR-Sentinel — Preserve only what has live value; retire deliberately at a gate
 
-PR #4 (`chore/brand-adaptation-ci-cleanup`, open 13+ months as of 2026-05) is the
-project's deferred-cleanup sentinel. Do not touch, modify, push to, merge, or
-close PR #4 without an explicit PD ruling. Read-only access via the local worktree
-at `5efaf91` is permitted for investigation.
+A branch, stash, or worktree is preserved only because it has an *identified
+future purpose*. Once that purpose is consumed, or it is ruled dead, it retires —
+deliberately, at a gate, with explicit PD sign-off. Indefinite preservation
+without a live subject is the failure mode (see SR-1 extension: "PR #10 untouched"
+guarded an abandoned PR for the engagement's duration).
 
-Disposition revisited as part of PIC-72 Cluster 8 (PR #4 + PR #10 investigation,
-post-cluster-1.a).
+**Live instances (2026-05-30):**
+- PR #15 branches `feature/commercial-monthly-cost-sheet` + `claude/vigorous-mahavira-f84718` — held for PIC-82.
+- lane-b stash (`fix/demo-project-integrity-prereq`) — held pending PD disposition.
 
-**Canonicalized 2026-05-22 per PIC-72 Phase A Discovery (Linear comment c417797f).**
-Prior to canonicalization, this rule operated as session-memory only and used the
-wrong identifier (PR #10 instead of PR #4). See SR-1 extension above for the
-six-layer drift history.
+**Retired:** PR #4 (`chore/brand-adaptation-ci-cleanup`) — salvage consumed by
+PIC-81; branch + worktree deleted 2026-05-30 with PD sign-off.
+
+**Provenance:** PIC-72 Cluster 8 disposition; canonicalized 2026-05-22 (Linear
+c417797f), reframed at PIC-81 close. Prior session-memory form used the wrong
+identifier (PR #10 instead of PR #4) — see SR-1 extension for the six-layer drift.
 
 ### SR-Multi-Tenancy — Per-tenant identity belongs in runtime configuration, not in `packages/`
 
@@ -455,3 +468,30 @@ full per-entity rationale and `docs/architecture.md` §
 PIC-72 cluster 6/7/1.c. Indexes patterns landed in earlier cluster work;
 future patterns added here as they mature from one-off decisions to
 reusable shapes.
+
+### SR-Playbook — Worked examples (PIC-72 arc, indexed by lesson)
+
+Lesson-first pointers into the catch register + ticket comments. The rule lives
+here; the detail lives at the pointer.
+
+1. **Re-verify the verifier.** A fix's own check can be vacuous; confirm green
+   means what you think before trusting it. → catch 24; PIC-78.
+2. **Transitive-reader sweep.** Changing a shape means finding every reader,
+   including indirect ones. → PIC-80: `tests/workflow/steps.test.ts` reads
+   `startInstance`'s return, so an optional-param union return would have broken
+   it — forced the sibling method (`startInstanceDeferred`).
+3. **Refuse unsourced rulings.** Don't act on a ruling whose provenance can't be
+   traced. → SR-1 extension, layers 5–6.
+4. **Stop the deviation gradient early.** Don't fold an N-site cascade into an
+   unrelated cluster. → cluster 1.b; Karpathy Surgical Changes.
+5. **Framing is a hypothesis; recon is truth.** Reconcile before mutating. →
+   SR-3; catch 23.
+6. **Verification masked by the layer it checks.** A gate/test passes because it
+   checks the wrong layer; verify at the operative one. → catches 24–25; cluster 4.
+7. **Sentinels discharge.** A preservation rule retires once its purpose is
+   consumed — deliberately, at a gate. → SR-Sentinel; cluster 8 → PIC-81.
+8. **Literal mechanism infeasible, intent sound → SURFACE.** Don't follow a
+   ruling off a cliff; don't override unilaterally. → PIC-80 sibling method;
+   PIC-81 exit-code probe (vacated the PD's "blind gate" premise).
+9. **Trust exit codes; verify output fidelity.** turbo's piped output can mask a
+   signal or truncate a coverage display. → catches 14/22/25; PIC-86.
