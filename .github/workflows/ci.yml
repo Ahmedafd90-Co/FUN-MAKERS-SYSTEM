@@ -82,14 +82,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # Lint is TEMPORARILY non-blocking — 98 pre-existing no-explicit-any
-      # errors across apps/web, being addressed on chore/brand-adaptation-ci-
-      # cleanup (PR #4). This flag will be removed once that cleanup lands.
-      # Authoritative merge gates: Setup, Typecheck, Build, Test. (Test was
-      # made blocking in PIC-72 cluster 1.b; Lint remains the only soft check
-      # pending the brand-adaptation / PR #4 arc.)
+      # Lint is a BLOCKING gate as of PIC-81 (PIC-72 foundation closeout): the
+      # 125 pre-existing error-level violations across apps/web (121 no-explicit-
+      # any + 4 react/no-unescaped-entities) were cleared on merit — salvage-port
+      # from PR #4 + fresh typing, proper types only, no eslint-disable. The
+      # `continue-on-error` soft-gate flag is removed; `turbo run lint` gates on
+      # exit code, which reflects a violation in ANY linted file (verified locally
+      # via an exit-code probe). Caveat: turbo's piped stdout can truncate the
+      # failing lines on a red run — that is output FIDELITY (tracked in PIC-86),
+      # not a coverage gap; the exit code is authoritative. Authoritative merge
+      # gates: Setup, Lint, Typecheck, Build, Test.
       - name: Run lint
-        continue-on-error: true
         run: pnpm turbo run lint
 
   # ──────────────────────────────────────────────
