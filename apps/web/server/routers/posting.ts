@@ -10,6 +10,15 @@
  *
  * Permissions: Uses granular posting.view / posting.retry / posting.resolve
  * codes instead of blanket system.admin. Master admin bypasses via system.admin.
+ *
+ * SCOPE — platform-super-admin only (ruling c9ec11f6, 2026-05-30 / PIC-92):
+ * posting.view / .retry / .resolve are held by master_admin exclusively.
+ * These codes expose the full cross-project posting event and exception surface;
+ * granting them to a tenant-scoped role would allow that role to read or
+ * manipulate posting events across all projects (see PIC-89 D1 F-1 for the
+ * tenancy analysis). The super-admin-only constraint is enforced in CI by
+ * packages/db/tests/seed/seed-coverage.test.ts
+ * ('posting.* permissions are held by master_admin only').
  */
 import { TRPCError } from '@trpc/server';
 import {

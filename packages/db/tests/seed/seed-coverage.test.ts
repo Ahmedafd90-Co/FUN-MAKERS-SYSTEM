@@ -210,4 +210,37 @@ describe('Seed coverage — every catalog permission must be granted', () => {
 
     expect(grants).toBe(0);
   });
+
+  it('posting.* permissions are held by master_admin only — no tenant-scoped role (PIC-92)', async () => {
+    // Design ruling c9ec11f6 (2026-05-30): posting.view / .retry / .resolve are
+    // platform-super-admin-only. These codes expose the full cross-project posting
+    // event/exception surface (see PIC-89 D1 F-1 for the tenancy analysis). They
+    // must NEVER be granted to a tenant-scoped role. This test fails loudly if any
+    // role-permission seed file adds posting.* to any non-master_admin role.
+    const postingPerms = await prisma.permission.findMany({
+      where: { resource: 'posting' },
+      select: { id: true, code: true },
+    });
+
+    expect(postingPerms.length).toBe(3); // posting.view, posting.retry, posting.resolve
+
+    const grants = await prisma.rolePermission.findMany({
+      where: { permissionId: { in: postingPerms.map((p) => p.id) } },
+      include: { role: { select: { code: true } } },
+    });
+
+    const nonAdminGrants = grants.filter((g) => g.role.code !== 'master_admin');
+
+    if (nonAdminGrants.length > 0) {
+      const details = nonAdminGrants
+        .map((g) => `${g.role.code} → ${postingPerms.find((p) => p.id === g.permissionId)?.code}`)
+        .sort()
+        .join(', ');
+      expect.fail(
+        `posting.* permissions must be held by master_admin only (ruling c9ec11f6 / PIC-92). ` +
+          `The following non-admin grants were found: ${details}. ` +
+          `Remove them from the offending role-permission seed file.`,
+      );
+    }
+  });
 });
