@@ -163,30 +163,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      # PIC-91 (2026-05-30): MinIO service container — mirrors
-      # infra/docker/docker-compose.yml's minio service for local-CI parity.
-      # Document/storage tests (documents/*, audit/coverage MinIO-gated) require
-      # a live S3-compatible endpoint. Without this, ~43 tests are permanently
-      # skipped via describe.skipIf(!MINIO_AVAILABLE). MINIO_AVAILABLE gates on
-      # STORAGE_ENDPOINT and STORAGE_BUCKET being set (see STORAGE_* env below).
-      minio:
-        image: minio/minio:RELEASE.2024-01-01T16-36-33Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        # GitHub Actions 'options' appends to `docker create` verbatim.
-        # Positional args after all flags become the container CMD.
-        # minio/minio's default entrypoint is /usr/bin/docker-entrypoint.sh
-        # which passes all args to the minio binary, so 'server /data'
-        # starts the object storage server at /data.
-        options: >-
-          --health-cmd "curl -sf http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
-          minio server /data
+      # Note: MinIO is started as a `docker run -d` shell step (not a service
+      # container) because GitHub Actions service containers can't inject the
+      # required CMD ('server /data') — the runner always places it after the
+      # image name, producing a malformed docker create invocation. See the
+      # "Start MinIO" step below for the correct startup approach.
     env:
       # F3 (PIC-76): per-package test DBs prevent cross-package turbo concurrency
       # pollution. Each vitest process routes to its own Postgres database via
@@ -233,17 +214,31 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # PIC-91 (2026-05-30): Create MinIO bucket. The MinIO service container
-      # starts but does not pre-create buckets. The minio/mc CLI creates the
-      # fmksa-dev-documents bucket so document/storage tests can upload and
-      # download. Runs after node/pnpm setup (mc is pulled from the minio/mc
-      # image; --network host reaches the service on localhost:9000).
-      - name: Create MinIO bucket
+      # PIC-91 (2026-05-30): Start MinIO server + create bucket.
+      # MinIO requires 'server /data' as the CMD, which GitHub Actions service
+      # containers cannot inject cleanly (the runner places CMD-style args after
+      # the image name, breaking docker create). We use 'docker run -d' instead.
+      # minio/mc then creates the fmksa-dev-documents bucket so tests can upload.
+      - name: Start MinIO and create bucket
         run: |
-          docker run --rm --network host \
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:RELEASE.2024-01-01T16-36-33Z \
+            server /data
+          # Wait for MinIO to be healthy before creating the bucket
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
+              echo "MinIO healthy after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+          docker run --rm \
             minio/mc:latest \
-            alias set local http://localhost:9000 minioadmin minioadmin \
-            && docker run --rm --network host \
+            alias set local http://localhost:9000 minioadmin minioadmin
+          docker run --rm \
             minio/mc:latest \
             mb --ignore-existing local/fmksa-dev-documents
 
