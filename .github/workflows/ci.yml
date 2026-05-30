@@ -221,8 +221,9 @@ jobs:
       # minio/mc then creates the fmksa-dev-documents bucket so tests can upload.
       - name: Start MinIO and create bucket
         run: |
+          # Start MinIO with host networking so tests can reach it via localhost:9000
           docker run -d --name minio \
-            -p 9000:9000 \
+            --network host \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             minio/minio:RELEASE.2024-01-01T16-36-33Z \
@@ -235,10 +236,11 @@ jobs:
             fi
             sleep 2
           done
-          docker run --rm \
+          # minio/mc also needs host networking so it can reach localhost:9000
+          docker run --rm --network host \
             minio/mc:latest \
             alias set local http://localhost:9000 minioadmin minioadmin
-          docker run --rm \
+          docker run --rm --network host \
             minio/mc:latest \
             mb --ignore-existing local/fmksa-dev-documents
 
