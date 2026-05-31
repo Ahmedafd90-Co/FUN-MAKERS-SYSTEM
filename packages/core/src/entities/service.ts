@@ -54,8 +54,11 @@ export const entitiesService = {
    * Create a new entity.
    */
   async createEntity(input: CreateEntityInput) {
-    // Validate unique code
-    const existing = await prisma.entity.findUnique({
+    // Validate unique code. PIC-96 (F2): code is now unique PER-ORG
+    // (@@unique([orgId, code])); orgId is unenforced at the app layer until F3,
+    // so this pre-check stays a global findFirst. F3 scopes it to ctx.orgId to
+    // match the per-tenant constraint (today single-tenant, so global == per-org).
+    const existing = await prisma.entity.findFirst({
       where: { code: input.code },
     });
     if (existing) {

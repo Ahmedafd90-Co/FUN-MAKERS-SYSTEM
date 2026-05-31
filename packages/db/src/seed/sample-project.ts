@@ -1,21 +1,28 @@
 import type { PrismaClient } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 
 export async function seedSampleProject(prisma: PrismaClient) {
   console.log('  Seeding sample projects...');
 
   // Look up entities for project assignment
-  const opsEntity = await prisma.entity.findUnique({ where: { code: 'FMKSA-OPS' } });
+  const opsEntity = await prisma.entity.findUnique({
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-OPS' } },
+  });
   if (!opsEntity) {
     throw new Error('Entity FMKSA-OPS not found. Run sample-entity seed first.');
   }
 
-  const ruhEntity = await prisma.entity.findUnique({ where: { code: 'FMKSA-RUH' } });
-  const jedEntity = await prisma.entity.findUnique({ where: { code: 'FMKSA-JED' } });
+  const ruhEntity = await prisma.entity.findUnique({
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-RUH' } },
+  });
+  const jedEntity = await prisma.entity.findUnique({
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-JED' } },
+  });
 
   // Project 1 — flagship active project under operations
   // Financial baseline set for stakeholder KPI demo
   await prisma.project.upsert({
-    where: { code: 'FMKSA-2026-001' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-001' } },
     create: {
       code: 'FMKSA-2026-001',
       name: 'Al Yamamah Entertainment Complex',
@@ -40,7 +47,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
 
   // Project 2 — active project under Riyadh branch (or fallback to ops)
   await prisma.project.upsert({
-    where: { code: 'FMKSA-2026-002' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-002' } },
     create: {
       code: 'FMKSA-2026-002',
       name: 'Riyadh Season Pavilion',
@@ -61,7 +68,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
 
   // Project 3 — on-hold project under Jeddah branch (or fallback to ops)
   await prisma.project.upsert({
-    where: { code: 'FMKSA-2026-003' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-003' } },
     create: {
       code: 'FMKSA-2026-003',
       name: 'Jeddah Waterfront Experience Zone',
@@ -81,7 +88,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
 
   // Keep legacy demo project for backward compatibility (existing assignments reference it)
   await prisma.project.upsert({
-    where: { code: 'FMKSA-DEMO-001' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-DEMO-001' } },
     create: {
       code: 'FMKSA-DEMO-001',
       name: 'Fun Makers KSA Demo Project',

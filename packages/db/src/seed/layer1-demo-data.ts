@@ -20,6 +20,7 @@
  */
 import type { PrismaClient, ProjectParticipantRole } from '@prisma/client';
 import { MASTER_ADMIN_EMAIL } from './master-admin';
+import { SINGLETON_ORG_ID } from './organizations';
 
 // ---------------------------------------------------------------------------
 // External entity registry (clients + design consultant)
@@ -71,7 +72,9 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
 
   // Resolve the FMKSA-OPS entity — it plays the prime_contractor role on every
   // demo project (Pico Play's primary delivery entity).
-  const opsEntity = await prisma.entity.findUnique({ where: { code: 'FMKSA-OPS' } });
+  const opsEntity = await prisma.entity.findUnique({
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-OPS' } },
+  });
   if (!opsEntity) {
     console.warn('  ⚠ Layer 1 demo data skipped: FMKSA-OPS entity not found.');
     return;
@@ -79,12 +82,12 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
 
   // 1. Upsert shared external entities (design + sub).
   const designEntity = await prisma.entity.upsert({
-    where: { code: DESIGN_ENTITY.code },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: DESIGN_ENTITY.code } },
     create: { code: DESIGN_ENTITY.code, name: DESIGN_ENTITY.name, type: 'operating_unit', status: 'active' },
     update: { name: DESIGN_ENTITY.name, status: 'active' },
   });
   const subEntity = await prisma.entity.upsert({
-    where: { code: SUB_ENTITY.code },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: SUB_ENTITY.code } },
     create: { code: SUB_ENTITY.code, name: SUB_ENTITY.name, type: 'operating_unit', status: 'active' },
     update: { name: SUB_ENTITY.name, status: 'active' },
   });
@@ -93,12 +96,14 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
   let primeContractsCreated = 0;
 
   for (const client of CLIENT_ENTITIES) {
-    const project = await prisma.project.findUnique({ where: { code: client.projectCode } });
+    const project = await prisma.project.findUnique({
+      where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: client.projectCode } },
+    });
     if (!project) continue;
 
     // 2. Upsert the per-project client entity.
     const clientEntity = await prisma.entity.upsert({
-      where: { code: client.entityCode },
+      where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: client.entityCode } },
       create: { code: client.entityCode, name: client.name, type: 'operating_unit', status: 'active' },
       update: { name: client.name, status: 'active' },
     });

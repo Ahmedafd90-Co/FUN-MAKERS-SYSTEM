@@ -29,6 +29,7 @@
  * leaks into operator-visible UI.
  */
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 
 /**
  * Reserved fixture reference number — acts as the idempotency anchor. The
@@ -41,7 +42,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   console.log('  Seeding end-to-end demo data...');
 
   const project = await prisma.project.findUnique({
-    where: { code: 'FMKSA-2026-001' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-001' } },
   });
   if (!project) {
     console.log('  ⚠ Project FMKSA-2026-001 not found — skipping E2E demo.');
