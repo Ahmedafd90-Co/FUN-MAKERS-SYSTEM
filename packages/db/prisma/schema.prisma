@@ -121,6 +121,13 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // PIC-95 (F1) — backbone edges: the tenant root now owns the structural
+  // hierarchy (Org → Entity → Project) and user membership, not just the
+  // 10 PIC-75 transactional leaves.
+  entities Entity[]
+  users    User[]
+  projects Project[]
+
   // Reverse relations — per-tenant scoped transactional models (PIC-75)
   ipas                 Ipa[]
   ipcs                 Ipc[]
@@ -138,6 +145,8 @@ model Organization {
 
 model User {
   id               String     @id @default(uuid()) @map("id")
+  // PIC-95 (F1) — per-tenant membership (singleton default during single-tenant phase)
+  orgId            String     @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   email            String     @unique @map("email")
   name             String     @map("name")
   passwordHash     String     @map("password_hash")
@@ -150,6 +159,7 @@ model User {
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
   // Relations
+  organization                 Organization             @relation(fields: [orgId], references: [id])
   sessions                     UserSession[]
   userRoles                    UserRole[]
   projectAssignments           ProjectAssignment[]
@@ -270,6 +280,8 @@ enum EntityStatus {
 
 model Entity {
   id             String       @id @default(uuid()) @map("id")
+  // PIC-95 (F1) — per-tenant scope (singleton default during single-tenant phase)
+  orgId          String       @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   code           String       @unique @map("code")
   name           String       @map("name")
   type           EntityType   @map("type")
@@ -284,6 +296,7 @@ model Entity {
   children Entity[] @relation("EntityParent")
 
   // Relations
+  organization              Organization           @relation(fields: [orgId], references: [id])
   projects                  Project[]
   // Module 3 — Procurement Engine relations
   vendors                   Vendor[]
@@ -322,6 +335,9 @@ enum ProjectStatus {
 
 model Project {
   id                   String        @id @default(uuid()) @map("id")
+  // PIC-95 (F1) — denormalized per-tenant scope; derives from Entity.orgId
+  // (Org → Entity → Project). Singleton default during single-tenant phase.
+  orgId                String        @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   code                 String        @unique @map("code")
   name                 String        @map("name")
   entityId             String        @map("entity_id")
@@ -341,6 +357,7 @@ model Project {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
+  organization               Organization                @relation(fields: [orgId], references: [id])
   entity                     Entity                      @relation(fields: [entityId], references: [id])
   currency                   Currency                    @relation(fields: [currencyCode], references: [code])
   assignments                ProjectAssignment[]
