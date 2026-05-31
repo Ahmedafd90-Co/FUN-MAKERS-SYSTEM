@@ -49,8 +49,11 @@ export const projectsService = {
    * Writes an audit log entry.
    */
   async createProject(input: CreateProjectInput) {
-    // Validate unique code
-    const existing = await prisma.project.findUnique({
+    // Validate unique code. PIC-96 (F2): code is now unique PER-ORG
+    // (@@unique([orgId, code])); orgId is unenforced at the app layer until F3,
+    // so this pre-check stays a global findFirst. F3 scopes it to ctx.orgId to
+    // match the per-tenant constraint (today single-tenant, so global == per-org).
+    const existing = await prisma.project.findFirst({
       where: { code: input.code },
     });
     if (existing) {

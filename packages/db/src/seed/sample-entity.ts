@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 
 export async function seedSampleEntity(prisma: PrismaClient) {
   console.log('  Seeding sample entities...');
 
   // Parent holding company
   const parent = await prisma.entity.upsert({
-    where: { code: 'PICOPLAY-KSA' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'PICOPLAY-KSA' } },
     create: {
       code: 'PICOPLAY-KSA',
       name: 'Pico Play KSA',
@@ -21,7 +22,7 @@ export async function seedSampleEntity(prisma: PrismaClient) {
 
   // Operating subsidiary
   const ops = await prisma.entity.upsert({
-    where: { code: 'FMKSA-OPS' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-OPS' } },
     create: {
       code: 'FMKSA-OPS',
       name: 'Fun Makers KSA Operations',
@@ -39,7 +40,7 @@ export async function seedSampleEntity(prisma: PrismaClient) {
 
   // Riyadh branch
   await prisma.entity.upsert({
-    where: { code: 'FMKSA-RUH' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-RUH' } },
     create: {
       code: 'FMKSA-RUH',
       name: 'Fun Makers Riyadh',
@@ -57,7 +58,7 @@ export async function seedSampleEntity(prisma: PrismaClient) {
 
   // Jeddah branch
   await prisma.entity.upsert({
-    where: { code: 'FMKSA-JED' },
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-JED' } },
     create: {
       code: 'FMKSA-JED',
       name: 'Fun Makers Jeddah',

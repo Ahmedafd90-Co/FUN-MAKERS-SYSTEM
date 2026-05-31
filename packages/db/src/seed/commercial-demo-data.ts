@@ -29,11 +29,14 @@
  *   surfacing), revisit and migrate to Option A then.
  */
 import type { PrismaClient } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 
 export async function seedCommercialDemoData(prisma: PrismaClient) {
   console.log('  Seeding commercial demo data...');
 
-  const project = await prisma.project.findUnique({ where: { code: 'FMKSA-2026-001' } });
+  const project = await prisma.project.findUnique({
+    where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-001' } },
+  });
   if (!project) {
     console.log('  ⚠ Project FMKSA-2026-001 not found — skipping commercial demo data.');
     return;
