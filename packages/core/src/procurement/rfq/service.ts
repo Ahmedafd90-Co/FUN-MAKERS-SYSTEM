@@ -9,7 +9,8 @@ import type { CreateRfqInput, UpdateRfqInput, ProcurementListFilterInput } from 
 import { auditService } from '../../audit/service';
 import { workflowInstanceService, TemplateNotActiveError, DuplicateInstanceError, resolveTemplateCode } from '../../workflow';
 import { RFQ_TRANSITIONS, RFQ_TERMINAL_STATUSES, ACTION_TO_STATUS, RFQ_WORKFLOW_MANAGED_ACTIONS } from './transitions';
-import { nextRfqNumber, nextRfqReferenceNumber, EDITABLE_STATUSES } from './validation';
+import { nextRfqReferenceNumber, EDITABLE_STATUSES } from './validation';
+import { generateOrgScopedNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -17,64 +18,53 @@ import { assertProjectScope } from '../../scope-binding';
 // ---------------------------------------------------------------------------
 
 export async function createRfq(input: CreateRfqInput, actorUserId: string) {
-  const MAX_RETRIES = 1;
-  let attempt = 0;
+  // PIC-84: atomic per-org counter replaces read-max+retry-once. No P2002 retry needed.
+  const record = await prisma.$transaction(async (tx) => {
+    // RFQ is project-scoped — derive orgId from the project.
+    const project = await (tx as any).project.findUniqueOrThrow({
+      where: { id: input.projectId },
+      select: { orgId: true },
+    });
+    const rfqNumber = await generateOrgScopedNumber(
+      project.orgId,
+      'RFQ',
+      (n: number) => `RFQ-${String(n).padStart(4, '0')}`,
+      tx,
+    );
 
-  const record = await (async () => {
-    while (true) {
-      try {
-        return await prisma.$transaction(async (tx) => {
-          const last = await (tx as any).rFQ.findFirst({
-            orderBy: { rfqNumber: 'desc' },
-            select: { rfqNumber: true },
-          });
-          const rfqNumber = nextRfqNumber(last?.rfqNumber ?? null);
+    const rfq = await (tx as any).rFQ.create({
+      data: {
+        orgId: project.orgId,
+        projectId: input.projectId,
+        rfqNumber,
+        title: input.title,
+        description: input.description ?? null,
+        requiredByDate: input.deadline ? new Date(input.deadline) : null,
+        categoryId: input.categoryId ?? null,
+        currency: input.currency,
+        estimatedBudget: input.estimatedBudget ?? null,
+        status: 'draft',
+        createdBy: actorUserId,
+        ...(input.items && input.items.length > 0
+          ? { items: { create: input.items.map((item) => ({
+              itemCatalogId: item.itemCatalogId ?? null,
+              itemDescription: item.itemDescription,
+              quantity: item.quantity,
+              unit: item.unit,
+              estimatedUnitPrice: item.estimatedUnitPrice ?? null,
+            })) } }
+          : {}),
+        ...(input.invitedVendorIds && input.invitedVendorIds.length > 0
+          ? { rfqVendors: { create: input.invitedVendorIds.map((vendorId) => ({
+              vendorId,
+            })) } }
+          : {}),
+      },
+      include: { items: true, rfqVendors: true },
+    });
 
-          const rfq = await (tx as any).rFQ.create({
-            data: {
-              projectId: input.projectId,
-              rfqNumber,
-              title: input.title,
-              description: input.description ?? null,
-              requiredByDate: input.deadline ? new Date(input.deadline) : null,
-              categoryId: input.categoryId ?? null,
-              currency: input.currency,
-              estimatedBudget: input.estimatedBudget ?? null,
-              status: 'draft',
-              createdBy: actorUserId,
-              ...(input.items && input.items.length > 0
-                ? { items: { create: input.items.map((item) => ({
-                    itemCatalogId: item.itemCatalogId ?? null,
-                    itemDescription: item.itemDescription,
-                    quantity: item.quantity,
-                    unit: item.unit,
-                    estimatedUnitPrice: item.estimatedUnitPrice ?? null,
-                  })) } }
-                : {}),
-              ...(input.invitedVendorIds && input.invitedVendorIds.length > 0
-                ? { rfqVendors: { create: input.invitedVendorIds.map((vendorId) => ({
-                    vendorId,
-                  })) } }
-                : {}),
-            },
-            include: { items: true, rfqVendors: true },
-          });
-
-          return rfq;
-        });
-      } catch (err: unknown) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002' &&
-          attempt < MAX_RETRIES
-        ) {
-          attempt++;
-          continue;
-        }
-        throw err;
-      }
-    }
-  })();
+    return rfq;
+  });
 
   await auditService.log({
     actorUserId,

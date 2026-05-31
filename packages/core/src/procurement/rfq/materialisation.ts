@@ -33,8 +33,7 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { assertProjectScope } from '../../scope-binding';
-import { generateReferenceNumber } from '../../commercial/reference-number/service';
-import { nextContractNumber } from '../vendor-contract/validation';
+import { generateReferenceNumber, generateOrgScopedNumber } from '../../commercial/reference-number/service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -232,13 +231,20 @@ export async function materialiseAward(
     const startDate = new Date();
     const endDate = defaultEndDate(startDate);
     const created = await prisma.$transaction(async (tx) => {
-      const last = await (tx as typeof prisma).vendorContract.findFirst({
-        orderBy: { contractNumber: 'desc' },
-        select: { contractNumber: true },
+      // PIC-84: VendorContract is project-scoped — derive orgId from the project + atomic counter.
+      const project = await (tx as typeof prisma).project.findUniqueOrThrow({
+        where: { id: input.projectId },
+        select: { orgId: true },
       });
-      const contractNumber = nextContractNumber(last?.contractNumber ?? null);
+      const contractNumber = await generateOrgScopedNumber(
+        project.orgId,
+        'VC',
+        (n: number) => `VC-${String(n).padStart(4, '0')}`,
+        tx,
+      );
       return (tx as typeof prisma).vendorContract.create({
         data: {
+          orgId: project.orgId,
           projectId: input.projectId,
           vendorId: awardedQuotation!.vendorId,
           rfqId: input.rfqId,

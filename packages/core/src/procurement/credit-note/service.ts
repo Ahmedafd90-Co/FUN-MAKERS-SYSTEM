@@ -3,7 +3,7 @@
  *
  * Module 3 Procurement Engine — Credit Note lifecycle.
  */
-import { prisma, runAsWorkflowEngine } from '@fmksa/db';
+import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CreditNoteStatus } from '@fmksa/db';
 import { auditService, type TransactionClient } from '../../audit/service';
 import {
@@ -44,49 +44,63 @@ export async function createCreditNote(
   actorUserId: string,
 ) {
   // PIC-80: entity create + audit + workflow seed atomic; emit deferred to post-commit.
-  const { record, deferred } = await prisma.$transaction(async (tx) => {
-    const record = await (tx as any).creditNote.create({
-      data: {
-        projectId: input.projectId,
-        vendorId: input.vendorId,
-        subtype: input.subtype as any,
-        creditNoteNumber: input.creditNoteNumber,
-        supplierInvoiceId: input.supplierInvoiceId ?? null,
-        purchaseOrderId: input.purchaseOrderId ?? null,
-        correspondenceId: input.correspondenceId ?? null,
-        amount: input.amount,
-        currency: input.currency,
-        reason: input.reason,
-        receivedDate: new Date(input.receivedDate),
-        status: 'received',
-        createdBy: actorUserId,
-      },
+  // PIC-84: creditNoteNumber is user-supplied + now per-tenant unique ([orgId, number]);
+  // translate a uniqueness P2002 into a tenant-scoped message.
+  try {
+    const { record, deferred } = await prisma.$transaction(async (tx) => {
+      const record = await (tx as any).creditNote.create({
+        data: {
+          projectId: input.projectId,
+          vendorId: input.vendorId,
+          subtype: input.subtype as any,
+          creditNoteNumber: input.creditNoteNumber,
+          supplierInvoiceId: input.supplierInvoiceId ?? null,
+          purchaseOrderId: input.purchaseOrderId ?? null,
+          correspondenceId: input.correspondenceId ?? null,
+          amount: input.amount,
+          currency: input.currency,
+          reason: input.reason,
+          receivedDate: new Date(input.receivedDate),
+          status: 'received',
+          createdBy: actorUserId,
+        },
+      });
+
+      await auditService.log(
+        {
+          actorUserId,
+          actorSource: 'user',
+          action: 'credit_note.create',
+          resourceType: 'credit_note',
+          resourceId: record.id,
+          projectId: input.projectId,
+          beforeJson: null,
+          afterJson: record as any,
+        },
+        tx,
+      );
+
+      // PIC-35 Step 5: auto-seed workflow_instance at entity-create (on tx).
+      const deferred = await autoSeedCreditNoteWorkflow(record.id, input.projectId, actorUserId, tx);
+
+      return { record, deferred };
     });
 
-    await auditService.log(
-      {
-        actorUserId,
-        actorSource: 'user',
-        action: 'credit_note.create',
-        resourceType: 'credit_note',
-        resourceId: record.id,
-        projectId: input.projectId,
-        beforeJson: null,
-        afterJson: record as any,
-      },
-      tx,
-    );
+    // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
+    await dispatchDeferred(deferred);
 
-    // PIC-35 Step 5: auto-seed workflow_instance at entity-create (on tx).
-    const deferred = await autoSeedCreditNoteWorkflow(record.id, input.projectId, actorUserId, tx);
-
-    return { record, deferred };
-  });
-
-  // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
-  await dispatchDeferred(deferred);
-
-  return record;
+    return record;
+  } catch (err: unknown) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      throw new Error(
+        `Credit note number "${input.creditNoteNumber}" already exists in your organization.`,
+      );
+    }
+    throw err;
+  }
 }
 
 async function autoSeedCreditNoteWorkflow(

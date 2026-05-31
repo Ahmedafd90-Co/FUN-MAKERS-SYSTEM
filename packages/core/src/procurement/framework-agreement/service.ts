@@ -16,7 +16,8 @@ import {
   type DeferredWorkflowEvent,
 } from '../../workflow';
 import { FRAMEWORK_AGREEMENT_TRANSITIONS, FRAMEWORK_AGREEMENT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
-import { nextAgreementNumber, EDITABLE_STATUSES } from './validation';
+import { EDITABLE_STATUSES } from './validation';
+import { generateOrgScopedNumber } from '../../commercial/reference-number/service';
 import { assertEntityScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -24,88 +25,77 @@ import { assertEntityScope } from '../../scope-binding';
 // ---------------------------------------------------------------------------
 
 export async function createFrameworkAgreement(input: CreateFrameworkAgreementInput, actorUserId: string) {
-  const MAX_RETRIES = 1;
-  let attempt = 0;
+  // PIC-84: atomic per-org counter replaces read-max+retry-once. No P2002 retry needed.
+  const { record, deferred } = await prisma.$transaction(async (tx) => {
+    // FrameworkAgreement is entity-scoped — derive orgId from the entity.
+    const entity = await (tx as any).entity.findUniqueOrThrow({
+      where: { id: input.entityId },
+      select: { orgId: true },
+    });
+    const agreementNumber = await generateOrgScopedNumber(
+      entity.orgId,
+      'FA',
+      (n: number) => `FA-${String(n).padStart(4, '0')}`,
+      tx,
+    );
 
-  const { record, deferred } = await (async () => {
-    while (true) {
-      try {
-        return await prisma.$transaction(async (tx) => {
-          const last = await (tx as any).frameworkAgreement.findFirst({
-            orderBy: { agreementNumber: 'desc' },
-            select: { agreementNumber: true },
-          });
-          const agreementNumber = nextAgreementNumber(last?.agreementNumber ?? null);
+    const created = await (tx as any).frameworkAgreement.create({
+      data: {
+        orgId: entity.orgId,
+        entityId: input.entityId,
+        vendorId: input.vendorId,
+        projectId: input.projectId ?? null,
+        agreementNumber,
+        title: input.title,
+        description: input.description ?? null,
+        validFrom: new Date(input.validFrom),
+        validTo: new Date(input.validTo),
+        currency: input.currency,
+        totalCommittedValue: input.totalCommittedValue ?? null,
+        status: 'draft',
+        createdBy: actorUserId,
+        ...(input.items && input.items.length > 0
+          ? { items: { create: input.items.map((item) => ({
+              itemCatalogId: item.itemCatalogId ?? null,
+              itemDescription: item.itemDescription,
+              unit: item.unit,
+              agreedRate: item.agreedRate,
+              currency: item.currency,
+              minQuantity: item.minQuantity ?? null,
+              maxQuantity: item.maxQuantity ?? null,
+              notes: item.notes ?? null,
+            })) } }
+          : {}),
+      },
+      include: { items: true },
+    });
 
-          const created = await (tx as any).frameworkAgreement.create({
-            data: {
-              entityId: input.entityId,
-              vendorId: input.vendorId,
-              projectId: input.projectId ?? null,
-              agreementNumber,
-              title: input.title,
-              description: input.description ?? null,
-              validFrom: new Date(input.validFrom),
-              validTo: new Date(input.validTo),
-              currency: input.currency,
-              totalCommittedValue: input.totalCommittedValue ?? null,
-              status: 'draft',
-              createdBy: actorUserId,
-              ...(input.items && input.items.length > 0
-                ? { items: { create: input.items.map((item) => ({
-                    itemCatalogId: item.itemCatalogId ?? null,
-                    itemDescription: item.itemDescription,
-                    unit: item.unit,
-                    agreedRate: item.agreedRate,
-                    currency: item.currency,
-                    minQuantity: item.minQuantity ?? null,
-                    maxQuantity: item.maxQuantity ?? null,
-                    notes: item.notes ?? null,
-                  })) } }
-                : {}),
-            },
-            include: { items: true },
-          });
+    // PIC-80: audit + workflow seed share this transaction (atomic with the
+    // create + the agreementNumber). FrameworkAgreement is entity-scoped —
+    // projectId may be null; the seed is conditional and the deferred descriptor
+    // is null when there's no project (no orphan risk: no workflow_instance is
+    // expected without a project).
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'framework_agreement.create',
+        resourceType: 'framework_agreement',
+        resourceId: created.id,
+        projectId: input.projectId ?? null,
+        beforeJson: null,
+        afterJson: created as any,
+      },
+      tx,
+    );
 
-          // PIC-80: audit + workflow seed share this transaction (atomic with the
-          // create + the P2002-retried agreementNumber). FrameworkAgreement is
-          // entity-scoped — projectId may be null; the seed is conditional and the
-          // deferred descriptor is null when there's no project (no orphan risk:
-          // no workflow_instance is expected without a project).
-          await auditService.log(
-            {
-              actorUserId,
-              actorSource: 'user',
-              action: 'framework_agreement.create',
-              resourceType: 'framework_agreement',
-              resourceId: created.id,
-              projectId: input.projectId ?? null,
-              beforeJson: null,
-              afterJson: created as any,
-            },
-            tx,
-          );
-
-          let deferred: DeferredWorkflowEvent | null = null;
-          if (input.projectId) {
-            deferred = await autoSeedFrameworkAgreementWorkflow(created.id, input.projectId, actorUserId, tx);
-          }
-
-          return { record: created, deferred };
-        });
-      } catch (err: unknown) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002' &&
-          attempt < MAX_RETRIES
-        ) {
-          attempt++;
-          continue;
-        }
-        throw err;
-      }
+    let deferred: DeferredWorkflowEvent | null = null;
+    if (input.projectId) {
+      deferred = await autoSeedFrameworkAgreementWorkflow(created.id, input.projectId, actorUserId, tx);
     }
-  })();
+
+    return { record: created, deferred };
+  });
 
   // PIC-80 outbox-ready seam: emit 'workflow.started' after commit (no-op when
   // deferred is null — no project, so no workflow was seeded).
