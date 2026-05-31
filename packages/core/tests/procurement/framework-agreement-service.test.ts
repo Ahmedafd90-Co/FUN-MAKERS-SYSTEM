@@ -28,7 +28,13 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
     // warning and exits gracefully (no throw). See template-resolution.ts.
     projectSetting: { findUnique: vi.fn().mockResolvedValue(null) },
     project: { findUnique: vi.fn().mockResolvedValue(null) },
-    entity: { findUnique: vi.fn().mockResolvedValue(null) },
+    entity: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      // PIC-84: FA derives orgId from the entity for the per-org counter.
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ orgId: '00000000-0000-0000-0000-000000000001' }),
+    },
+    // PIC-84: atomic per-org counter (replaces read-max). lastNumber 1 → FA-0001.
+    orgSequenceCounter: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     workflowTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   mockPrisma.$transaction = vi.fn().mockImplementation((cbOrArr: any) => {
@@ -173,25 +179,11 @@ describe('FrameworkAgreement Service', () => {
     expect(result.projectId).toBeNull();
   });
 
-  it('retries on P2002 unique violation', async () => {
-    const error = new mockPrismaNamespace.PrismaClientKnownRequestError('Unique constraint', { code: 'P2002' });
-    mockPrisma.frameworkAgreement.findFirst.mockResolvedValue(null);
-    mockPrisma.frameworkAgreement.create.mockRejectedValueOnce(error);
-    const created = fakeAgreement();
-    mockPrisma.frameworkAgreement.create.mockResolvedValueOnce(created);
-
-    const result = await createFrameworkAgreement({
-      entityId: ENTITY_ID,
-      vendorId: VENDOR_ID,
-      title: 'Test',
-      validFrom: '2026-01-01T00:00:00.000Z',
-      validTo: '2026-12-31T00:00:00.000Z',
-      currency: 'SAR',
-    }, ACTOR);
-
-    expect(result).toBeDefined();
-    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(2);
-  });
+  // PIC-84: the read-max+retry-once "retries on P2002" test is removed — the
+  // atomic per-org counter eliminates the contention race entirely (no retry
+  // path remains). The new robustness is covered at the DB level by
+  // tests/procurement/numbering-robustness.test.ts (≥5-way concurrency +
+  // cross-tenant), proven RED on read-max → GREEN on the counter.
 
   // -- Update --
 

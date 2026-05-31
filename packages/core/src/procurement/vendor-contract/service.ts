@@ -17,7 +17,8 @@ import {
 } from '../../workflow';
 import { postingService } from '../../posting/service';
 import { VENDOR_CONTRACT_TRANSITIONS, VENDOR_CONTRACT_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
-import { nextContractNumber, EDITABLE_STATUSES } from './validation';
+import { EDITABLE_STATUSES } from './validation';
+import { generateOrgScopedNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -25,76 +26,65 @@ import { assertProjectScope } from '../../scope-binding';
 // ---------------------------------------------------------------------------
 
 export async function createVendorContract(input: CreateVendorContractInput, actorUserId: string) {
-  const MAX_RETRIES = 1;
-  let attempt = 0;
+  // PIC-84: atomic per-org counter replaces read-max+retry-once. No P2002 retry needed.
+  const { record, deferred } = await prisma.$transaction(async (tx) => {
+    // VendorContract is project-scoped — derive orgId from the project.
+    const project = await (tx as any).project.findUniqueOrThrow({
+      where: { id: input.projectId! },
+      select: { orgId: true },
+    });
+    const contractNumber = await generateOrgScopedNumber(
+      project.orgId,
+      'VC',
+      (n: number) => `VC-${String(n).padStart(4, '0')}`,
+      tx,
+    );
 
-  const { record, deferred } = await (async () => {
-    while (true) {
-      try {
-        return await prisma.$transaction(async (tx) => {
-          const last = await (tx as any).vendorContract.findFirst({
-            orderBy: { contractNumber: 'desc' },
-            select: { contractNumber: true },
-          });
-          const contractNumber = nextContractNumber(last?.contractNumber ?? null);
+    const created = await (tx as any).vendorContract.create({
+      data: {
+        orgId: project.orgId,
+        projectId: input.projectId!,
+        vendorId: input.vendorId,
+        contractNumber,
+        title: input.title,
+        description: input.description ?? null,
+        contractType: input.contractType,
+        startDate: new Date(input.startDate),
+        endDate: new Date(input.endDate),
+        totalValue: input.totalValue,
+        currency: input.currency,
+        terms: input.paymentTerms ?? null,
+        parentContractId: input.parentContractId ?? null,
+        status: 'draft',
+        createdBy: actorUserId,
+      },
+    });
 
-          const created = await (tx as any).vendorContract.create({
-            data: {
-              projectId: input.projectId!,
-              vendorId: input.vendorId,
-              contractNumber,
-              title: input.title,
-              description: input.description ?? null,
-              contractType: input.contractType,
-              startDate: new Date(input.startDate),
-              endDate: new Date(input.endDate),
-              totalValue: input.totalValue,
-              currency: input.currency,
-              terms: input.paymentTerms ?? null,
-              parentContractId: input.parentContractId ?? null,
-              status: 'draft',
-              createdBy: actorUserId,
-            },
-          });
+    // PIC-80: audit + conditional workflow seed share this transaction (atomic
+    // with the contractNumber + create). projectId is non-null on create but the
+    // seed stays guarded for symmetry with the framework-agreement entity-scoped
+    // pattern.
+    await auditService.log(
+      {
+        actorUserId,
+        actorSource: 'user',
+        action: 'vendor_contract.create',
+        resourceType: 'vendor_contract',
+        resourceId: created.id,
+        projectId: input.projectId ?? null,
+        beforeJson: null,
+        afterJson: created as any,
+      },
+      tx,
+    );
 
-          // PIC-80: audit + conditional workflow seed share this transaction
-          // (atomic with the P2002-retried contractNumber + create). projectId is
-          // non-null on create but the seed stays guarded for symmetry with the
-          // framework-agreement entity-scoped pattern.
-          await auditService.log(
-            {
-              actorUserId,
-              actorSource: 'user',
-              action: 'vendor_contract.create',
-              resourceType: 'vendor_contract',
-              resourceId: created.id,
-              projectId: input.projectId ?? null,
-              beforeJson: null,
-              afterJson: created as any,
-            },
-            tx,
-          );
-
-          let deferred: DeferredWorkflowEvent | null = null;
-          if (input.projectId) {
-            deferred = await autoSeedVendorContractWorkflow(created.id, input.projectId, actorUserId, tx);
-          }
-
-          return { record: created, deferred };
-        });
-      } catch (err: unknown) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002' &&
-          attempt < MAX_RETRIES
-        ) {
-          attempt++;
-          continue;
-        }
-        throw err;
-      }
+    let deferred: DeferredWorkflowEvent | null = null;
+    if (input.projectId) {
+      deferred = await autoSeedVendorContractWorkflow(created.id, input.projectId, actorUserId, tx);
     }
-  })();
+
+    return { record: created, deferred };
+  });
 
   // PIC-80 outbox-ready seam: emit 'workflow.started' after commit.
   await dispatchDeferred(deferred);

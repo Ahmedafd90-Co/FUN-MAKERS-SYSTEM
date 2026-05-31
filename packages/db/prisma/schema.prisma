@@ -158,6 +158,9 @@ model Organization {
   procurementCategories      ProcurementCategory[]
   itemCatalogs               ItemCatalog[]
   frameworkAgreements        FrameworkAgreement[]
+  // PIC-84 (F2 Batch 3) — numbering counters
+  referenceCounters          ReferenceCounter[]
+  orgSequenceCounters        OrgSequenceCounter[]
 
   @@map("organizations")
 }
@@ -568,9 +571,9 @@ model WorkflowInstance {
 
   // Relations
   organization Organization     @relation(fields: [orgId], references: [id])
-  template WorkflowTemplate @relation(fields: [templateId], references: [id])
-  project  Project          @relation(fields: [projectId], references: [id])
-  actions  WorkflowAction[]
+  template     WorkflowTemplate @relation(fields: [templateId], references: [id])
+  project      Project          @relation(fields: [projectId], references: [id])
+  actions      WorkflowAction[]
 
   @@index([projectId, status])
   @@index([currentStepId])
@@ -657,7 +660,7 @@ model Document {
 
   // Relations
   organization Organization @relation(fields: [orgId], references: [id])
-  project Project @relation(fields: [projectId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
 
   @@index([projectId, category])
   @@map("documents")
@@ -808,7 +811,7 @@ model BudgetAbsorptionException {
   createdAt        DateTime  @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
-  project Project @relation(fields: [projectId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id])
 
   @@index([projectId, status])
   @@index([sourceRecordType, sourceRecordId])
@@ -851,7 +854,7 @@ model AuditLog {
   createdAt    DateTime         @default(now()) @map("created_at")
 
   // Relations
-  organization Organization @relation(fields: [orgId], references: [id])
+  organization Organization  @relation(fields: [orgId], references: [id])
   overrideLogs OverrideLog[]
 
   @@index([resourceType, resourceId, createdAt])
@@ -1201,7 +1204,7 @@ model Ipa {
   orgId             String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String    @map("project_id")
   status            IpaStatus @default(draft) @map("status")
-  referenceNumber   String?            @map("reference_number")
+  referenceNumber   String?   @map("reference_number")
   periodNumber      Int       @map("period_number")
   periodFrom        DateTime  @map("period_from")
   periodTo          DateTime  @map("period_to")
@@ -1251,7 +1254,7 @@ model Ipc {
   projectId         String    @map("project_id")
   ipaId             String    @map("ipa_id")
   status            IpcStatus @default(draft) @map("status")
-  referenceNumber   String?            @map("reference_number")
+  referenceNumber   String?   @map("reference_number")
   certifiedAmount   Decimal   @map("certified_amount") @db.Decimal(18, 2)
   retentionAmount   Decimal   @map("retention_amount") @db.Decimal(18, 2)
   adjustments       Decimal?  @map("adjustments") @db.Decimal(18, 2)
@@ -1283,7 +1286,7 @@ model Variation {
   projectId              String                @map("project_id")
   subtype                VariationSubtype      @map("subtype")
   status                 VariationStatus       @default(draft) @map("status")
-  referenceNumber        String?                        @map("reference_number")
+  referenceNumber        String?               @map("reference_number")
   title                  String                @map("title")
   description            String                @map("description")
   reason                 String                @map("reason")
@@ -1330,7 +1333,7 @@ model CostProposal {
   projectId         String             @map("project_id")
   variationId       String?            @map("variation_id")
   status            CostProposalStatus @default(draft) @map("status")
-  referenceNumber   String?                     @map("reference_number")
+  referenceNumber   String?            @map("reference_number")
   revisionNumber    Int                @map("revision_number")
   estimatedCost     Decimal            @map("estimated_cost") @db.Decimal(18, 2)
   estimatedTimeDays Int?               @map("estimated_time_days")
@@ -1366,7 +1369,7 @@ model TaxInvoice {
   projectId       String           @map("project_id")
   ipcId           String           @map("ipc_id")
   status          TaxInvoiceStatus @default(draft) @map("status")
-  referenceNumber String?                   @map("reference_number")
+  referenceNumber String?          @map("reference_number")
   invoiceNumber   String           @map("invoice_number")
   invoiceDate     DateTime         @map("invoice_date")
   grossAmount     Decimal          @map("gross_amount") @db.Decimal(18, 2)
@@ -1429,7 +1432,7 @@ model Correspondence {
   projectId              String                @map("project_id")
   subtype                CorrespondenceSubtype @map("subtype")
   status                 CorrespondenceStatus  @default(draft) @map("status")
-  referenceNumber        String?                        @map("reference_number")
+  referenceNumber        String?               @map("reference_number")
   subject                String                @map("subject")
   body                   String                @map("body")
   recipientName          String                @map("recipient_name")
@@ -1478,14 +1481,38 @@ model Correspondence {
 
 model ReferenceCounter {
   id         String @id @default(uuid()) @map("id")
+  // PIC-84 (F2 Batch 3) — per-tenant scope; orgId derived INTERNALLY by
+  // generateReferenceNumber (its 10 callers stay unchanged). Additive column,
+  // singleton default — atomic metadata-only on PG14+.
+  orgId      String @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId  String @map("project_id")
   typeCode   String @map("type_code")
   lastNumber Int    @default(0) @map("last_number")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [orgId], references: [id])
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
-  @@unique([projectId, typeCode])
+  @@unique([orgId, projectId, typeCode])
   @@map("reference_counters")
+}
+
+/// PIC-84 (F2 Batch 3) — per-ORG atomic sequence counter for the bare procurement
+/// numbers (FA/VC/RFQ) that keep their XX-NNNN format (no project code in the
+/// value). Distinct from ReferenceCounter (project-scoped, bakes the project code
+/// into the value). The atomic upsert+increment replaces the fragile
+/// read-max+retry-once generators. Keyed per (orgId, typeCode) — one sequence per
+/// tenant per series. orgId is derived from the entity/project at create time
+/// (no ctx.orgId; UNENFORCED until F3). Backfilled per-org from existing max.
+model OrgSequenceCounter {
+  id         String @id @default(uuid()) @map("id")
+  orgId      String @map("org_id")
+  typeCode   String @map("type_code")
+  lastNumber Int    @default(0) @map("last_number")
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, typeCode])
+  @@map("org_sequence_counters")
 }
 
 // ---------------------------------------------------------------------------
@@ -1693,7 +1720,7 @@ model VendorContract {
   orgId            String               @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId        String               @map("project_id")
   vendorId         String               @map("vendor_id")
-  contractNumber   String               @unique @map("contract_number")
+  contractNumber   String               @map("contract_number")
   title            String
   description      String?
   contractType     VendorContractType   @map("contract_type")
@@ -1711,7 +1738,7 @@ model VendorContract {
   // if a VendorContract with this rfqId already exists).
   rfqId            String?              @map("rfq_id")
   status           VendorContractStatus @default(draft)
-  referenceNumber  String?                       @map("reference_number")
+  referenceNumber  String?              @map("reference_number")
   createdBy        String               @map("created_by")
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
@@ -1725,8 +1752,9 @@ model VendorContract {
   rfq            RFQ?             @relation("VendorContractFromRfq", fields: [rfqId], references: [id], onDelete: Restrict)
 
   // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
-  // (contractNumber retains its global @unique — customer-facing identifier)
+  // PIC-84 (F2 Batch 3): contractNumber is now per-tenant unique too (was global)
   @@unique([orgId, projectId, referenceNumber])
+  @@unique([orgId, contractNumber])
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
@@ -1742,7 +1770,7 @@ model FrameworkAgreement {
   vendorId            String                   @map("vendor_id")
   projectId           String?                  @map("project_id")
   entityId            String                   @map("entity_id")
-  agreementNumber     String                   @unique @map("agreement_number")
+  agreementNumber     String                   @map("agreement_number")
   title               String
   description         String?
   validFrom           DateTime                 @map("valid_from")
@@ -1754,12 +1782,14 @@ model FrameworkAgreement {
   createdAt           DateTime                 @default(now()) @map("created_at")
   updatedAt           DateTime                 @updatedAt @map("updated_at")
 
-  organization Organization        @relation(fields: [orgId], references: [id])
-  vendor  Vendor                   @relation(fields: [vendorId], references: [id], onDelete: Restrict)
-  project Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  entity  Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
-  items   FrameworkAgreementItem[]
+  organization Organization             @relation(fields: [orgId], references: [id])
+  vendor       Vendor                   @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  project      Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entity       Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  items        FrameworkAgreementItem[]
 
+  // PIC-84 (F2 Batch 3) — agreementNumber is now per-tenant unique (was global)
+  @@unique([orgId, agreementNumber])
   @@index([entityId, status])
   @@index([projectId, status])
   @@index([vendorId])
@@ -1795,7 +1825,7 @@ model RFQ {
   // globally unique) and referenceNumber (internal sequential, per-tenant).
   orgId              String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId          String    @map("project_id")
-  rfqNumber          String    @unique @map("rfq_number")
+  rfqNumber          String    @map("rfq_number")
   title              String
   description        String?
   requiredByDate     DateTime? @map("required_by_date")
@@ -1803,7 +1833,7 @@ model RFQ {
   currency           String
   estimatedBudget    Decimal?  @map("estimated_budget") @db.Decimal(18, 2)
   status             RfqStatus @default(draft)
-  referenceNumber    String?            @map("reference_number")
+  referenceNumber    String?   @map("reference_number")
   // PIC-53: first-class FK to the winning quotation (promotes the value that
   // previously lived only in audit-log afterJson). Nullable; set when RFQ
   // transitions to awarded. Enables efficient "find me the winning quotation"
@@ -1824,8 +1854,9 @@ model RFQ {
   vendorContracts  VendorContract[]     @relation("VendorContractFromRfq")
 
   // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
-  // (rfqNumber retains its global @unique — customer-facing identifier)
+  // PIC-84 (F2 Batch 3): rfqNumber is now per-tenant unique too (was global)
   @@unique([orgId, projectId, referenceNumber])
+  @@unique([orgId, rfqNumber])
   @@index([projectId, status])
   @@index([projectId, createdAt])
   @@index([categoryId])
@@ -1977,7 +2008,7 @@ model PurchaseOrder {
   vendorContractId      String?             @map("vendor_contract_id")
   frameworkAgreementId  String?             @map("framework_agreement_id")
   categoryId            String?             @map("category_id")
-  poNumber              String              @unique @map("po_number")
+  poNumber              String              @map("po_number")
   title                 String
   description           String?
   totalAmount           Decimal             @map("total_amount") @db.Decimal(18, 2)
@@ -1987,7 +2018,7 @@ model PurchaseOrder {
   paymentTerms          String?             @map("payment_terms")
   hasFrameworkDeviation Boolean             @default(false) @map("has_framework_deviation")
   status                PurchaseOrderStatus @default(draft)
-  referenceNumber       String?                      @map("reference_number")
+  referenceNumber       String?             @map("reference_number")
   createdBy             String              @map("created_by")
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
@@ -2002,8 +2033,11 @@ model PurchaseOrder {
   creditNotes      CreditNote[]
 
   // PIC-75 multi-tenancy: per-tenant compound unique on referenceNumber
-  // (poNumber retains its global @unique — customer-facing identifier)
+  // PIC-84 (F2 Batch 3): poNumber is now per-tenant unique too — its projectCode
+  // prefix no longer guarantees cross-tenant uniqueness post-F2 (project codes
+  // repeat across tenants under @@unique([orgId, code])).
   @@unique([orgId, projectId, referenceNumber])
+  @@unique([orgId, poNumber])
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
@@ -2133,7 +2167,7 @@ model CreditNote {
   projectId         String            @map("project_id")
   vendorId          String            @map("vendor_id")
   subtype           CreditNoteSubtype
-  creditNoteNumber  String            @unique @map("credit_note_number")
+  creditNoteNumber  String            @map("credit_note_number")
   supplierInvoiceId String?           @map("supplier_invoice_id")
   purchaseOrderId   String?           @map("purchase_order_id")
   correspondenceId  String?           @map("correspondence_id")
@@ -2153,6 +2187,8 @@ model CreditNote {
   purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   correspondence  Correspondence?  @relation(fields: [correspondenceId], references: [id], onDelete: Restrict)
 
+  // PIC-84 (F2 Batch 3) — creditNoteNumber is now per-tenant unique (user-supplied; was global)
+  @@unique([orgId, creditNoteNumber])
   @@index([projectId, status])
   @@index([projectId, vendorId])
   @@index([projectId, createdAt])
@@ -2292,10 +2328,10 @@ model ProjectBudget {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  organization Organization      @relation(fields: [orgId], references: [id])
-  project     Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  lines       BudgetLine[]
-  adjustments BudgetAdjustment[]
+  organization Organization       @relation(fields: [orgId], references: [id])
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  lines        BudgetLine[]
+  adjustments  BudgetAdjustment[]
 
   @@map("project_budgets")
 }
@@ -2384,7 +2420,7 @@ model EngineerInstruction {
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
   orgId           String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId       String   @map("project_id")
-  referenceNumber String?           @map("reference_number")
+  referenceNumber String?  @map("reference_number")
   title           String   @map("title")
   description     String?  @map("description")
   estimatedValue  Decimal  @map("estimated_value") @db.Decimal(18, 2)
@@ -2495,8 +2531,8 @@ model ImportBatch {
   updatedAt                  DateTime          @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
-  project Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  rows    ImportRow[]
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  rows         ImportRow[]
 
   @@unique([projectId, importType, sourceFileHash])
   @@index([projectId, status])
@@ -2645,9 +2681,9 @@ model ProjectParticipant {
   updatedAt DateTime               @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
-  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Restrict)
-  creator User    @relation("ProjectParticipantCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entity       Entity       @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  creator      User         @relation("ProjectParticipantCreator", fields: [createdBy], references: [id], onDelete: Restrict)
 
   @@unique([projectId, entityId], name: "project_entity_unique")
   @@index([projectId])
@@ -2713,11 +2749,11 @@ model IntercompanyContract {
   updatedAt          DateTime                       @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [orgId], references: [id])
-  project    Project  @relation("ProjectIntercompanyContracts", fields: [projectId], references: [id], onDelete: Restrict)
-  fromEntity Entity   @relation("IntercompanyContractFrom", fields: [fromEntityId], references: [id], onDelete: Restrict)
-  toEntity   Entity   @relation("IntercompanyContractTo", fields: [toEntityId], references: [id], onDelete: Restrict)
-  creator    User     @relation("IntercompanyContractCreator", fields: [createdBy], references: [id], onDelete: Restrict)
-  currency   Currency @relation("IntercompanyContractCurrency", fields: [contractCurrency], references: [code], onDelete: Restrict)
+  project      Project      @relation("ProjectIntercompanyContracts", fields: [projectId], references: [id], onDelete: Restrict)
+  fromEntity   Entity       @relation("IntercompanyContractFrom", fields: [fromEntityId], references: [id], onDelete: Restrict)
+  toEntity     Entity       @relation("IntercompanyContractTo", fields: [toEntityId], references: [id], onDelete: Restrict)
+  creator      User         @relation("IntercompanyContractCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  currency     Currency     @relation("IntercompanyContractCurrency", fields: [contractCurrency], references: [code], onDelete: Restrict)
 
   @@index([projectId])
   @@index([fromEntityId])
