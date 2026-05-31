@@ -22,8 +22,14 @@ const { mockPrisma, mockAuditLog, mockPostingPost, mockPrismaNamespace } = vi.ho
     // resolveTemplate yield "no template configured" → autoSeed logs a
     // warning and exits gracefully (no throw). See template-resolution.ts.
     projectSetting: { findUnique: vi.fn().mockResolvedValue(null) },
-    project: { findUnique: vi.fn().mockResolvedValue(null) },
+    project: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      // PIC-84: VC derives orgId from the project for the per-org counter.
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ orgId: '00000000-0000-0000-0000-000000000001' }),
+    },
     entity: { findUnique: vi.fn().mockResolvedValue(null) },
+    // PIC-84: atomic per-org counter (replaces read-max). lastNumber 1 → VC-0001.
+    orgSequenceCounter: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     workflowTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   mockPrisma.$transaction = vi.fn().mockImplementation((cb: (tx: any) => any) => cb(mockPrisma));
@@ -148,28 +154,9 @@ describe('VendorContract Service', () => {
     expect(result.contractNumber).toBe('VC-0004');
   });
 
-  it('retries on P2002 unique violation', async () => {
-    const error = new mockPrismaNamespace.PrismaClientKnownRequestError('Unique constraint', { code: 'P2002' });
-    mockPrisma.vendorContract.findFirst.mockResolvedValue(null);
-    mockPrisma.vendorContract.create.mockRejectedValueOnce(error);
-    const created = fakeContract();
-    mockPrisma.vendorContract.create.mockResolvedValueOnce(created);
-
-    const result = await createVendorContract({
-      entityId: ENTITY_ID,
-      vendorId: VENDOR_ID,
-      projectId: PROJECT_ID,
-      title: 'Test',
-      contractType: 'service',
-      startDate: '2026-01-01T00:00:00.000Z',
-      endDate: '2026-12-31T00:00:00.000Z',
-      totalValue: 100000,
-      currency: 'SAR',
-    }, ACTOR);
-
-    expect(result).toBeDefined();
-    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(2);
-  });
+  // PIC-84: "retries on P2002" removed — the atomic per-org counter eliminates
+  // the read-max contention race (no retry path). Robustness is covered by
+  // tests/procurement/numbering-robustness.test.ts (>=5-way concurrency).
 
   // -- Update --
 

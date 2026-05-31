@@ -34,7 +34,11 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
     },
     project: {
       findUnique: vi.fn().mockResolvedValue({ entityId: 'entity-1' }),
+      // PIC-84: RFQ derives orgId from the project for the per-org counter.
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ orgId: '00000000-0000-0000-0000-000000000001' }),
     },
+    // PIC-84: atomic per-org counter (replaces read-max). lastNumber 1 → RFQ-0001.
+    orgSequenceCounter: { upsert: vi.fn().mockResolvedValue({ lastNumber: 1 }) },
     entity: {
       findUnique: vi.fn().mockResolvedValue({ metadataJson: null }),
     },
@@ -178,23 +182,9 @@ describe('RFQ Service', () => {
     expect(result.rfqVendors).toHaveLength(1);
   });
 
-  it('retries on P2002 unique violation', async () => {
-    const error = new mockPrismaNamespace.PrismaClientKnownRequestError('Unique constraint', { code: 'P2002' });
-    mockPrisma.rFQ.findFirst.mockResolvedValue(null);
-    mockPrisma.rFQ.create.mockRejectedValueOnce(error);
-    const created = fakeRfq();
-    mockPrisma.rFQ.create.mockResolvedValueOnce(created);
-
-    const result = await createRfq({
-      projectId: PROJECT_ID,
-      title: 'Test',
-      currency: 'SAR',
-      deadline: '2026-06-01T00:00:00.000Z',
-    }, ACTOR);
-
-    expect(result).toBeDefined();
-    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(2);
-  });
+  // PIC-84: "retries on P2002" removed — the atomic per-org counter eliminates
+  // the read-max contention race (no retry path). Robustness is covered by
+  // tests/procurement/numbering-robustness.test.ts (>=5-way concurrency).
 
   // -- Update --
 
