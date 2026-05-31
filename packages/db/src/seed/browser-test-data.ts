@@ -9,6 +9,7 @@
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------------------
@@ -201,7 +202,9 @@ export async function seedBrowserTestData() {
 
   // ─── 10. Purchase Order — with valid category (materials) ───
   const po = await prisma.purchaseOrder.upsert({
-    where: { poNumber: 'PO-AY-2026-001' },
+    where: {
+      orgId_poNumber: { orgId: SINGLETON_ORG_ID, poNumber: 'PO-AY-2026-001' },
+    },
     update: {},
     create: {
       projectId: PROJECT_ID,
@@ -222,7 +225,9 @@ export async function seedBrowserTestData() {
 
   // ─── 11. Purchase Order — WITHOUT category (for exception test) ───
   const poNoCat = await prisma.purchaseOrder.upsert({
-    where: { poNumber: 'PO-AY-2026-002' },
+    where: {
+      orgId_poNumber: { orgId: SINGLETON_ORG_ID, poNumber: 'PO-AY-2026-002' },
+    },
     update: {},
     create: {
       projectId: PROJECT_ID,
@@ -292,7 +297,12 @@ export async function seedBrowserTestData() {
 
   // ─── 14. Credit Note linked to SI ───
   const cn = await prisma.creditNote.upsert({
-    where: { creditNoteNumber: 'CN-RAJHI-2026-003' },
+    where: {
+      orgId_creditNoteNumber: {
+        orgId: SINGLETON_ORG_ID,
+        creditNoteNumber: 'CN-RAJHI-2026-003',
+      },
+    },
     update: {},
     create: {
       projectId: PROJECT_ID,
