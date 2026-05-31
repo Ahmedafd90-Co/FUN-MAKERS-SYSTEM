@@ -140,6 +140,25 @@ model Organization {
   purchaseOrders       PurchaseOrder[]
   engineerInstructions EngineerInstruction[]
 
+  // Reverse relations — PIC-96 (F2) universal orgId surface (Bucket-2 models)
+  workflowInstances          WorkflowInstance[]
+  documents                  Document[]
+  postingEvents              PostingEvent[]
+  budgetAbsorptionExceptions BudgetAbsorptionException[]
+  auditLogs                  AuditLog[]
+  supplierInvoices           SupplierInvoice[]
+  expenses                   Expense[]
+  creditNotes                CreditNote[]
+  projectBudgets             ProjectBudget[]
+  importBatches              ImportBatch[]
+  projectParticipants        ProjectParticipant[]
+  intercompanyContracts      IntercompanyContract[]
+  drawings                   Drawing[]
+  vendors                    Vendor[]
+  procurementCategories      ProcurementCategory[]
+  itemCatalogs               ItemCatalog[]
+  frameworkAgreements        FrameworkAgreement[]
+
   @@map("organizations")
 }
 
@@ -282,7 +301,8 @@ model Entity {
   id             String       @id @default(uuid()) @map("id")
   // PIC-95 (F1) — per-tenant scope (singleton default during single-tenant phase)
   orgId          String       @default("00000000-0000-0000-0000-000000000001") @map("org_id")
-  code           String       @unique @map("code")
+  // PIC-96 (F2) — code is per-tenant unique, not global (see @@unique([orgId, code]))
+  code           String       @map("code")
   name           String       @map("name")
   type           EntityType   @map("type")
   parentEntityId String?      @map("parent_entity_id")
@@ -313,6 +333,8 @@ model Entity {
   // Layer 2.5 — Drawing Register originator (PIC-52)
   drawingsOriginated        Drawing[]              @relation("DrawingOriginator")
 
+  // PIC-96 (F2) — entity code is unique PER TENANT, not globally
+  @@unique([orgId, code])
   @@map("entities")
 }
 
@@ -338,7 +360,8 @@ model Project {
   // PIC-95 (F1) — denormalized per-tenant scope; derives from Entity.orgId
   // (Org → Entity → Project). Singleton default during single-tenant phase.
   orgId                String        @default("00000000-0000-0000-0000-000000000001") @map("org_id")
-  code                 String        @unique @map("code")
+  // PIC-96 (F2) — code is per-tenant unique, not global (see @@unique([orgId, code]))
+  code                 String        @map("code")
   name                 String        @map("name")
   entityId             String        @map("entity_id")
   status               ProjectStatus @map("status")
@@ -397,6 +420,8 @@ model Project {
   // Layer 2.5 — Drawing Register (PIC-52)
   drawings                   Drawing[]
 
+  // PIC-96 (F2) — project code is unique PER TENANT, not globally
+  @@unique([orgId, code])
   @@index([entityId])
   @@map("projects")
 }
@@ -529,6 +554,8 @@ model WorkflowStep {
 
 model WorkflowInstance {
   id            String         @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId         String         @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   templateId    String         @map("template_id")
   recordType    String         @map("record_type")
   recordId      String         @map("record_id")
@@ -540,6 +567,7 @@ model WorkflowInstance {
   completedAt   DateTime?      @map("completed_at")
 
   // Relations
+  organization Organization     @relation(fields: [orgId], references: [id])
   template WorkflowTemplate @relation(fields: [templateId], references: [id])
   project  Project          @relation(fields: [projectId], references: [id])
   actions  WorkflowAction[]
@@ -610,6 +638,8 @@ enum DocumentStatus {
 
 model Document {
   id               String           @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId            String           @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId        String           @map("project_id")
   recordType       String?          @map("record_type")
   recordId         String?          @map("record_id")
@@ -626,6 +656,7 @@ model Document {
   versions       DocumentVersion[] @relation("DocumentVersions")
 
   // Relations
+  organization Organization @relation(fields: [orgId], references: [id])
   project Project @relation(fields: [projectId], references: [id])
 
   @@index([projectId, category])
@@ -708,6 +739,8 @@ enum PostingOrigin {
 
 model PostingEvent {
   id                String        @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId             String        @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   eventType         String        @map("event_type")
   sourceService     String        @map("source_service")
   sourceRecordType  String        @map("source_record_type")
@@ -730,6 +763,7 @@ model PostingEvent {
   reversals       PostingEvent[] @relation("PostingReversal")
 
   // Relations
+  organization         Organization         @relation(fields: [orgId], references: [id])
   project              Project              @relation(fields: [projectId], references: [id])
   exceptions           PostingException[]
   ipaAdjustmentBatches IpaAdjustmentBatch[]
@@ -757,6 +791,8 @@ model PostingException {
 
 model BudgetAbsorptionException {
   id               String    @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId            String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId        String    @map("project_id")
   sourceModule     String    @map("source_module") // 'procurement', 'engineer_instruction'
   sourceRecordType String    @map("source_record_type") // 'purchase_order', 'supplier_invoice', etc.
@@ -771,6 +807,7 @@ model BudgetAbsorptionException {
   resolvedBy       String?   @map("resolved_by")
   createdAt        DateTime  @default(now()) @map("created_at")
 
+  organization Organization @relation(fields: [orgId], references: [id])
   project Project @relation(fields: [projectId], references: [id])
 
   @@index([projectId, status])
@@ -798,6 +835,8 @@ enum AuditActorSource {
 /// APPEND-ONLY: no updatedAt, no soft-delete. Never updated, never deleted.
 model AuditLog {
   id           String           @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId        String           @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   actorUserId  String?          @map("actor_user_id")
   actorSource  AuditActorSource @map("actor_source")
   action       String           @map("action")
@@ -812,6 +851,7 @@ model AuditLog {
   createdAt    DateTime         @default(now()) @map("created_at")
 
   // Relations
+  organization Organization @relation(fields: [orgId], references: [id])
   overrideLogs OverrideLog[]
 
   @@index([resourceType, resourceId, createdAt])
@@ -1525,6 +1565,8 @@ enum QuotationStatus {
 
 model Vendor {
   id                 String       @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId              String       @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   entityId           String       @map("entity_id")
   vendorCode         String       @map("vendor_code")
   name               String
@@ -1548,6 +1590,7 @@ model Vendor {
   isInternalEntity   Boolean      @default(false) @map("is_internal_entity")
   internalEntityId   String?      @map("internal_entity_id")
 
+  organization        Organization         @relation(fields: [orgId], references: [id])
   entity              Entity               @relation(fields: [entityId], references: [id], onDelete: Restrict)
   internalEntity      Entity?              @relation("VendorInternalEntity", fields: [internalEntityId], references: [id], onDelete: Restrict)
   projectVendors      ProjectVendor[]
@@ -1585,6 +1628,8 @@ model ProjectVendor {
 
 model ProcurementCategory {
   id        String                   @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId     String                   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   entityId  String                   @map("entity_id")
   name      String
   code      String
@@ -1594,6 +1639,7 @@ model ProcurementCategory {
   createdAt DateTime                 @default(now()) @map("created_at")
   updatedAt DateTime                 @updatedAt @map("updated_at")
 
+  organization     Organization          @relation(fields: [orgId], references: [id])
   entity           Entity                @relation(fields: [entityId], references: [id], onDelete: Restrict)
   parent           ProcurementCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children         ProcurementCategory[] @relation("CategoryHierarchy")
@@ -1612,6 +1658,8 @@ model ProcurementCategory {
 
 model ItemCatalog {
   id          String   @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId       String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   entityId    String   @map("entity_id")
   itemCode    String   @map("item_code")
   description String
@@ -1621,6 +1669,7 @@ model ItemCatalog {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  organization            Organization             @relation(fields: [orgId], references: [id])
   entity                  Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
   category                ProcurementCategory?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   // H6 hardening: reverse relations for soft FK fields
@@ -1688,6 +1737,8 @@ model VendorContract {
 
 model FrameworkAgreement {
   id                  String                   @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId               String                   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   vendorId            String                   @map("vendor_id")
   projectId           String?                  @map("project_id")
   entityId            String                   @map("entity_id")
@@ -1703,6 +1754,7 @@ model FrameworkAgreement {
   createdAt           DateTime                 @default(now()) @map("created_at")
   updatedAt           DateTime                 @updatedAt @map("updated_at")
 
+  organization Organization        @relation(fields: [orgId], references: [id])
   vendor  Vendor                   @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   project Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
   entity  Entity                   @relation(fields: [entityId], references: [id], onDelete: Restrict)
@@ -1981,6 +2033,8 @@ model PurchaseOrderItem {
 
 model SupplierInvoice {
   id              String                @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId           String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId       String                @map("project_id")
   vendorId        String                @map("vendor_id")
   purchaseOrderId String?               @map("purchase_order_id")
@@ -1999,6 +2053,7 @@ model SupplierInvoice {
   createdAt       DateTime              @default(now()) @map("created_at")
   updatedAt       DateTime              @updatedAt @map("updated_at")
 
+  organization  Organization         @relation(fields: [orgId], references: [id])
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   vendor        Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
@@ -2015,6 +2070,8 @@ model SupplierInvoice {
 
 model Expense {
   id                   String             @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId                String             @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId            String             @map("project_id")
   subtype              ExpenseSubtype
   title                String
@@ -2058,6 +2115,7 @@ model Expense {
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 
+  organization  Organization         @relation(fields: [orgId], references: [id])
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   category      ProcurementCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -2070,6 +2128,8 @@ model Expense {
 
 model CreditNote {
   id                String            @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId             String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String            @map("project_id")
   vendorId          String            @map("vendor_id")
   subtype           CreditNoteSubtype
@@ -2086,6 +2146,7 @@ model CreditNote {
   createdAt         DateTime          @default(now()) @map("created_at")
   updatedAt         DateTime          @updatedAt @map("updated_at")
 
+  organization    Organization     @relation(fields: [orgId], references: [id])
   project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
   vendor          Vendor           @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id], onDelete: Restrict)
@@ -2219,6 +2280,8 @@ model BudgetCategory {
 /// which is distinct from the external contract value on the Project model.
 model ProjectBudget {
   id                String   @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId             String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId         String   @unique @map("project_id")
   internalBaseline  Decimal  @map("internal_baseline") @db.Decimal(18, 2)
   internalRevised   Decimal  @map("internal_revised") @db.Decimal(18, 2)
@@ -2229,6 +2292,7 @@ model ProjectBudget {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  organization Organization      @relation(fields: [orgId], references: [id])
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   lines       BudgetLine[]
   adjustments BudgetAdjustment[]
@@ -2401,6 +2465,8 @@ enum ImportRowStatus {
 
 model ImportBatch {
   id                         String            @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId                      String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId                  String            @map("project_id")
   importType                 ImportType        @map("import_type")
   sourceFileName             String            @map("source_file_name")
@@ -2428,6 +2494,7 @@ model ImportBatch {
   createdAt                  DateTime          @default(now()) @map("created_at")
   updatedAt                  DateTime          @updatedAt @map("updated_at")
 
+  organization Organization @relation(fields: [orgId], references: [id])
   project Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
   rows    ImportRow[]
 
@@ -2566,6 +2633,8 @@ enum IntercompanyContractStatus {
 /// modeling deferred to Phase 2 if needed.
 model ProjectParticipant {
   id        String                 @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId     String                 @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId String                 @map("project_id")
   entityId  String                 @map("entity_id")
   role      ProjectParticipantRole
@@ -2575,6 +2644,7 @@ model ProjectParticipant {
   createdAt DateTime               @default(now()) @map("created_at")
   updatedAt DateTime               @updatedAt @map("updated_at")
 
+  organization Organization @relation(fields: [orgId], references: [id])
   project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
   entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Restrict)
   creator User    @relation("ProjectParticipantCreator", fields: [createdBy], references: [id], onDelete: Restrict)
@@ -2624,6 +2694,8 @@ model PrimeContract {
 /// are project participants.
 model IntercompanyContract {
   id                 String                         @id @default(uuid())
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId              String                         @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId          String                         @map("project_id")
   fromEntityId       String                         @map("from_entity_id")
   toEntityId         String                         @map("to_entity_id")
@@ -2640,6 +2712,7 @@ model IntercompanyContract {
   createdAt          DateTime                       @default(now()) @map("created_at")
   updatedAt          DateTime                       @updatedAt @map("updated_at")
 
+  organization Organization @relation(fields: [orgId], references: [id])
   project    Project  @relation("ProjectIntercompanyContracts", fields: [projectId], references: [id], onDelete: Restrict)
   fromEntity Entity   @relation("IntercompanyContractFrom", fields: [fromEntityId], references: [id], onDelete: Restrict)
   toEntity   Entity   @relation("IntercompanyContractTo", fields: [toEntityId], references: [id], onDelete: Restrict)
@@ -2729,6 +2802,8 @@ enum DrawingRevisionStatus {
 
 model Drawing {
   id                 String            @id @default(uuid()) @map("id")
+  // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
+  orgId              String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   projectId          String            @map("project_id")
   drawingNumber      String            @map("drawing_number")
   title              String            @map("title")
@@ -2739,6 +2814,7 @@ model Drawing {
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
 
+  organization     Organization      @relation(fields: [orgId], references: [id])
   project          Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
   originatorEntity Entity?           @relation("DrawingOriginator", fields: [originatorEntityId], references: [id], onDelete: Restrict)
   currentRevision  DrawingRevision?  @relation("DrawingCurrentRevision", fields: [currentRevisionId], references: [id])
