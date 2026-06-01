@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import { recordInOrgOrNull } from '../middleware/org-scope';
 import {
   CreateWorkflowTemplateSchema,
   UpdateWorkflowTemplateSchema,
@@ -253,11 +254,14 @@ const instancesRouter = router({
       recordType: z.string().min(1),
       recordId: z.string().min(1),
     }))
-    .query(async ({ input }) => {
-      const instance = await workflowInstanceService.getInstanceByRecord(
+    .query(async ({ ctx, input }) => {
+      const found = await workflowInstanceService.getInstanceByRecord(
         input.recordType,
         input.recordId,
       );
+      // PIC-97 (F3): a cross-org instance is shaped identically to "no instance"
+      // (null) — no existence disclosure on this by-record read.
+      const instance = recordInOrgOrNull(found, ctx);
       if (!instance) return null;
 
       // Resolve current approvers if instance is active

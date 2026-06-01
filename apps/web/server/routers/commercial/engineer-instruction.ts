@@ -14,6 +14,7 @@ import {
   transitionEi,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
+import { assertRecordOrgOrNotFound } from '../../middleware/org-scope';
 
 export const engineerInstructionRouter = router({
   list: projectProcedure
@@ -29,7 +30,12 @@ export const engineerInstructionRouter = router({
     .query(async ({ ctx, input }) => {
       if (!ctx.user.permissions.includes('variation.view'))
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Insufficient permissions.' });
-      return getEi(input.id);
+      // PIC-97 (F3): getEi fetches by id alone — assert it's in the caller's org,
+      // NOT-FOUND-shaped. `.catch(() => null)` collapses getEi's not-found throw
+      // into the SAME NOT_FOUND as a wrong-org record, so a fake id and an org-B
+      // id are indistinguishable (no existence disclosure).
+      const ei = await getEi(input.id).catch(() => null);
+      return assertRecordOrgOrNotFound(ei, ctx, 'Engineer instruction');
     }),
 
   create: projectProcedure

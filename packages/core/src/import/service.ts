@@ -664,6 +664,8 @@ type UserSummary = { id: string; name: string; email: string };
 
 export async function listBatches(input: {
   projectId?: string | null;
+  /** PIC-97 (F3): org filter for the cross-project admin list (import.listAll). */
+  orgId?: string | null;
   importType?: ImportType | null;
   status?: ImportBatchStatus | null;
   skip?: number;
@@ -671,6 +673,7 @@ export async function listBatches(input: {
 }) {
   const where: Prisma.ImportBatchWhereInput = {};
   if (input.projectId) where.projectId = input.projectId;
+  if (input.orgId) where.orgId = input.orgId;
   if (input.importType) where.importType = input.importType;
   if (input.status) where.status = input.status;
 

@@ -32,6 +32,7 @@ import {
   ImportBatchNotReadyError,
 } from '@fmksa/core';
 import { router, projectProcedure, protectedProcedure } from '../trpc';
+import { listOrgScope, assertRecordOrgOrNotFound } from '../middleware/org-scope';
 
 function hasPerm(
   ctx: { user: { permissions: string[] } },
@@ -149,7 +150,9 @@ export const importRouter = router({
           message: 'Insufficient permissions.',
         });
       }
-      return getBatch(input.batchId);
+      // PIC-97 (F3): by-id admin fetch — NOT-FOUND-shaped org guard.
+      const batch = await getBatch(input.batchId);
+      return assertRecordOrgOrNotFound(batch, ctx, 'Import batch');
     }),
 
   // -------------------------------------------------------------------------
@@ -301,6 +304,9 @@ export const importRouter = router({
       }
       return listBatches({
         projectId: null,
+        // PIC-97 (F3): scope the cross-project admin list to the caller's org
+        // (null for a platform-admin → no filter → all orgs).
+        orgId: listOrgScope(ctx) ?? null,
         importType: input?.importType ?? null,
         status: input?.status ?? null,
         skip: input?.skip ?? 0,
