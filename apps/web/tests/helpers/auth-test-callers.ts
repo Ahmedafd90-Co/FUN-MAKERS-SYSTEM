@@ -23,6 +23,7 @@ export function makeCtx(user: AuthUser | null): Context {
   return {
     db: prisma,
     user,
+    orgId: user?.orgId ?? null,
     session: user
       ? { user: { id: user.id, email: user.email, name: user.name } } as Context['session']
       : null,
