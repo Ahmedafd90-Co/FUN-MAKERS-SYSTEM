@@ -49,23 +49,22 @@ export const projectsService = {
    * Writes an audit log entry.
    */
   async createProject(input: CreateProjectInput) {
-    // Validate unique code. PIC-96 (F2): code is now unique PER-ORG
-    // (@@unique([orgId, code])); orgId is unenforced at the app layer until F3,
-    // so this pre-check stays a global findFirst. F3 scopes it to ctx.orgId to
-    // match the per-tenant constraint (today single-tenant, so global == per-org).
-    const existing = await prisma.project.findFirst({
-      where: { code: input.code },
-    });
-    if (existing) {
-      throw new Error(`Project code "${input.code}" already exists.`);
-    }
-
-    // Validate entity exists
+    // Validate entity exists — its org is the new project's org (denormalized).
     const entity = await prisma.entity.findUnique({
       where: { id: input.entityId },
     });
     if (!entity) {
       throw new Error(`Entity "${input.entityId}" not found.`);
+    }
+
+    // Validate unique code. PIC-97 (F3): code is unique PER-ORG
+    // (@@unique([orgId, code])), so the pre-check is scoped to the entity's org
+    // (= the project's org) — two tenants may reuse a code without collision.
+    const existing = await prisma.project.findFirst({
+      where: { orgId: entity.orgId, code: input.code },
+    });
+    if (existing) {
+      throw new Error(`Project code "${input.code}" already exists.`);
     }
 
     // Validate currency exists
@@ -80,6 +79,10 @@ export const projectsService = {
     const project = await prisma.$transaction(async (tx) => {
       const p = await tx.project.create({
         data: {
+          // PIC-97 (F3): denormalize orgId from the entity — Project.orgId ===
+          // Entity.orgId is the spine-integrity invariant. Replaces reliance on
+          // the singleton @default so a non-singleton entity's project is correct.
+          orgId: entity.orgId,
           code: input.code,
           name: input.name,
           entityId: input.entityId,
