@@ -21,6 +21,7 @@ import {
   extractEntityId,
   verifyEntityAccess,
 } from './middleware/entity-scope';
+import { isPlatformAdmin } from './middleware/org-scope';
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -125,11 +126,13 @@ const enforceProjectScopeMiddleware = t.middleware(
       });
     }
 
-    // Verify assignment / cross-project access (throws on denial)
+    // Verify assignment / cross-project access + tenant-org gate (throws on denial)
     await verifyProjectAccess({
       userId: ctx.user.id,
       projectId,
       path,
+      orgId: ctx.orgId,
+      platformAdmin: isPlatformAdmin(ctx),
     });
 
     // Pass projectId into context for downstream resolvers
@@ -184,11 +187,13 @@ const enforceEntityScopeMiddleware = t.middleware(
       });
     }
 
-    // Verify entity membership / system.admin access (throws on denial)
+    // Verify entity membership / system.admin access + tenant-org gate (throws on denial)
     const { entityPermissions } = await verifyEntityAccess({
       userId: ctx.user.id,
       entityId,
       path,
+      orgId: ctx.orgId,
+      platformAdmin: isPlatformAdmin(ctx),
     });
 
     // Pass entityId and entityPermissions into context for downstream resolvers

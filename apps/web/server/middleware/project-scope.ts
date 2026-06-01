@@ -17,7 +17,9 @@
  */
 
 import { TRPCError } from '@trpc/server';
+import { prisma } from '@fmksa/db';
 import { accessControlService, auditService } from '@fmksa/core';
+import { orgMatches } from './org-scope';
 
 /**
  * Extracts projectId from an unknown input payload.
@@ -48,23 +50,56 @@ export async function verifyProjectAccess(opts: {
   userId: string;
   projectId: string;
   path: string;
+  /** PIC-97 (F3): the caller's tenant org (ctx.orgId). */
+  orgId: string | null;
+  /** PIC-97 (F3): platform-admin (system.admin) bypass — preserved; F4 splits it. */
+  platformAdmin: boolean;
 }): Promise<void> {
-  const { userId, projectId, path } = opts;
+  const { userId, projectId, path, orgId, platformAdmin } = opts;
 
-  // Check assignment
+  // 1. Access: project assignment (org-safe by construction) OR the
+  //    cross_project.read fallback (Master Admin / PMO — global today).
   const assigned = await accessControlService.isAssignedToProject(
     userId,
     projectId,
   );
+  const granted =
+    assigned || (await accessControlService.canReadAcrossProjects(userId));
 
-  if (assigned) return;
+  if (!granted) {
+    await logProjectDenial(userId, projectId, path, 'not_assigned');
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: "You don't have access to this project.",
+    });
+  }
 
-  // Fallback: Master Admin / PMO with cross_project.read
-  const crossProject = await accessControlService.canReadAcrossProjects(userId);
+  // 2. PIC-97 (F3) tenant-org gate — DENY-BY-DEFAULT + FAIL-CLOSED (a null orgId
+  //    on either side never passes), UNLESS the caller is a platform-admin. This
+  //    is what scopes the cross_project.read fallback to the caller's org (the
+  //    cross-tenant leak), centrally — no per-call-site filters downstream.
+  if (!platformAdmin) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { orgId: true },
+    });
+    if (!orgMatches(orgId, project?.orgId, false)) {
+      await logProjectDenial(userId, projectId, path, 'org_mismatch');
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: "You don't have access to this project.",
+      });
+    }
+  }
+}
 
-  if (crossProject) return;
-
-  // Deny — write audit log and throw
+/** Write the access-denied audit row for a project-scope denial. */
+async function logProjectDenial(
+  userId: string,
+  projectId: string,
+  path: string,
+  reason: string,
+): Promise<void> {
   await auditService.log({
     actorSource: 'user',
     actorUserId: userId,
@@ -73,11 +108,6 @@ export async function verifyProjectAccess(opts: {
     resourceId: projectId,
     projectId,
     beforeJson: {},
-    afterJson: { path, reason: 'not_assigned' },
-  });
-
-  throw new TRPCError({
-    code: 'FORBIDDEN',
-    message: "You don't have access to this project.",
+    afterJson: { path, reason },
   });
 }
