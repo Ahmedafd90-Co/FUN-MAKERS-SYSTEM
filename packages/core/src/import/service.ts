@@ -24,6 +24,7 @@
 
 import { prisma, Prisma, type ImportType, type ImportBatchStatus, type ImportRowStatus } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { assertProjectScope } from '../scope-binding';
 
 import { PARSER_VERSIONS, VALIDATOR_SCHEMA_VERSIONS } from './versions';
 import { parseXlsx } from './parse-sheet';
@@ -168,11 +169,14 @@ export async function stageBatch(input: {
 // Validate — run per-row validation against a snapshot
 // ---------------------------------------------------------------------------
 
-export async function validateBatch(batchId: string, actorUserId: string) {
+export async function validateBatch(batchId: string, actorUserId: string, expectedProjectId: string) {
   const batch = await prisma.importBatch.findUniqueOrThrow({
     where: { id: batchId },
     include: { rows: true },
   });
+  // PIC-97 hotfix: tenant scope — the batch must belong to the caller's project
+  // (the chokepoint validated `expectedProjectId`, NOT this by-id batch).
+  assertProjectScope(batch, expectedProjectId, 'ImportBatch', batchId);
 
   if (batch.status === 'committed' || batch.status === 'rejected' || batch.status === 'cancelled') {
     throw new ImportBatchNotReadyError(batch.status, ['staged', 'validated', 'partially_valid']);
@@ -301,11 +305,13 @@ export async function validateBatch(batchId: string, actorUserId: string) {
 // Exclude a row — operator decides not to commit a specific row
 // ---------------------------------------------------------------------------
 
-export async function excludeRow(rowId: string, actorUserId: string) {
+export async function excludeRow(rowId: string, actorUserId: string, expectedProjectId: string) {
   const row = await prisma.importRow.findUniqueOrThrow({
     where: { id: rowId },
     include: { batch: true },
   });
+  // PIC-97 hotfix: tenant scope — the row's batch must belong to the caller's project.
+  assertProjectScope(row.batch, expectedProjectId, 'ImportBatch', rowId);
   if (row.status === 'committed') {
     throw new Error('Cannot exclude a row that has already been committed.');
   }
@@ -334,7 +340,7 @@ export async function excludeRow(rowId: string, actorUserId: string) {
 // Commit — promote valid rows into live state (with freshness guard)
 // ---------------------------------------------------------------------------
 
-export async function commitBatch(batchId: string, actorUserId: string) {
+export async function commitBatch(batchId: string, actorUserId: string, expectedProjectId: string) {
   const batch = await prisma.importBatch.findUniqueOrThrow({
     where: { id: batchId },
     include: {
@@ -345,6 +351,8 @@ export async function commitBatch(batchId: string, actorUserId: string) {
       project: { select: { entityId: true } },
     },
   });
+  // PIC-97 hotfix: tenant scope — the batch must belong to the caller's project.
+  assertProjectScope(batch, expectedProjectId, 'ImportBatch', batchId);
 
   if (batch.status !== 'validated' && batch.status !== 'partially_valid') {
     throw new ImportBatchNotReadyError(batch.status, ['validated', 'partially_valid']);
@@ -565,10 +573,13 @@ export async function rejectBatch(
   batchId: string,
   input: { reason: string },
   actorUserId: string,
+  expectedProjectId: string,
 ) {
   const batch = await prisma.importBatch.findUniqueOrThrow({
     where: { id: batchId },
   });
+  // PIC-97 hotfix: tenant scope — the batch must belong to the caller's project.
+  assertProjectScope(batch, expectedProjectId, 'ImportBatch', batchId);
   if (batch.status === 'committed' || batch.status === 'rejected' || batch.status === 'cancelled') {
     throw new ImportBatchNotReadyError(batch.status, ['staged', 'validated', 'partially_valid']);
   }
@@ -603,10 +614,12 @@ export async function rejectBatch(
 // Cancel — operator aborts a staged batch before any commit
 // ---------------------------------------------------------------------------
 
-export async function cancelBatch(batchId: string, actorUserId: string) {
+export async function cancelBatch(batchId: string, actorUserId: string, expectedProjectId: string) {
   const batch = await prisma.importBatch.findUniqueOrThrow({
     where: { id: batchId },
   });
+  // PIC-97 hotfix: tenant scope — the batch must belong to the caller's project.
+  assertProjectScope(batch, expectedProjectId, 'ImportBatch', batchId);
   if (batch.status === 'committed' || batch.status === 'rejected' || batch.status === 'cancelled') {
     throw new ImportBatchNotReadyError(batch.status, ['staged', 'validated', 'partially_valid']);
   }
