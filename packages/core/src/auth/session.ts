@@ -34,6 +34,8 @@ export type AuthUser = {
   email: string;
   name: string;
   status: string;
+  /** PIC-97 (F3): the user's tenant org (User.orgId, F1 edge) — the source of ctx.orgId. */
+  orgId: string;
   roles: Array<{
     id: string;
     code: string;
@@ -116,6 +118,7 @@ async function loadUserWithRoles(userId: string): Promise<AuthUser | null> {
     email: user.email,
     name: user.name,
     status: user.status,
+    orgId: user.orgId,
     roles,
     permissions: Array.from(permissionSet),
   };

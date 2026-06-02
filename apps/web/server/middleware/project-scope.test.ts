@@ -30,7 +30,7 @@ function pastDate(days: number): Date {
 
 /** Build a minimal tRPC context with the given user (or null). */
 function makeCtx(user: AuthUser | null): Context {
-  return { db: prisma, user, session: null };
+  return { db: prisma, user, orgId: user?.orgId ?? null, session: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +135,7 @@ beforeAll(async () => {
     email: assignedDbUser.email,
     name: assignedDbUser.name,
     status: assignedDbUser.status,
+    orgId: assignedDbUser.orgId,
     ...assignedRoles,
   };
 
@@ -165,6 +166,7 @@ beforeAll(async () => {
     email: unassignedDbUser.email,
     name: unassignedDbUser.name,
     status: unassignedDbUser.status,
+    orgId: unassignedDbUser.orgId,
     ...unassignedRoles,
   };
 
@@ -199,6 +201,7 @@ beforeAll(async () => {
     email: masterAdminDbUser.email,
     name: masterAdminDbUser.name,
     status: masterAdminDbUser.status,
+    orgId: masterAdminDbUser.orgId,
     ...adminRoles,
   };
 });

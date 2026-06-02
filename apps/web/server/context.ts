@@ -14,6 +14,8 @@ import type { Session } from 'next-auth';
 export type Context = {
   db: typeof prisma;
   user: AuthUser | null;
+  /** PIC-97 (F3): tenant org derived from the user's Org membership; null when unauthenticated. */
+  orgId: string | null;
   session: Session | null;
 };
 
@@ -36,6 +38,7 @@ export async function createTRPCContext(): Promise<Context> {
   return {
     db: prisma,
     user,
+    orgId: user?.orgId ?? null,
     session,
   };
 }

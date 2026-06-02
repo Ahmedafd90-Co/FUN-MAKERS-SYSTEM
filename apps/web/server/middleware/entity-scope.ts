@@ -22,6 +22,7 @@
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@fmksa/db';
 import { accessControlService, auditService } from '@fmksa/core';
+import { orgMatches } from './org-scope';
 
 /**
  * Extracts entityId from an unknown input payload.
@@ -59,8 +60,12 @@ export async function verifyEntityAccess(opts: {
   userId: string;
   entityId: string;
   path: string;
+  /** PIC-97 (F3): the caller's tenant org (ctx.orgId). */
+  orgId: string | null;
+  /** PIC-97 (F3): platform-admin (system.admin) bypass — preserved; F4 splits it. */
+  platformAdmin: boolean;
 }): Promise<{ entityPermissions: string[] }> {
-  const { userId, entityId, path } = opts;
+  const { userId, entityId, path, orgId, platformAdmin } = opts;
   const now = new Date();
 
   // NOTE: Unlike project-scope.ts which delegates to accessControlService,
@@ -92,6 +97,32 @@ export async function verifyEntityAccess(opts: {
   });
 
   if (assignments.length > 0) {
+    // PIC-97 (F3): tenant-org gate on the assignment path — deny-by-default +
+    // fail-closed unless platform-admin. (The assignment path is org-safe by
+    // construction; this is chokepoint defense-in-depth.)
+    if (!platformAdmin) {
+      const entity = await prisma.entity.findUnique({
+        where: { id: entityId },
+        select: { orgId: true },
+      });
+      if (!orgMatches(orgId, entity?.orgId, false)) {
+        await auditService.log({
+          actorSource: 'user',
+          actorUserId: userId,
+          action: 'access_denied',
+          resourceType: 'entity',
+          resourceId: entityId,
+          projectId: null,
+          beforeJson: {},
+          afterJson: { path, reason: 'org_mismatch' },
+        });
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: "You don't have access to this entity.",
+        });
+      }
+    }
+
     // Aggregate all permission codes from all roles across all assignments
     const permissionCodes = new Set<string>();
     for (const assignment of assignments) {

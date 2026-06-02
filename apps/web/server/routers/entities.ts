@@ -16,7 +16,25 @@ import {
   getSiblings,
 } from '@fmksa/core';
 import { accessControlService } from '@fmksa/core';
+import { prisma } from '@fmksa/db';
 import { router, protectedProcedure, adminProcedure } from '../trpc';
+import { assertRecordOrgOrNotFound } from '../middleware/org-scope';
+
+/**
+ * PIC-97 (F3): assert the entity is in the caller's org — NOT-FOUND-shaped, so a
+ * cross-org entity is indistinguishable from a non-existent one (no existence
+ * disclosure on the by-id hierarchy reads).
+ */
+async function assertEntityInOrg(
+  ctx: { user: { permissions: string[] } | null; orgId: string | null },
+  entityId: string,
+): Promise<void> {
+  const entity = await prisma.entity.findUnique({
+    where: { id: entityId },
+    select: { orgId: true },
+  });
+  assertRecordOrgOrNotFound(entity, ctx, 'Entity');
+}
 
 export const entitiesRouter = router({
   list: protectedProcedure
@@ -81,19 +99,22 @@ export const entitiesRouter = router({
 
   ancestors: protectedProcedure
     .input(EntityIdSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertEntityInOrg(ctx, input.entityId);
       return getAncestors(input.entityId);
     }),
 
   descendants: protectedProcedure
     .input(EntityIdSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertEntityInOrg(ctx, input.entityId);
       return getDescendants(input.entityId);
     }),
 
   siblings: protectedProcedure
     .input(EntityIdSchema)
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertEntityInOrg(ctx, input.entityId);
       return getSiblings(input.entityId);
     }),
 });
