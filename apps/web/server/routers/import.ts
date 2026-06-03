@@ -30,6 +30,7 @@ import {
   DuplicateImportError,
   StaleValidationError,
   ImportBatchNotReadyError,
+  ScopeMismatchError,
 } from '@fmksa/core';
 import { router, projectProcedure, protectedProcedure } from '../trpc';
 import { listOrgScope, assertRecordOrgOrNotFound } from '../middleware/org-scope';
@@ -63,6 +64,15 @@ function handleImportError(err: unknown): never {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof ScopeMismatchError) {
+    // PIC-97 hotfix: NOT-FOUND-shaped (mirror import.get at line ~129) — never
+    // disclose that the batch exists in a different tenant.
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Import batch not found.',
       cause: err,
     });
   }
@@ -175,7 +185,7 @@ export const importRouter = router({
         });
       }
       try {
-        return await validateBatch(input.batchId, ctx.user.id);
+        return await validateBatch(input.batchId, ctx.user.id, input.projectId);
       } catch (err) {
         handleImportError(err);
       }
@@ -196,7 +206,11 @@ export const importRouter = router({
           message: 'Insufficient permissions.',
         });
       }
-      return excludeRow(input.rowId, ctx.user.id);
+      try {
+        return await excludeRow(input.rowId, ctx.user.id, input.projectId);
+      } catch (err) {
+        handleImportError(err);
+      }
     }),
 
   /** Commit all valid rows — write live records + post ledger events. */
@@ -215,7 +229,7 @@ export const importRouter = router({
         });
       }
       try {
-        return await commitBatch(input.batchId, ctx.user.id);
+        return await commitBatch(input.batchId, ctx.user.id, input.projectId);
       } catch (err) {
         handleImportError(err);
       }
@@ -242,6 +256,7 @@ export const importRouter = router({
           input.batchId,
           { reason: input.reason },
           ctx.user.id,
+          input.projectId,
         );
       } catch (err) {
         handleImportError(err);
@@ -264,7 +279,7 @@ export const importRouter = router({
         });
       }
       try {
-        return await cancelBatch(input.batchId, ctx.user.id);
+        return await cancelBatch(input.batchId, ctx.user.id, input.projectId);
       } catch (err) {
         handleImportError(err);
       }

@@ -13,6 +13,7 @@ import {
   recordCollection,
   listCollections,
   getOutstandingAmount,
+  ScopeMismatchError,
 } from '@fmksa/core';
 import { router, projectProcedure } from '../../trpc';
 
@@ -21,6 +22,15 @@ import { router, projectProcedure } from '../../trpc';
 // ---------------------------------------------------------------------------
 
 function mapError(err: unknown): never {
+  // PIC-97 hotfix: NOT-FOUND-shaped (mirror handleImportError + documents.get) —
+  // never disclose that the invoice exists in a different tenant.
+  if (err instanceof ScopeMismatchError) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Tax invoice not found.',
+      cause: err,
+    });
+  }
   if (err instanceof Error) {
     if (err.message.includes('not found') || err.message.includes('findUniqueOrThrow'))
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
@@ -44,7 +54,11 @@ export const invoiceCollectionRouter = router({
           message: 'Insufficient permissions to record collection.',
         });
       try {
-        return await recordCollection(input, ctx.user.id);
+        // PIC-97 hotfix: pass ctx.projectId (the chokepoint-validated tenant
+        // scope) so the service can assert the by-id taxInvoice belongs to it.
+        // RecordCollectionSchema strips `projectId` via zod; ctx.projectId is
+        // the canonical source.
+        return await recordCollection(input, ctx.user.id, ctx.projectId);
       } catch (err) {
         mapError(err);
       }

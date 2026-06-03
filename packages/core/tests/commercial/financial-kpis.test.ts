@@ -94,6 +94,7 @@ beforeAll(async () => {
   await recordCollection(
     { taxInvoiceId: invoice1.id, amount: 200000, collectionDate: new Date('2026-03-15') },
     'test-user',
+    project.id,
   );
 
   // Create a Variation (approved_internal) with cost impacts

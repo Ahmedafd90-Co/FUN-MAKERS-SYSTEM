@@ -12,6 +12,7 @@
 import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { RecordCollectionInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { assertProjectScope } from '../../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Collectable statuses — invoices must be in one of these to accept payments
@@ -38,10 +39,20 @@ function toDecimal(val: Prisma.Decimal | number | string | null | undefined): Pr
 // Record a collection
 // ---------------------------------------------------------------------------
 
-export async function recordCollection(input: RecordCollectionInput, actorUserId: string) {
+export async function recordCollection(
+  input: RecordCollectionInput,
+  actorUserId: string,
+  expectedProjectId: string,
+) {
   const invoice = await prisma.taxInvoice.findUniqueOrThrow({
     where: { id: input.taxInvoiceId },
   });
+
+  // PIC-97 hotfix: tenant scope — the invoice must belong to the caller's project
+  // (the projectProcedure chokepoint validated `expectedProjectId`, NOT this by-id
+  // invoice). RecordCollectionSchema strips `projectId` via zod, so the router
+  // injects ctx.projectId as the third argument here.
+  assertProjectScope(invoice, expectedProjectId, 'TaxInvoice', input.taxInvoiceId);
 
   // Gate: only collectable statuses
   if (!COLLECTABLE_STATUSES.includes(invoice.status as any)) {
