@@ -88,7 +88,11 @@ export const invoiceCollectionRouter = router({
           message: 'Insufficient permissions.',
         });
       try {
-        return await getOutstandingAmount(input.taxInvoiceId);
+        // PIC-71 PR-2 γ-fold: mirror recordCollection's ctx.projectId injection
+        // (GetOutstandingSchema strips projectId via zod; the projectProcedure
+        // chokepoint reads raw input + injects ctx.projectId). Same NOT_FOUND
+        // mapping path via mapError → ScopeMismatchError.
+        return await getOutstandingAmount(input.taxInvoiceId, ctx.projectId);
       } catch (err) {
         mapError(err);
       }
