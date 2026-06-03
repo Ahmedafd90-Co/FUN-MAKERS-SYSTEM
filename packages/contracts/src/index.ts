@@ -9,3 +9,5 @@ export * from './posting';
 export * from './commercial';
 export * from './procurement';
 export * from './layer1';
+// PIC-98 (F4 PR-2) — module entitlement registry + chokepoint filter helpers.
+export * from './modules';

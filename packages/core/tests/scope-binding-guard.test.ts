@@ -51,6 +51,13 @@ const TENANT_MODELS = new Set<string>([
   'procurementCategory', 'itemCatalog', 'projectBudget',
   'budgetAbsorptionException', 'postingEvent', 'auditLog', 'workflowInstance',
   'entity', 'project', 'department',
+  // PIC-98 PR-2 (F4) — OverrideLog gained orgId (denormalized from
+  // audit_logs parent) so tenant-admin reachability in PR-3c is
+  // guard-visible at the service layer. Adding here brings every by-id
+  // overrideLog read into the guard's enforcement scope. The current
+  // getOverrideLog (audit/override-list.ts:53) is exempt as F4_DEFERRED
+  // — adminProcedure-only today, same family as getAuditLog.
+  'overrideLog',
 ]);
 
 const BY_ID_METHODS = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst']);
@@ -173,6 +180,9 @@ const EXEMPTIONS: Exemption[] = [
   { file: 'audit/list.ts', fn: 'getAuditLog',
     category: 'F4_DEFERRED',
     reason: 'platform_admin platform surface (adminProcedure-only router; same family as posting/budget/recon); F4 splits + adds org-scope' },
+  { file: 'audit/override-list.ts', fn: 'getOverrideLog',
+    category: 'F4_DEFERRED',
+    reason: 'platform_admin platform surface (adminProcedure-only router; audit.overrideDetail); PR-3c adds tenant-admin own-org reachability via OverrideLog.orgId (denormalized in PR-2). Until PR-3c lands, this stays admin-only and the F4_DEFERRED exemption matches getAuditLog' },
 
   // -----------------------------------------------------------------------
   // HOTFIX_EXEMPT: PIC-97 hotfix (#71) router-asserted at the actual entry

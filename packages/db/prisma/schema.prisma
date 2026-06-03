@@ -121,6 +121,20 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // PIC-98 (F4 PR-2) — module entitlement (the sellable-modules gate).
+  // String array of ModuleKey values (from @fmksa/contracts):
+  //   commercial · procurement · budget · documents · drawings · layer1
+  // Filter applied at the getPermissionCodes chokepoint (filter-on-top —
+  // RolePermission rows are NEVER mutated; per-USER RBAC stays orthogonal
+  // to per-TENANT entitlement per PA1.C ruling).
+  //
+  // Default = ALL sellable modules so existing single-tenant behavior is
+  // preserved exactly (entitlement is no-op when all enabled). Platform-
+  // always-on perm resources (system / posting / audit / reconciliation /
+  // user / role / project_settings) ALWAYS pass through the filter
+  // regardless of this set — those are platform plumbing, NOT sellable.
+  enabledModules String[] @default(["commercial", "procurement", "budget", "documents", "drawings", "layer1"]) @map("enabled_modules")
+
   // PIC-95 (F1) — backbone edges: the tenant root now owns the structural
   // hierarchy (Org → Entity → Project) and user membership, not just the
   // 10 PIC-75 transactional leaves.
@@ -146,6 +160,11 @@ model Organization {
   postingEvents              PostingEvent[]
   budgetAbsorptionExceptions BudgetAbsorptionException[]
   auditLogs                  AuditLog[]
+  // PIC-98 (F4 PR-2) — OverrideLog gains orgId so audit override reads are
+  // guard-visible at the service layer when PR-3c adds tenant-admin
+  // reachability for audit.overrides/overrideDetail. Backfill via JOIN to
+  // audit_logs (the parent), then singleton default for the column.
+  overrideLogs               OverrideLog[]
   supplierInvoices           SupplierInvoice[]
   expenses                   Expense[]
   creditNotes                CreditNote[]
@@ -866,6 +885,14 @@ model AuditLog {
 /// Materialized on write for fast admin visibility.
 model OverrideLog {
   id              String   @id @default(uuid()) @map("id")
+  // PIC-98 (F4 PR-2) — per-tenant scope (denormalized for guard-visibility;
+  // PD ruling 71de0038). Backfilled from `audit_logs.org_id` parent on
+  // migration; singleton default for new rows. The denormalization keeps
+  // tenant-admin org-scoped reads (PR-3c) provable by the static-AST guard
+  // — without an orgId column, every audit override read would require a
+  // JOIN-derived check and the guard would have to exempt it (the
+  // F2 OverrideLog gap surfaced in PR-1 phase A recon).
+  orgId           String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
   auditLogId      String   @map("audit_log_id")
   overrideType    String   @map("override_type")
   overriderUserId String   @map("overrider_user_id")
@@ -876,7 +903,8 @@ model OverrideLog {
   createdAt       DateTime @default(now()) @map("created_at")
 
   // Relations
-  auditLog AuditLog @relation(fields: [auditLogId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+  auditLog     AuditLog     @relation(fields: [auditLogId], references: [id])
 
   @@map("override_logs")
 }
