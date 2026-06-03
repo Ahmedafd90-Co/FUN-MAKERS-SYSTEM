@@ -100,6 +100,7 @@ describe('Invoice Collection Service', () => {
           collectionDate: new Date('2026-03-15'),
         },
         'test-user',
+        testProject.id,
       );
 
       expect(result.collection.amount).toEqual(new Prisma.Decimal(3000));
@@ -114,12 +115,14 @@ describe('Invoice Collection Service', () => {
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 3000, collectionDate: new Date('2026-03-15') },
         'test-user',
+        testProject.id,
       );
 
       // Second collection: 2000
       const result = await recordCollection(
         { taxInvoiceId: invoice.id, amount: 2000, collectionDate: new Date('2026-03-20') },
         'test-user',
+        testProject.id,
       );
 
       expect(result.invoice.status).toBe('partially_collected');
@@ -137,6 +140,7 @@ describe('Invoice Collection Service', () => {
       const result = await recordCollection(
         { taxInvoiceId: invoice.id, amount: 5000, collectionDate: new Date('2026-04-01') },
         'test-user',
+        testProject.id,
       );
 
       expect(result.statusChanged).toBe(true);
@@ -153,6 +157,7 @@ describe('Invoice Collection Service', () => {
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 7000, collectionDate: new Date('2026-03-15') },
         'test-user',
+        testProject.id,
       );
 
       // Try to collect 5000 more (total would be 12000 > 10000)
@@ -160,6 +165,7 @@ describe('Invoice Collection Service', () => {
         recordCollection(
           { taxInvoiceId: invoice.id, amount: 5000, collectionDate: new Date('2026-03-20') },
           'test-user',
+          testProject.id,
         ),
       ).rejects.toThrow('Overcollection blocked');
     });
@@ -179,6 +185,7 @@ describe('Invoice Collection Service', () => {
         recordCollection(
           { taxInvoiceId: draftInvoice.id, amount: 1000, collectionDate: new Date() },
           'test-user',
+          testProject.id,
         ),
       ).rejects.toThrow("Cannot record collection: invoice is in 'draft' status");
     });
@@ -190,6 +197,7 @@ describe('Invoice Collection Service', () => {
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 1000, collectionDate: new Date() },
         'test-user',
+        testProject.id,
       );
 
       // Try to collect more
@@ -197,6 +205,7 @@ describe('Invoice Collection Service', () => {
         recordCollection(
           { taxInvoiceId: invoice.id, amount: 100, collectionDate: new Date() },
           'test-user',
+          testProject.id,
         ),
       ).rejects.toThrow("Cannot record collection: invoice is in 'collected' status");
     });
@@ -226,6 +235,7 @@ describe('Invoice Collection Service', () => {
       const result = await recordCollection(
         { taxInvoiceId: invoice.id, amount: 2000, collectionDate: new Date() },
         'test-user',
+        testProject.id,
       );
 
       const logs = await prisma.auditLog.findMany({
@@ -246,14 +256,17 @@ describe('Invoice Collection Service', () => {
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 2000, collectionDate: new Date('2026-06-15') },
         'test-user',
+        testProject.id,
       );
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 1000, collectionDate: new Date('2026-03-01') },
         'test-user',
+        testProject.id,
       );
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 1500, collectionDate: new Date('2026-04-10') },
         'test-user',
+        testProject.id,
       );
 
       const collections = await listCollections(invoice.id);
@@ -283,10 +296,12 @@ describe('Invoice Collection Service', () => {
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 5000, collectionDate: new Date('2026-01-15') },
         'test-user',
+        testProject.id,
       );
       await recordCollection(
         { taxInvoiceId: invoice.id, amount: 3000, collectionDate: new Date('2026-02-15') },
         'test-user',
+        testProject.id,
       );
 
       const result = await getOutstandingAmount(invoice.id);
