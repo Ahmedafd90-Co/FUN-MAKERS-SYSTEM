@@ -30,7 +30,7 @@ export async function seedQaTestRolePermissions(prisma: PrismaClient) {
   // resources that must not be delegated to tenant-scoped roles. Using the action
   // column (not a code-suffix LIKE) avoids matching codes like `commercial.preview`.
   // posting.* exclusion: ruling c9ec11f6 / PIC-92 — posting view/retry/resolve are
-  // platform-super-admin-only (held by master_admin exclusively).
+  // platform-super-admin-only (held by platform_admin exclusively).
   const viewPerms = await prisma.permission.findMany({
     where: { action: 'view', resource: { not: 'posting' } },
   });

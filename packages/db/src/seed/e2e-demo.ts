@@ -878,7 +878,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
       overrideType: 'workflow_skip',
       overriderUserId: actorId,
       reason:
-        'Urgent delivery; standard approval workflow skipped with master-admin authorisation.',
+        'Urgent delivery; standard approval workflow skipped with platform-admin authorisation.',
       beforeJson: { status: 'draft' },
       afterJson: { status: 'approved' },
       approvedBy: actorId,

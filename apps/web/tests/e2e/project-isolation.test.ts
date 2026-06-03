@@ -173,15 +173,15 @@ beforeAll(async () => {
 
   userB = await loadAuthUser(userBDb.id);
 
-  // --- Master Admin (has cross_project.read) ---
+  // --- Platform Admin (has cross_project.read) ---
   const masterAdminRole = await prisma.role.findUniqueOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
   });
 
   const masterAdminDb = await prisma.user.create({
     data: {
       email: `iso-admin-${Date.now()}@test.com`,
-      name: 'Isolation Master Admin',
+      name: 'Isolation Platform Admin',
       passwordHash: 'test-hash',
       status: 'active',
     },
@@ -261,14 +261,14 @@ describe('E2E: project isolation', () => {
     expect(result.granted).toBe(true);
   });
 
-  it('Master Admin can access project A (cross_project.read)', async () => {
+  it('Platform Admin can access project A (cross_project.read)', async () => {
     const caller = createCaller(makeCtx(masterAdmin));
     const result = await caller.getProjectData({ projectId: projectA.id });
     expect(result.projectId).toBe(projectA.id);
     expect(result.granted).toBe(true);
   });
 
-  it('Master Admin can access project B (cross_project.read)', async () => {
+  it('Platform Admin can access project B (cross_project.read)', async () => {
     const caller = createCaller(makeCtx(masterAdmin));
     const result = await caller.getProjectData({ projectId: projectB.id });
     expect(result.projectId).toBe(projectB.id);

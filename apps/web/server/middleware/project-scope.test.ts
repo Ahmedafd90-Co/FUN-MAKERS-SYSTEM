@@ -170,16 +170,16 @@ beforeAll(async () => {
     ...unassignedRoles,
   };
 
-  // --- Master Admin (has cross_project.read) ---
-  // Use the seeded master_admin role which includes cross_project.read
+  // --- Platform Admin (has cross_project.read) ---
+  // Use the seeded platform_admin role which includes cross_project.read
   const masterAdminRole = await prisma.role.findUniqueOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
   });
 
   const masterAdminDbUser = await prisma.user.create({
     data: {
       email: `mw-admin-${Date.now()}@test.com`,
-      name: 'MW Master Admin',
+      name: 'MW Platform Admin',
       passwordHash: 'test-hash',
       status: 'active',
     },
@@ -300,8 +300,8 @@ describe('projectScope middleware', () => {
     });
   });
 
-  it('allows cross-project read for Master Admin', async () => {
-    // Master Admin is NOT assigned to the project but has cross_project.read
+  it('allows cross-project read for Platform Admin', async () => {
+    // Platform Admin is NOT assigned to the project but has cross_project.read
     const caller = createCaller(makeCtx(masterAdmin));
     const result = await caller.getProjectData({ projectId: project.id });
     expect(result.projectId).toBe(project.id);

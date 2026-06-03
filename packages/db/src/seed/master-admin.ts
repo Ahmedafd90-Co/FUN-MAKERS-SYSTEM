@@ -94,7 +94,7 @@ async function ensureProjectAssignment(
 // ---------------------------------------------------------------------------
 
 export async function seedMasterAdmin(prisma: PrismaClient) {
-  console.log('  Seeding Master Admin + demo users...');
+  console.log('  Seeding Platform Admin + demo users...');
 
   // Resolve password — same for all demo users
   const password = process.env.SEED_MASTER_ADMIN_PASSWORD || DEFAULT_PASSWORD;
@@ -105,7 +105,7 @@ export async function seedMasterAdmin(prisma: PrismaClient) {
   }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  // ---- Master Admin ----
+  // ---- Platform Admin ----
   const admin = await prisma.user.upsert({
     where: { email: MASTER_ADMIN_EMAIL },
     create: {
@@ -120,9 +120,13 @@ export async function seedMasterAdmin(prisma: PrismaClient) {
     },
   });
 
-  const adminRole = await prisma.role.findUnique({ where: { code: 'master_admin' } });
+  // PIC-98 PR-1 (F4): role renamed in-place to `platform_admin` by the
+  // 20260603120000 migration (PD ruling 71de0038). User-level constants
+  // (MASTER_ADMIN_EMAIL/NAME) intentionally stay — they identify the admin
+  // USER's email/display, not the role.
+  const adminRole = await prisma.role.findUnique({ where: { code: 'platform_admin' } });
   if (!adminRole) {
-    throw new Error('Role master_admin not found. Run roles seed first.');
+    throw new Error('Role platform_admin not found. Run roles seed first.');
   }
   await ensureUserRole(prisma, admin.id, adminRole.id, admin.id);
 
@@ -169,6 +173,6 @@ export async function seedMasterAdmin(prisma: PrismaClient) {
     }
   }
 
-  console.log(`  ✓ Master Admin seeded (${MASTER_ADMIN_EMAIL})`);
+  console.log(`  ✓ Platform Admin seeded (${MASTER_ADMIN_EMAIL})`);
   console.log(`  ✓ ${DEMO_USERS.length} demo users seeded across ${projects.length} projects`);
 }

@@ -51,7 +51,7 @@ beforeAll(async () => {
     prisma.user.create({
       data: {
         email: `admin-${ts}@test.com`,
-        name: 'Master Admin',
+        name: 'Platform Admin',
         passwordHash: 'hash',
         status: 'active',
       },
@@ -108,9 +108,9 @@ beforeAll(async () => {
     },
   });
 
-  // Create master_admin role + assignment for posting exception test
+  // Create platform_admin role + assignment for posting exception test
   const existingMasterAdmin = await prisma.role.findFirst({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
   });
   adminRoleId = existingMasterAdmin?.id ?? '';
   if (existingMasterAdmin) {
@@ -273,9 +273,9 @@ describe('workflow event handlers', () => {
 });
 
 describe('notifyPostingException', () => {
-  it('notifies master_admin users when a posting exception occurs', async () => {
+  it('notifies platform_admin users when a posting exception occurs', async () => {
     if (!adminRoleId) {
-      console.warn('Skipping: no master_admin role in seed data');
+      console.warn('Skipping: no platform_admin role in seed data');
       return;
     }
 

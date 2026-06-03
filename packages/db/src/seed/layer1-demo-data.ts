@@ -65,7 +65,7 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
     select: { id: true },
   });
   if (!seedActor) {
-    console.warn('  ⚠ Layer 1 demo data skipped: master_admin user not found (run master-admin seed first).');
+    console.warn('  ⚠ Layer 1 demo data skipped: platform_admin user not found (run master-admin seed first).');
     return;
   }
   const actorId = seedActor.id;

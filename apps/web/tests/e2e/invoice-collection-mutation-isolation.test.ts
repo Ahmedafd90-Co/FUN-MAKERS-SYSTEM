@@ -9,7 +9,7 @@
  * `ctx.projectId`; the service now asserts `invoice.projectId === ctx.projectId`
  * and throws ScopeMismatchError → NOT_FOUND.
  *
- * Real-DB. userA = master_admin grants MINUS system.admin (cross_project.read
+ * Real-DB. userA = platform_admin grants MINUS system.admin (cross_project.read
  * + tax_invoice.edit, passes the chokepoint for its OWN project) — so the ORG
  * boundary is the only variable.
  */
@@ -51,10 +51,10 @@ beforeAll(async () => {
   orgAId = orgA.id;
   orgBId = orgB.id;
 
-  // Role: master_admin grants MINUS system.admin (so the chokepoint enforces
+  // Role: platform_admin grants MINUS system.admin (so the chokepoint enforces
   // org boundary; system.admin is the platform-bypass that would skip it).
   const masterAdmin = await prisma.role.findFirstOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
     include: { rolePermissions: true },
   });
   const sysAdminPerm = await prisma.permission.findFirstOrThrow({ where: { code: 'system.admin' } });

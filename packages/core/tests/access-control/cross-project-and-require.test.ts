@@ -42,10 +42,10 @@ beforeAll(async () => {
     },
   });
 
-  const maRole = await prisma.role.findUniqueOrThrow({ where: { code: 'master_admin' } });
+  const maRole = await prisma.role.findUniqueOrThrow({ where: { code: 'platform_admin' } });
   const pmRole = await prisma.role.findUniqueOrThrow({ where: { code: 'project_manager' } });
 
-  // Master Admin gets all permissions via role-permissions seed
+  // Platform Admin gets all permissions via role-permissions seed
   await prisma.userRole.create({
     data: {
       userId: masterAdminUser.id,
@@ -56,7 +56,7 @@ beforeAll(async () => {
     },
   });
 
-  // Regular PM — currently only master_admin has permissions mapped in seeds
+  // Regular PM — currently only platform_admin has permissions mapped in seeds
   await prisma.userRole.create({
     data: {
       userId: regularUser.id,
@@ -79,7 +79,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('canReadAcrossProjects', () => {
-  it('returns true for Master Admin (has cross_project.read)', async () => {
+  it('returns true for Platform Admin (has cross_project.read)', async () => {
     const result = await canReadAcrossProjects(masterAdminUser.id);
     expect(result).toBe(true);
   });

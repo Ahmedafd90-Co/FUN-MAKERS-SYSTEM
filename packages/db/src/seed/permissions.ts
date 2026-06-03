@@ -10,7 +10,7 @@ import type { PrismaClient } from '@prisma/client';
  *
  * These permissions are assigned to roles in role-permissions.ts.
  * The 14 business roles are:
- *   1. Master Admin        — full access; only role with override.*
+ *   1. Platform Admin        — full access; only role with override.*
  *   2. Project Director    — project approvals, cross-project transfer approval
  *   3. Project Manager     — project operations, same-project reallocation only
  *   4. Site Team           — raises material requests, uploads site docs

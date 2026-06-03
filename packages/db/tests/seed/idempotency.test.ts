@@ -38,12 +38,12 @@ async function runFullSeed() {
   await seedSampleProject(prisma);
   await seedMasterAdmin(prisma);
 
-  // Cluster 4: master_admin full grant runs last (mirrors index.ts; keeps this
+  // Cluster 4: platform_admin full grant runs last (mirrors index.ts; keeps this
   // helper production-faithful now that seedRolePermissions no longer wildcards
-  // master_admin). delete-then-reseed stays idempotent across the two runFullSeed
+  // platform_admin). delete-then-reseed stays idempotent across the two runFullSeed
   // runs this test makes — delete removes the prior run's rows, reseed restores
   // the same set, so row counts match.
-  await prisma.rolePermission.deleteMany({ where: { role: { code: 'master_admin' } } });
+  await prisma.rolePermission.deleteMany({ where: { role: { code: 'platform_admin' } } });
   await seedMasterAdminAllPermissions(prisma);
 }
 
@@ -146,7 +146,7 @@ describe('seed idempotency', () => {
     }
   });
 
-  it('master_admin user has exactly 1 user_role (not 2)', async () => {
+  it('platform_admin user has exactly 1 user_role (not 2)', async () => {
     const admin = await prisma.user.findUnique({
       where: { email: 'ahmedafd90@gmail.com' },
     });
@@ -158,7 +158,7 @@ describe('seed idempotency', () => {
     expect(roleCount).toBe(1);
   });
 
-  it('master_admin has exactly one assignment per demo project (no duplicates after repeated seed runs)', async () => {
+  it('platform_admin has exactly one assignment per demo project (no duplicates after repeated seed runs)', async () => {
     const admin = await prisma.user.findUnique({
       where: { email: 'ahmedafd90@gmail.com' },
     });

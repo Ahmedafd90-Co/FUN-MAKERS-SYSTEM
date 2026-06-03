@@ -8,7 +8,7 @@ import {
 } from '../access-control/override-policy';
 
 // ---------------------------------------------------------------------------
-// withOverride() — wraps any action that constitutes a Master Admin override.
+// withOverride() — wraps any action that constitutes a Platform Admin override.
 //
 // Enforces the override policy from Pause #3:
 //   1. Never-overridable actions are permanently blocked.

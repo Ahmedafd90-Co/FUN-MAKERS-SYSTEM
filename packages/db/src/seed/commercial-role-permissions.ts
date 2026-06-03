@@ -7,15 +7,15 @@ function expand(family: string, actions: string[]): string[] {
 }
 
 const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
-  // master_admin intentionally omitted — its full catalog grant is centralized
+  // platform_admin intentionally omitted — its full catalog grant is centralized
   // in seedMasterAdminAllPermissions() (cluster 4 / Option B), which runs after
-  // this commercial catalog seeds. master_admin still receives every commercial
+  // this commercial catalog seeds. platform_admin still receives every commercial
   // permission without a per-domain catch-up entry (proven by seed-coverage.test.ts).
   project_director: [
     ...expand('ipa', ['view', 'review', 'approve', 'sign']),
     ...expand('ipc', ['view', 'review', 'approve', 'sign']),
     ...expand('variation', ['view', 'review', 'approve', 'sign']),
-    // PIC-59 audit D3.05: cost_proposal.issue + cost_proposal.sign were master_admin-only —
+    // PIC-59 audit D3.05: cost_proposal.issue + cost_proposal.sign were platform_admin-only —
     // PD issues + signs cost proposals to client in practice.
     ...expand('cost_proposal', ['view', 'review', 'approve', 'issue', 'sign']),
     ...expand('tax_invoice', ['view', 'review', 'approve', 'sign']),
@@ -44,7 +44,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('ipa', ['view', 'create', 'edit', 'delete', 'submit']),
     ...expand('ipc', ['view', 'create', 'edit', 'delete', 'submit']),
     ...expand('variation', ['view', 'create', 'edit', 'delete', 'submit']),
-    // PIC-59 audit D3.05: cost_proposal.issue was master_admin-only — QS drafts and issues cost proposals.
+    // PIC-59 audit D3.05: cost_proposal.issue was platform_admin-only — QS drafts and issues cost proposals.
     ...expand('cost_proposal', ['view', 'create', 'edit', 'delete', 'submit', 'issue']),
     ...expand('tax_invoice', ['view', 'create', 'edit', 'delete', 'submit']),
     ...expand('correspondence', ['view', 'create', 'edit', 'delete', 'submit']),
@@ -126,7 +126,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('ipa', ['view', 'review', 'approve', 'sign']),
     ...expand('ipc', ['view', 'review', 'approve', 'sign']),
     ...expand('variation', ['view', 'review', 'approve', 'sign']),
-    // PIC-59 audit D3.05: cost_proposal.sign was master_admin-only — exec also signs high-value cost proposals.
+    // PIC-59 audit D3.05: cost_proposal.sign was platform_admin-only — exec also signs high-value cost proposals.
     ...expand('cost_proposal', ['view', 'review', 'approve', 'sign']),
     ...expand('tax_invoice', ['view', 'review', 'approve']),
     ...expand('correspondence', ['view', 'review', 'approve', 'sign']),

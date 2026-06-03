@@ -13,7 +13,7 @@
  * after the service-layer scope assert. reject + cancel are proven at runtime here;
  * `commit` shares the identical unscoped `commitBatch(batchId)` codepath (sweep-verified).
  *
- * Real-DB (fmksa_test). userA = master_admin grants MINUS system.admin (cross_project.read,
+ * Real-DB (fmksa_test). userA = platform_admin grants MINUS system.admin (cross_project.read,
  * passes the chokepoint for its OWN project) — so the ORG boundary is the only variable.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -58,9 +58,9 @@ beforeAll(async () => {
   orgAId = orgA.id;
   orgBId = orgB.id;
 
-  // Role: master_admin grants MINUS system.admin (cross_project.read + import.*; no platform bypass).
+  // Role: platform_admin grants MINUS system.admin (cross_project.read + import.*; no platform bypass).
   const masterAdmin = await prisma.role.findFirstOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
     include: { rolePermissions: true },
   });
   const sysAdminPerm = await prisma.permission.findFirstOrThrow({ where: { code: 'system.admin' } });

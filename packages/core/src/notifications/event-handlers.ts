@@ -13,7 +13,7 @@
  *  - workflow.rejected     → notify the workflow starter
  *  - workflow.returned     → notify the workflow starter + previous step approver
  *
- * Posting exception → notify all master_admin users.
+ * Posting exception → notify all platform_admin users.
  */
 
 import { prisma } from '@fmksa/db';
@@ -265,7 +265,7 @@ async function handleWorkflowReturned(payload: WorkflowEventPayload): Promise<vo
 // ---------------------------------------------------------------------------
 
 /**
- * Notify all users with role `master_admin` when a posting exception occurs.
+ * Notify all users with role `platform_admin` when a posting exception occurs.
  *
  * @param eventType  - The posting event type string.
  * @param eventId    - The posting event ID (used as idempotency key).
@@ -276,10 +276,10 @@ export async function notifyPostingException(
   projectId?: string,
   reason?: string,
 ): Promise<void> {
-  // Find all master_admin users (active UserRole → active User)
+  // Find all platform_admin users (active UserRole → active User)
   const now = new Date();
   const masterAdminRoles = await (prisma as any).role.findMany({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
     select: { id: true },
   });
 

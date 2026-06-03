@@ -59,7 +59,7 @@ export type OverridePolicy = {
 export const OVERRIDE_POLICY: OverridePolicy = {
   /**
    * Category 1: allowed (solo)
-   * Master Admin may perform alone, always with:
+   * Platform Admin may perform alone, always with:
    * - mandatory reason note
    * - audit log
    * - before/after capture where applicable
@@ -73,7 +73,7 @@ export const OVERRIDE_POLICY: OverridePolicy = {
 
   /**
    * Category 2: requiresSecondApprover
-   * Requires a second Master Admin approval before execution, plus:
+   * Requires a second Platform Admin approval before execution, plus:
    * - mandatory reason note
    * - audit log
    * - explicit approval record
@@ -89,7 +89,7 @@ export const OVERRIDE_POLICY: OverridePolicy = {
 
   /**
    * Category 3: never
-   * Never allowed, even by Master Admin. These would violate:
+   * Never allowed, even by Platform Admin. These would violate:
    * - signed document immutability (document.unsign)
    * - no hard delete of critical records (document.delete)
    * - additive reversal only for posting (posting.reverse_silently)

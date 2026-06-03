@@ -1,7 +1,17 @@
 import type { PrismaClient } from '@prisma/client';
 
 const ROLES = [
-  { code: 'master_admin', name: 'Master Admin', description: 'Full platform control, overrides, system administration' },
+  // PIC-98 PR-1 (F4): platform-admin role (formerly known by its pre-F4 role
+  // code; renamed in-place by the 20260603120000 migration per PD ruling
+  // 71de0038). The role still holds the `system.admin` permission
+  // (unchanged) which is the platform-admin marker — `isPlatformAdmin(ctx)`
+  // checks `permissions.includes('system.admin')`, so F3 D3 (platform-admin
+  // cross-org bypass) survives by construction. F4 PR-3a will introduce a
+  // new `tenant_admin` role with a curated subset (no system.admin, no
+  // posting.*, etc.) — the PIC-92 invariant test (retargeted to
+  // platform_admin in this same PR) is the guardrail that catches
+  // tenant_admin accidentally gaining posting.*.
+  { code: 'platform_admin', name: 'Platform Admin', description: 'Full platform control, overrides, system administration; Fun Makers operator level (cross-tenant)' },
   { code: 'project_director', name: 'Project Director', description: 'Project approvals, signatures, cross-project transfer approval' },
   { code: 'project_manager', name: 'Project Manager', description: 'Project operations, same-project reallocation only' },
   { code: 'site_team', name: 'Site Team', description: 'Raises material requests, uploads site documents' },

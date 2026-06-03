@@ -11,7 +11,7 @@
  *  1. User must be authenticated.
  *  2. Input must contain `entityId`.
  *  3. User must hold an active project assignment where project.entityId = entityId — OR —
- *     hold `system.admin` (Master Admin).
+ *     hold `system.admin` (Platform Admin).
  *  4. Aggregate all permissions from the user's roles within those assignments.
  *
  * On denial an audit log entry is written and a user-friendly FORBIDDEN
@@ -48,7 +48,7 @@ export function extractEntityId(input: unknown): string | undefined {
  * Algorithm:
  *   1. Query ProjectAssignment where project.entityId = entityId AND userId = ctx.user.id
  *      - Active assignments only: effectiveFrom <= now, effectiveTo IS NULL or > now, revokedAt IS NULL
- *   2. If no assignments, check for system.admin (Master Admin cross-entity access)
+ *   2. If no assignments, check for system.admin (Platform Admin cross-entity access)
  *   3. If neither, FORBIDDEN (log audit entry)
  *   4. Aggregate permissions: get all role IDs from the user's assignments within this entity,
  *      then get all permission codes from those roles (union of grants)
@@ -133,7 +133,7 @@ export async function verifyEntityAccess(opts: {
     return { entityPermissions: [...permissionCodes] };
   }
 
-  // Fallback: Master Admin with system.admin permission
+  // Fallback: Platform Admin with system.admin permission
   const isAdmin = await accessControlService.hasPermission(userId, 'system.admin');
 
   if (isAdmin) {

@@ -80,10 +80,10 @@ async function main() {
   // QA test grants run LAST so the view_only_demo runtime query captures every
   // *.view code added by all preceding domain seeds.
   await seedQaTestRolePermissions(prisma);
-  // master_admin full grant — same "run last" pattern (cluster 4 / Option B):
+  // platform_admin full grant — same "run last" pattern (cluster 4 / Option B):
   // every permission catalog (base, commercial, procurement, layer1) is now
-  // seeded, so grant master_admin the COMPLETE catalog. Replaces the early '*'
-  // expansion in seedRolePermissions; supersedes per-domain master_admin grants.
+  // seeded, so grant platform_admin the COMPLETE catalog. Replaces the early '*'
+  // expansion in seedRolePermissions; supersedes per-domain platform_admin grants.
   await seedMasterAdminAllPermissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
   await seedDocumentsWorkflowTemplates(prisma);
