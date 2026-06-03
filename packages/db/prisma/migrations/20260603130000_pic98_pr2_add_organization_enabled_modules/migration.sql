@@ -1,0 +1,25 @@
+-- PIC-98 PR-2 (F4) — Module entitlement column on Organization.
+--
+-- PD ruling 71de0038 / a0748f23:
+--   Entitlement is a tenant-level filter ON TOP of RBAC (PA1.C). The column
+--   lives on Organization (one row per tenant); the filter is applied at the
+--   `getPermissionCodes` chokepoint in @fmksa/core access-control. The DB
+--   stores a TEXT[] of ModuleKey codes; type-safety lives in the @fmksa/
+--   contracts MODULES registry — schema agnostic.
+--
+-- Default behavior preserved:
+--   Existing single-tenant org gets ALL sellable modules pre-enabled so the
+--   filter is a no-op until a platform-admin explicitly disables one. Until
+--   PR-3a introduces tenant_admin + PR-3b/c lock down the admin surfaces,
+--   every existing endpoint MUST behave exactly as before.
+--
+-- Platform-always-on resources (system / posting / audit / reconciliation /
+-- user / role / project_settings) are NEVER filtered out by this set —
+-- they're platform plumbing, NOT sellable. That distinction lives in
+-- @fmksa/contracts `PLATFORM_ALWAYS_ON_RESOURCES` + enforced in the
+-- chokepoint filter (PR-2 Step 6).
+--
+-- Schema change only — no PIC-93-class deploy risk. PostgreSQL 14+ atomic
+-- metadata-only DEFAULT add (no table rewrite).
+
+ALTER TABLE "organizations" ADD COLUMN     "enabled_modules" TEXT[] NOT NULL DEFAULT ARRAY['commercial', 'procurement', 'budget', 'documents', 'drawings', 'layer1'];
