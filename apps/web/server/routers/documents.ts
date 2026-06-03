@@ -16,6 +16,7 @@ import {
   DocumentStatusSchema,
 } from '@fmksa/contracts';
 import { documentService, accessControlService, createStorageAdapter } from '@fmksa/core';
+import { prisma } from '@fmksa/db';
 import { router, projectProcedure } from '../trpc';
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,20 @@ export const documentsRouter = router({
         input.projectId,
       );
 
+      // PIC-97 hotfix: tenant scope — pre-fetch the version with its document
+      // and verify the document belongs to this project (mirror the documents.get
+      // line-96 idiom). Router-asserted; flagged for PR-2 honesty note.
+      const versionScope = await prisma.documentVersion.findUnique({
+        where: { id: input.versionId },
+        select: { document: { select: { projectId: true } } },
+      });
+      if (!versionScope || versionScope.document.projectId !== input.projectId) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Document version not found in this project.',
+        });
+      }
+
       try {
         return await documentService.signVersion({
           versionId: input.versionId,
@@ -162,6 +177,23 @@ export const documentsRouter = router({
         input.projectId,
       );
 
+      // PIC-97 hotfix: tenant scope — verify the document belongs to this
+      // project before returning the `authorized: true` stamp. /api/upload
+      // re-checks scope at handleSupersede (route.ts:310), so DB mutation
+      // was already blocked, but the unguarded stamp + existence-disclosure
+      // was a real cross-tenant leak. Router-asserted; flagged for PR-2
+      // honesty note.
+      const docScope = await prisma.document.findUnique({
+        where: { id: input.documentId },
+        select: { projectId: true },
+      });
+      if (!docScope || docScope.projectId !== input.projectId) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Document not found in this project.',
+        });
+      }
+
       // This returns the metadata needed for the client to proceed with
       // file upload via /api/upload. The actual supersession happens there.
       return {
@@ -189,6 +221,23 @@ export const documentsRouter = router({
         'document.view',
         input.projectId,
       );
+
+      // PIC-97 hotfix: tenant scope — F3 hardened the document/version reads
+      // via the documentId path but getDownloadUrl is keyed on fileKey, which
+      // means org-A could request a presigned URL for any known/guessed org-B
+      // fileKey. Pre-fetch the DocumentVersion by fileKey and verify the
+      // document belongs to this project. Router-asserted; flagged for PR-2
+      // honesty note.
+      const versionScope = await prisma.documentVersion.findFirst({
+        where: { fileKey: input.fileKey },
+        select: { document: { select: { projectId: true } } },
+      });
+      if (!versionScope || versionScope.document.projectId !== input.projectId) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Document version not found in this project.',
+        });
+      }
 
       const storage = createStorageAdapter();
       const url = await storage.getSignedUrl(input.fileKey, 15 * 60);
