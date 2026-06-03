@@ -206,11 +206,21 @@ export async function listCollections(taxInvoiceId: string) {
 // Get outstanding amount for an invoice
 // ---------------------------------------------------------------------------
 
-export async function getOutstandingAmount(taxInvoiceId: string) {
+export async function getOutstandingAmount(
+  taxInvoiceId: string,
+  expectedProjectId: string,
+) {
   const invoice = await prisma.taxInvoice.findUniqueOrThrow({
     where: { id: taxInvoiceId },
-    select: { totalAmount: true, status: true },
+    select: { totalAmount: true, status: true, projectId: true },
   });
+
+  // PIC-71 PR-2 γ-fold: same scope-binding the hotfix added to recordCollection.
+  // GetOutstandingSchema strips `projectId` via zod; router injects ctx.projectId
+  // as the second arg. Without this, an org-A user submitting org-B's taxInvoiceId
+  // reads org-B's totalAmount/collectedAmount/outstandingAmount (proven REAL exfil
+  // on main `9b5504d` — see apps/web/tests/e2e/invoice-collection-mutation-isolation.test.ts).
+  assertProjectScope(invoice, expectedProjectId, 'TaxInvoice', taxInvoiceId);
 
   const agg = await prisma.invoiceCollection.aggregate({
     where: { taxInvoiceId },

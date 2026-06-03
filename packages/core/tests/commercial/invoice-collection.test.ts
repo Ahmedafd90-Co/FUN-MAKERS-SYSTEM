@@ -128,7 +128,7 @@ describe('Invoice Collection Service', () => {
       expect(result.invoice.status).toBe('partially_collected');
 
       // Outstanding should be 5000
-      const outstanding = await getOutstandingAmount(invoice.id);
+      const outstanding = await getOutstandingAmount(invoice.id, testProject.id);
       expect(outstanding.totalAmount).toBe('10000');
       expect(outstanding.collectedAmount).toBe('5000');
       expect(outstanding.outstandingAmount).toBe('5000');
@@ -146,7 +146,7 @@ describe('Invoice Collection Service', () => {
       expect(result.statusChanged).toBe(true);
       expect(result.invoice.status).toBe('collected');
 
-      const outstanding = await getOutstandingAmount(invoice.id);
+      const outstanding = await getOutstandingAmount(invoice.id, testProject.id);
       expect(outstanding.outstandingAmount).toBe('0');
     });
 
@@ -283,7 +283,7 @@ describe('Invoice Collection Service', () => {
     it('computes outstanding correctly with no collections', async () => {
       const invoice = await createCollectableInvoice(25000);
 
-      const result = await getOutstandingAmount(invoice.id);
+      const result = await getOutstandingAmount(invoice.id, testProject.id);
 
       expect(result.totalAmount).toBe('25000');
       expect(result.collectedAmount).toBe('0');
@@ -304,7 +304,7 @@ describe('Invoice Collection Service', () => {
         testProject.id,
       );
 
-      const result = await getOutstandingAmount(invoice.id);
+      const result = await getOutstandingAmount(invoice.id, testProject.id);
 
       expect(result.totalAmount).toBe('20000');
       expect(result.collectedAmount).toBe('8000');

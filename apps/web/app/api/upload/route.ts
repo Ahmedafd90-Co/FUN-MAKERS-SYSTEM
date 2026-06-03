@@ -305,8 +305,23 @@ async function handleSupersede(params: {
     );
   }
 
-  // Verify document belongs to this project (scope binding)
-  const doc = await documentService.getDocument(documentId, userId);
+  // Verify document belongs to this project (scope binding).
+  // PIC-71 PR-2 (β-sweep): pass projectId to getDocument so its service-level
+  // assertProjectScope binds — and catch the ScopeMismatchError as a 404
+  // (same shape the pre-existing inline check below produces). Both layers
+  // converge to the same NOT_FOUND surface, which the AST guard recognizes.
+  let doc;
+  try {
+    doc = await documentService.getDocument(documentId, userId, projectId);
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ScopeMismatchError') {
+      return NextResponse.json(
+        { error: 'Document not found.' },
+        { status: 404 },
+      );
+    }
+    throw err;
+  }
   if (doc.projectId !== projectId) {
     return NextResponse.json(
       { error: 'Document not found.' },

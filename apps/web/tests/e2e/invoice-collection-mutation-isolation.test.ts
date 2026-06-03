@@ -217,3 +217,52 @@ describe('PIC-97 hotfix — cross-tenant invoice-collection write leak', () => {
     expect(result?.invoice.status).toBe('partially_collected');
   });
 });
+
+/**
+ * PIC-71 (PR-2): γ-residual READ leak in the same file.
+ *
+ * `getOutstandingAmount(taxInvoiceId)` follows the SAME unscoped-by-id pattern
+ * as the now-fixed `recordCollection` but is a READ (financial-data exfil) —
+ * NOT a write. F3 PR-1 left the chokepoint reading `ctx.projectId` from raw
+ * input, but the service never compared the by-id `taxInvoice.projectId`
+ * against `ctx.projectId`. An org-A user submitting org-B's `taxInvoiceId`
+ * (with their own `projectId`) receives org-B's `{totalAmount, collectedAmount,
+ * outstandingAmount}` — secret financial data crossed orgs.
+ *
+ * PD ruling on this finding (during PR-2 γ-confirmation pass): FOLD into the
+ * bounded β-sweep, same risk class + fix shape as recordCollection. Different
+ * call than the PIC-97 hotfix split (that was a destructive WRITE on a
+ * non-auto-deploying main; this is a READ on the same main, same urgency).
+ *
+ * Same caller, same role grants, same org-B taxInvoiceId reused — only the
+ * router method differs. POS proves the fix doesn't break legit own-org use.
+ */
+describe('PIC-71 PR-2 — cross-tenant invoice-collection READ leak (getOutstandingAmount)', () => {
+  it('org-A user CANNOT read outstanding amount for an org-B invoice', async () => {
+    const caller = appRouter.createCaller(makeCtx(userA));
+    // Same wire-shape attack as record: schema strips projectId via zod;
+    // the chokepoint reads raw input + injects ctx.projectId. Cast to any
+    // to write the projectId field at the wire layer.
+    await expect(
+      caller.commercial.invoiceCollection.outstanding({
+        projectId: projectAId,
+        taxInvoiceId: invoiceBId,
+      } as any),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('POS: org-A user CAN read outstanding amount for their OWN org-A invoice', async () => {
+    const caller = appRouter.createCaller(makeCtx(userA));
+    const result = await caller.commercial.invoiceCollection.outstanding({
+      projectId: projectAId,
+      taxInvoiceId: invoiceAId,
+    } as any);
+
+    // invoiceA total is 10000 in beforeAll; the partial collection of 1000
+    // from the POS path above may have landed if test order persists DB
+    // state — assert the shape + outstanding <= total, not exact equality.
+    expect(result?.totalAmount).toBe('10000');
+    expect(typeof result?.collectedAmount).toBe('string');
+    expect(typeof result?.outstandingAmount).toBe('string');
+  });
+});

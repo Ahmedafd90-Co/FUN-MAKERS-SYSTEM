@@ -526,7 +526,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
       uploadedBy: testUser.id,
     });
 
-    const result = await documentService.getDocument(doc.id, testUser.id);
+    const result = await documentService.getDocument(doc.id, testUser.id, testProject.id);
 
     expect(result.id).toBe(doc.id);
     expect(result.title).toBe('Get Test');
@@ -548,7 +548,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
       createdBy: testUser.id,
     });
 
-    const result = await documentService.getDocument(doc.id, testUser.id);
+    const result = await documentService.getDocument(doc.id, testUser.id, testProject.id);
     expect(result.downloadUrl).toBeNull();
   });
 
@@ -557,6 +557,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
       documentService.getDocument(
         '00000000-0000-0000-0000-000000000000',
         testUser.id,
+        testProject.id,
       ),
     ).rejects.toThrow(/not found/);
   });

@@ -88,12 +88,30 @@ export const documentsRouter = router({
         input.projectId,
       );
 
-      const doc = await documentService.getDocument(
-        input.documentId,
-        ctx.user.id,
-      );
+      // PIC-71 PR-2 (β-sweep): pass input.projectId so the service-level
+      // assertProjectScope binds the read at @fmksa/core. Router check stays
+      // as belt-and-suspenders + fast-fail before the service tries the read.
+      // Both layers see input.projectId so the AST guard sees the service has
+      // its own scope binding (PD 6fec748d Path A).
+      let doc;
+      try {
+        doc = await documentService.getDocument(
+          input.documentId,
+          ctx.user.id,
+          input.projectId,
+        );
+      } catch (err) {
+        if ((err as { name?: string }).name === 'ScopeMismatchError') {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Document not found in this project.',
+          });
+        }
+        throw err;
+      }
 
-      // Verify the document belongs to this project
+      // Defensive: keep the router-level check so a future service refactor
+      // that drops the assert wouldn't silently un-protect the read.
       if (doc.projectId !== input.projectId) {
         throw new TRPCError({
           code: 'NOT_FOUND',
