@@ -1,6 +1,7 @@
 import { prisma, Prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { recordAbsorptionException } from '../budget/absorption';
+import { assertProjectScope } from '../scope-binding';
 import {
   EI_TRANSITIONS,
   EI_TERMINAL_STATUSES,
@@ -70,11 +71,29 @@ export async function createEi(input: CreateEiInput, actorUserId: string) {
 // Get
 // ---------------------------------------------------------------------------
 
-export async function getEi(id: string) {
-  return prisma.engineerInstruction.findUniqueOrThrow({
+/**
+ * PIC-71 PR-2 (β-sweep): the F3 router does `assertRecordOrgOrNotFound`
+ * on the returned EI to enforce org-scope (NOT-FOUND-shaped denial). The
+ * service gains its own project assert so the static-AST guard sees the
+ * binding AND a future router refactor cannot silently un-protect the read
+ * (PD 6fec748d Path A belt-and-suspenders).
+ *
+ * Router is `projectProcedure` (input.projectId chokepoint-validated); pass
+ * input.projectId here so the service binds at project scope — stricter than
+ * the router's existing org scope (project ⊂ org), consistent with the F3
+ * `documents.get` line-96 idiom + the PIC-97 hotfix shape. Platform-admin
+ * (system.admin) bypass: caller passes `expectedProjectId = null` to skip
+ * (F4 splits the cross-org bypass; see PD ruling c4e77f1c).
+ */
+export async function getEi(id: string, expectedProjectId: string | null) {
+  const ei = await prisma.engineerInstruction.findUniqueOrThrow({
     where: { id },
     include: { project: true, variation: true },
   });
+  if (expectedProjectId !== null) {
+    assertProjectScope(ei, expectedProjectId, 'EngineerInstruction', id);
+  }
+  return ei;
 }
 
 // ---------------------------------------------------------------------------
