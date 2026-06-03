@@ -1,0 +1,41 @@
+-- PIC-98 PR-1 (F4): rename `master_admin` role to `platform_admin` in-place.
+--
+-- PD ruling 71de0038 / 1af02c28:
+--   Role rename is in-place (UPDATE roles SET code, grants preserved via
+--   role_id; no UserRole churn). The `system.admin` permission code STAYS
+--   unchanged — `isPlatformAdmin(ctx)` continues to check for `system.admin`
+--   in ctx.user.permissions, which only the renamed `platform_admin` role
+--   holds. F3 D3 ruling ("system.admin still crosses orgs") survives by
+--   construction — the bypass moves with the role, not against it.
+--
+-- Scope of THIS migration:
+--   - Data migration only: one UPDATE statement on `roles.code`.
+--   - No schema change.
+--   - No new permissions, no permission catalog changes.
+--   - The `name` column ('Master Admin') is updated separately by the seed
+--     (roles.ts upsert) on next `pnpm db:seed` run — the seed is the
+--     source-of-truth for human-readable name + description.
+--
+-- Idempotency on fresh DBs:
+--   On a fresh DB (`prisma db push` + `db:seed`), the seed creates the role
+--   directly with `code='platform_admin'`. This migration then runs with 0
+--   rows affected (no-op). On existing DBs that already have `master_admin`,
+--   this migration renames it to `platform_admin`, after which the seed's
+--   upsert finds it by new code and updates the human-readable name.
+--
+-- Co-located changes (same commit, NOT this SQL file):
+--   - packages/db/src/seed/roles.ts — role definition renamed.
+--   - packages/db/src/seed/master-admin.ts — `findUnique({code:'master_admin'})`
+--     → `'platform_admin'` lookup.
+--   - packages/db/src/seed/role-permissions.ts — catch-all "master_admin gets
+--     all catalog permissions" lookup renamed.
+--   - packages/core/src/notifications/event-handlers.ts:268-282 (RUNTIME) —
+--     posting-exception notification role-lookup renamed. Notifications break
+--     silently if this is missed; landed atomically with the migration.
+--   - packages/db/tests/seed/seed-coverage.test.ts:214 (PIC-92 GUARDRAIL) —
+--     "posting.* held by master_admin only" retargeted to `platform_admin`.
+--     The retargeted assertion is the gate that catches PR-3a accidentally
+--     granting posting.* to `tenant_admin`.
+--   - 5 test fixture files (e2e isolation tests + middleware tests).
+--   - Comments sweep across seed files for accuracy.
+UPDATE "roles" SET "code" = 'platform_admin' WHERE "code" = 'master_admin';

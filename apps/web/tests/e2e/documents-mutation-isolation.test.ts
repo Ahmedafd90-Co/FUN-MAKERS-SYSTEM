@@ -19,7 +19,7 @@
  * the router layer, so PR-2 marks the documents fns as router-asserted
  * exemptions rather than requiring service-level guard insertion.
  *
- * Real-DB. userA = master_admin grants MINUS system.admin (cross_project.read
+ * Real-DB. userA = platform_admin grants MINUS system.admin (cross_project.read
  * + document.* perms, passes the chokepoint for its OWN project) — so the ORG
  * boundary is the only variable.
  *
@@ -75,10 +75,10 @@ beforeAll(async () => {
   orgAId = orgA.id;
   orgBId = orgB.id;
 
-  // Role: master_admin grants MINUS system.admin (chokepoint enforces org;
+  // Role: platform_admin grants MINUS system.admin (chokepoint enforces org;
   // system.admin is the platform-bypass that would skip it).
   const masterAdmin = await prisma.role.findFirstOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
     include: { rolePermissions: true },
   });
   const sysAdminPerm = await prisma.permission.findFirstOrThrow({ where: { code: 'system.admin' } });

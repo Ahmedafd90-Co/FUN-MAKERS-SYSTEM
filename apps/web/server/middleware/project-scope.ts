@@ -10,7 +10,7 @@
  *  1. User must be authenticated.
  *  2. Input must contain `projectId`.
  *  3. User must hold an active project assignment — OR —
- *     hold `cross_project.read` (Master Admin / PMO).
+ *     hold `cross_project.read` (Platform Admin / PMO).
  *
  * On denial an audit log entry is written and a user-friendly FORBIDDEN
  * error is thrown. On success, `ctx.projectId` is forwarded to resolvers.
@@ -58,7 +58,7 @@ export async function verifyProjectAccess(opts: {
   const { userId, projectId, path, orgId, platformAdmin } = opts;
 
   // 1. Access: project assignment (org-safe by construction) OR the
-  //    cross_project.read fallback (Master Admin / PMO — global today).
+  //    cross_project.read fallback (Platform Admin / PMO — global today).
   const assigned = await accessControlService.isAssignedToProject(
     userId,
     projectId,

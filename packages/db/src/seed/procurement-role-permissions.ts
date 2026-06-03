@@ -5,23 +5,23 @@ function expand(resource: string, actions: string[]): string[] {
 }
 
 const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
-  // master_admin intentionally omitted — full catalog grant is centralized in
+  // platform_admin intentionally omitted — full catalog grant is centralized in
   // seedMasterAdminAllPermissions() (cluster 4 / Option B), which runs after
   // the procurement catalog seeds. This includes the procurement-only hard-delete
   // codes (vendor.delete, vendor_contract.delete, framework_agreement.delete,
   // rfq.delete, quotation.delete) that previously lived only on this entry —
   // the centralized grant covers every catalog code, so seed-coverage's
-  // every-permission-granted guard (:75) still holds via master_admin.
+  // every-permission-granted guard (:75) still holds via platform_admin.
   project_director: [
     ...expand('vendor', ['view']),
     ...expand('vendor_contract', ['view', 'approve', 'sign']),
     ...expand('framework_agreement', ['view', 'approve', 'sign']),
-    // PIC-59 (PIC-53 closing-observation): 'materialise' was master_admin-only post-PIC-53.
+    // PIC-59 (PIC-53 closing-observation): 'materialise' was platform_admin-only post-PIC-53.
     // Audit D3.03 recommended procurement + project_director per the deal-shape decision —
     // PD picks PO vs Subcontract per the materialise card UX. Granting here.
     ...expand('rfq', ['view', 'approve', 'materialise', 'terminate']),
     ...expand('quotation', ['view']),
-    // PIC-59 audit D3.05: purchase_order.issue was master_admin-only — PD issues POs in practice.
+    // PIC-59 audit D3.05: purchase_order.issue was platform_admin-only — PD issues POs in practice.
     ...expand('purchase_order', ['view', 'approve', 'sign', 'issue']),
     ...expand('supplier_invoice', ['view', 'approve']),
     ...expand('expense', ['view', 'approve']),
@@ -72,12 +72,12 @@ const ROLE_PROCUREMENT_PERMISSIONS: Record<string, string[]> = {
     ...expand('vendor', ['view', 'create', 'edit', 'activate', 'suspend', 'blacklist']),
     ...expand('vendor_contract', ['view', 'create', 'edit', 'submit']),
     ...expand('framework_agreement', ['view', 'create', 'edit', 'submit']),
-    // PIC-59 (PIC-53 closing-observation): 'materialise' was master_admin-only post-PIC-53.
+    // PIC-59 (PIC-53 closing-observation): 'materialise' was platform_admin-only post-PIC-53.
     // Audit D3.03 recommended procurement + project_director — procurement operates
     // the materialise card on awarded RFQs; PD has materialise too (line 32).
     ...expand('rfq', ['view', 'create', 'edit', 'submit', 'review', 'approve', 'issue', 'evaluate', 'award', 'materialise', 'terminate']),
     ...expand('quotation', ['view', 'create', 'edit', 'review', 'shortlist', 'award', 'reject', 'terminate']),
-    // PIC-59 audit D3.05: purchase_order.issue was master_admin-only — procurement issues POs in practice.
+    // PIC-59 audit D3.05: purchase_order.issue was platform_admin-only — procurement issues POs in practice.
     ...expand('purchase_order', ['view', 'create', 'edit', 'submit', 'review', 'issue']),
     ...expand('supplier_invoice', ['view', 'create', 'edit', 'submit']),
     ...expand('expense', ['view', 'create', 'edit', 'submit']),

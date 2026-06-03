@@ -5,7 +5,7 @@
  * org-A session genuinely retrieving org-B rows), asserting the post-enforcement
  * isolated behaviour — RED on current main (org isolation UNENFORCED), GREEN
  * after F3. Targets are the TENANT-reachable holes (posting/budget/reconciliation
- * are master_admin-only per PIC-92 — platform-admin surfaces, out of F3 scope):
+ * are platform_admin-only per PIC-92 — platform-admin surfaces, out of F3 scope):
  *
  *   CAT1 chokepoint     — projectProcedure (import.list) on an org-B project,
  *                         reached via the cross_project.read fallback (no system.admin).
@@ -19,7 +19,7 @@
  *
  * Plus positive-path: a normal org-A user can still read within org A.
  *
- * Real-DB (fmksa_test). userA holds master_admin's grants MINUS system.admin (a
+ * Real-DB (fmksa_test). userA holds platform_admin's grants MINUS system.admin (a
  * broad cross-project reader, no platform bypass) so resolver perm-gates pass and
  * the ORG boundary is the only variable under test.
  */
@@ -40,8 +40,8 @@ function past(days: number): Date {
 
 let orgAId: string;
 let orgBId: string;
-let userA: AuthUser; // org A — master_admin grants MINUS system.admin (cross_project.read, all views)
-let platformAdmin: AuthUser; // org A — full master_admin (system.admin)
+let userA: AuthUser; // org A — platform_admin grants MINUS system.admin (cross_project.read, all views)
+let platformAdmin: AuthUser; // org A — full platform_admin (system.admin)
 let projectAId: string;
 let entityAId: string;
 let entityBId: string;
@@ -71,9 +71,9 @@ beforeAll(async () => {
   orgAId = orgA.id;
   orgBId = orgB.id;
 
-  // Roles: userA = master_admin perms minus system.admin; platformAdmin = master_admin.
+  // Roles: userA = platform_admin perms minus system.admin; platformAdmin = platform_admin.
   const masterAdmin = await prisma.role.findFirstOrThrow({
-    where: { code: 'master_admin' },
+    where: { code: 'platform_admin' },
     include: { rolePermissions: true },
   });
   const sysAdminPerm = await prisma.permission.findFirstOrThrow({

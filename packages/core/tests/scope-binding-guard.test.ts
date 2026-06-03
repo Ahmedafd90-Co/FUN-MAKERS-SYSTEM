@@ -28,7 +28,7 @@
  *   - ENGINE_PAYLOAD: convergence / workflow-engine internal, trusted payload
  *   - INTERNAL_DELEGATION: private helper called only by guarded callers
  *   - CREATE_FK_F4: create-path FK parent read, deferred to F4
- *   - F4_DEFERRED: posting/budget/recon/audit master_admin platform surface
+ *   - F4_DEFERRED: posting/budget/recon/audit platform_admin platform surface
  *   - HOTFIX_EXEMPT: documents.supersede router-asserted / .upload vacated
  *
  * Run:  pnpm -F @fmksa/core test scope-binding-guard
@@ -160,19 +160,19 @@ const EXEMPTIONS: Exemption[] = [
     reason: 'create-path entity FK lookup (Project.orgId = entity.orgId from 3fa67005); F4 hardens' },
 
   // -----------------------------------------------------------------------
-  // F4_DEFERRED: master_admin-only platform surfaces. Per PD ruling
+  // F4_DEFERRED: platform_admin-only platform surfaces. Per PD ruling
   // c4e77f1c: "system.admin bypasses org-scoping; F4 splits this when
   // tenant-admin gains posting/budget/recon/audit access".
   // -----------------------------------------------------------------------
   { file: 'posting/reversal.ts', fn: 'reversePostingEvent',
     category: 'F4_DEFERRED',
-    reason: 'master_admin platform surface (PIC-92 c9ec11f6: posting.* exclusive); F4 splits + adds org-scope' },
+    reason: 'platform_admin platform surface (PIC-92 c9ec11f6: posting.* exclusive); F4 splits + adds org-scope' },
   { file: 'reconciliation/service.ts', fn: 'reconcileProjectFinancials',
     category: 'F4_DEFERRED',
-    reason: 'master_admin platform surface (gates on posting.view per c4e77f1c); F4 splits + adds org-scope' },
+    reason: 'platform_admin platform surface (gates on posting.view per c4e77f1c); F4 splits + adds org-scope' },
   { file: 'audit/list.ts', fn: 'getAuditLog',
     category: 'F4_DEFERRED',
-    reason: 'master_admin platform surface (adminProcedure-only router; same family as posting/budget/recon); F4 splits + adds org-scope' },
+    reason: 'platform_admin platform surface (adminProcedure-only router; same family as posting/budget/recon); F4 splits + adds org-scope' },
 
   // -----------------------------------------------------------------------
   // HOTFIX_EXEMPT: PIC-97 hotfix (#71) router-asserted at the actual entry

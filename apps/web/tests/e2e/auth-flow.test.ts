@@ -138,7 +138,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('E2E: auth flow', () => {
-  it('Master Admin can sign in (core service) and get their profile (tRPC)', async () => {
+  it('Platform Admin can sign in (core service) and get their profile (tRPC)', async () => {
     // 1. Sign in via core authService
     const result = await authService.signIn(
       'ahmedafd90@gmail.com',
@@ -160,7 +160,7 @@ describe('E2E: auth flow', () => {
 
     // 5. Verify the response
     expect(me.email).toBe('ahmedafd90@gmail.com');
-    expect(me.roles.some((r) => r.code === 'master_admin')).toBe(true);
+    expect(me.roles.some((r) => r.code === 'platform_admin')).toBe(true);
     expect(me.permissions).toContain('system.admin');
   });
 

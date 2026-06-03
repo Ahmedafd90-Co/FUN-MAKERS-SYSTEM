@@ -44,7 +44,7 @@ beforeAll(async () => {
   testUserId = user.id;
 
   // Assign a role so getUser returns roles
-  const role = await prisma.role.findFirst({ where: { code: 'master_admin' } });
+  const role = await prisma.role.findFirst({ where: { code: 'platform_admin' } });
   if (role) {
     await prisma.userRole.create({
       data: {
@@ -217,7 +217,7 @@ describe('sessionService.getUser', () => {
     expect(user!.id).toBe(testUserId);
     expect(user!.email).toBe(TEST_EMAIL);
     expect(user!.roles.length).toBeGreaterThan(0);
-    // master_admin role should have permissions
+    // platform_admin role should have permissions
     expect(user!.permissions.length).toBeGreaterThan(0);
   });
 

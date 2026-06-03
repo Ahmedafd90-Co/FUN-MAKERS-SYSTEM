@@ -69,7 +69,7 @@ beforeAll(async () => {
   masterAdminUser = await prisma.user.create({
     data: {
       email: `perm-test-admin-${Date.now()}@test.com`,
-      name: 'Test Master Admin',
+      name: 'Test Platform Admin',
       passwordHash: 'test-hash',
       status: 'active',
     },
@@ -78,7 +78,7 @@ beforeAll(async () => {
   // Look up seeded roles
   const pmRole = await prisma.role.findUniqueOrThrow({ where: { code: 'project_manager' } });
   const siteTeamRole = await prisma.role.findUniqueOrThrow({ where: { code: 'site_team' } });
-  const maRole = await prisma.role.findUniqueOrThrow({ where: { code: 'master_admin' } });
+  const maRole = await prisma.role.findUniqueOrThrow({ where: { code: 'platform_admin' } });
 
   pmRoleId = pmRole.id;
   siteTeamRoleId = siteTeamRole.id;
@@ -129,7 +129,7 @@ beforeAll(async () => {
     },
   });
 
-  // masterAdminUser: active master_admin role
+  // masterAdminUser: active platform_admin role
   await prisma.userRole.create({
     data: {
       userId: masterAdminUser.id,
@@ -178,10 +178,10 @@ describe('getEffectiveRoles', () => {
 describe('getPermissionCodes', () => {
   it('returns union of permissions from multiple active roles', async () => {
     // testUser2 has only site_team active. site_team currently has no
-    // permissions mapped in seeds (only master_admin does). But we can
+    // permissions mapped in seeds (only platform_admin does). But we can
     // verify the union logic by checking master admin.
     const codes = await getPermissionCodes(masterAdminUser.id);
-    // Master Admin has all seeded permissions (at least 40+).
+    // Platform Admin has all seeded permissions (at least 40+).
     // The exact count depends on the seed run; we verify key permissions exist.
     expect(codes.length).toBeGreaterThanOrEqual(40);
     expect(codes).toContain('override.execute');
@@ -197,7 +197,7 @@ describe('getPermissionCodes', () => {
 });
 
 describe('hasPermission', () => {
-  it('returns true when Master Admin checks for override.execute', async () => {
+  it('returns true when Platform Admin checks for override.execute', async () => {
     const result = await hasPermission(masterAdminUser.id, 'override.execute');
     expect(result).toBe(true);
   });

@@ -3,13 +3,13 @@
  *
  * Closes the gap that produced the May 5 smoke-test bug: PR-A2 (PIC-13) added
  * 24 Layer 1 permission codes to the catalog but never granted them to any
- * role. master_admin therefore had 181 perms instead of all of them, and the
+ * role. platform_admin therefore had 181 perms instead of all of them, and the
  * Participants tab — gated on `project_participant.view` after the M4 fix —
  * was hidden for the only user who could test it.
  *
  * The check is structural and runs after the full seed orchestration: every
  * permission in the catalog must be granted to at least one role, and
- * master_admin must specifically have every code. If a future PR adds catalog
+ * platform_admin must specifically have every code. If a future PR adds catalog
  * codes without wiring grants, this test fails loudly and points at the gap.
  *
  * Mirrors the idempotency.test.ts pattern: real DB, runs the seed sequence in
@@ -60,13 +60,13 @@ async function runPermissionSeeds() {
   await seedLayer1RolePermissions(prisma);
   await seedQaTestRolePermissions(prisma);
 
-  // Cluster 4: prove the centralized master_admin grant is LOAD-BEARING.
-  // Nuke master_admin's grants first, then let seedMasterAdminAllPermissions
+  // Cluster 4: prove the centralized platform_admin grant is LOAD-BEARING.
+  // Nuke platform_admin's grants first, then let seedMasterAdminAllPermissions
   // (runs last, mirroring index.ts) restore them from the full catalog. The
   // :98 / :141 assertions can then only pass if the centralized fn actually
   // re-grants every code — NOT residual rows left by a prior CI `db:seed` step
   // (the catch-24 masking layer that made this fix unverifiable by CI alone).
-  await prisma.rolePermission.deleteMany({ where: { role: { code: 'master_admin' } } });
+  await prisma.rolePermission.deleteMany({ where: { role: { code: 'platform_admin' } } });
   await seedMasterAdminAllPermissions(prisma);
 }
 
@@ -104,8 +104,8 @@ describe('Seed coverage — every catalog permission must be granted', () => {
     }
   });
 
-  it('master_admin has every permission in the catalog', async () => {
-    const masterAdmin = await prisma.role.findFirst({ where: { code: 'master_admin' } });
+  it('platform_admin has every permission in the catalog', async () => {
+    const masterAdmin = await prisma.role.findFirst({ where: { code: 'platform_admin' } });
     expect(masterAdmin).not.toBeNull();
 
     const allPerms = await prisma.permission.findMany({ select: { id: true, code: true } });
@@ -120,8 +120,8 @@ describe('Seed coverage — every catalog permission must be granted', () => {
     if (missing.length > 0) {
       const codes = missing.map((p) => p.code).sort().join(', ');
       expect.fail(
-        `master_admin role is missing ${missing.length} permission code(s) that exist in the catalog: ${codes}. ` +
-          `master_admin must be granted every catalog code (this is the regression net for future drift).`,
+        `platform_admin role is missing ${missing.length} permission code(s) that exist in the catalog: ${codes}. ` +
+          `platform_admin must be granted every catalog code (this is the regression net for future drift).`,
       );
     }
   });
@@ -147,9 +147,9 @@ describe('Seed coverage — every catalog permission must be granted', () => {
     }
   });
 
-  it('master_admin has all 24 Layer 1 codes (PIC-26 regression net)', async () => {
+  it('platform_admin has all 24 Layer 1 codes (PIC-26 regression net)', async () => {
     // Specific guard for the May 5 smoke-test bug that motivated this PR.
-    const masterAdmin = await prisma.role.findFirst({ where: { code: 'master_admin' } });
+    const masterAdmin = await prisma.role.findFirst({ where: { code: 'platform_admin' } });
     expect(masterAdmin).not.toBeNull();
 
     const layer1Prefixes = [
@@ -211,12 +211,12 @@ describe('Seed coverage — every catalog permission must be granted', () => {
     expect(grants).toBe(0);
   });
 
-  it('posting.* permissions are held by master_admin only — no tenant-scoped role (PIC-92)', async () => {
+  it('posting.* permissions are held by platform_admin only — no tenant-scoped role (PIC-92)', async () => {
     // Design ruling c9ec11f6 (2026-05-30): posting.view / .retry / .resolve are
     // platform-super-admin-only. These codes expose the full cross-project posting
     // event/exception surface (see PIC-89 D1 F-1 for the tenancy analysis). They
     // must NEVER be granted to a tenant-scoped role. This test fails loudly if any
-    // role-permission seed file adds posting.* to any non-master_admin role.
+    // role-permission seed file adds posting.* to any non-platform_admin role.
     const postingPerms = await prisma.permission.findMany({
       where: { resource: 'posting' },
       select: { id: true, code: true },
@@ -229,7 +229,7 @@ describe('Seed coverage — every catalog permission must be granted', () => {
       include: { role: { select: { code: true } } },
     });
 
-    const nonAdminGrants = grants.filter((g) => g.role.code !== 'master_admin');
+    const nonAdminGrants = grants.filter((g) => g.role.code !== 'platform_admin');
 
     if (nonAdminGrants.length > 0) {
       const details = nonAdminGrants
@@ -237,7 +237,7 @@ describe('Seed coverage — every catalog permission must be granted', () => {
         .sort()
         .join(', ');
       expect.fail(
-        `posting.* permissions must be held by master_admin only (ruling c9ec11f6 / PIC-92). ` +
+        `posting.* permissions must be held by platform_admin only (ruling c9ec11f6 / PIC-92). ` +
           `The following non-admin grants were found: ${details}. ` +
           `Remove them from the offending role-permission seed file.`,
       );
