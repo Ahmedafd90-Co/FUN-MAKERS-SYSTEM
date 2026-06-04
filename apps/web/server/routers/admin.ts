@@ -1,17 +1,67 @@
 /**
- * Admin tRPC router — user management operations.
+ * Admin tRPC router — user/role management operations.
  *
- * All procedures require system.admin permission via adminProcedure.
+ * PIC-98 PR-3a (F4): F4 split lands here. Previously every procedure used
+ * `adminProcedure` (system.admin gate); now each procedure uses
+ * `protectedProcedure` + per-perm `hasPerm` gate so `tenant_admin` (which
+ * does NOT hold `system.admin`) can reach own-org administration.
+ *
+ * Permission gates per route:
+ *   - roleList:        role.view
+ *   - userList:        user.view
+ *   - getUser:         user.view
+ *   - createUser:      user.create
+ *   - deactivateUser:  user.admin
+ *
+ * Org-scoping (the F4 reachability-change):
+ *   - Every User read scopes to `ctx.orgId` for non-platform-admin callers
+ *     (tenant_admin sees only own-org users; platform_admin still crosses
+ *     orgs per F3 D3 ruling — proven by `isPlatformAdmin(ctx)` checking
+ *     `system.admin` permission which only platform_admin holds).
+ *   - By-id reads use post-fetch `user.orgId !== ctx.orgId → NOT_FOUND` to
+ *     preserve the F3 NOT-FOUND-shaped denial (no cross-org existence
+ *     disclosure).
+ *   - Create defaults `orgId = ctx.orgId` for non-platform callers; platform_
+ *     admin creates inherit the same default (today they only operate in
+ *     the singleton org; PR-4's master-provisioning procedure adds the
+ *     surface for platform-admin to create users in any org).
  */
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@fmksa/db';
 import { hashPassword, auditService } from '@fmksa/core';
-import { router, adminProcedure } from '../trpc';
+import { router, protectedProcedure } from '../trpc';
+import { isPlatformAdmin } from '../middleware/org-scope';
+
+/**
+ * Per-procedure permission gate — mirrors `posting.ts:42` / `budget.ts:25` /
+ * etc. `system.admin` is the platform-admin marker and ALWAYS satisfies any
+ * `hasPerm` call (the F3 D3 cross-org bypass marker).
+ */
+function hasPerm(
+  ctx: { user: { permissions: string[] } },
+  perm: string,
+): boolean {
+  return (
+    ctx.user.permissions.includes('system.admin') ||
+    ctx.user.permissions.includes(perm)
+  );
+}
 
 export const adminRouter = router({
-  roleList: adminProcedure
-    .query(async () => {
+  roleList: protectedProcedure
+    .query(async ({ ctx }) => {
+      if (!hasPerm(ctx, 'role.view')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      }
+      // Roles are platform-wide by design (every org uses the same role
+      // taxonomy: platform_admin / tenant_admin / project_manager / etc.).
+      // No org-scoping on role.findMany — scoping happens at user-role
+      // assignment time (the user being assigned must belong to ctx.orgId,
+      // which is enforced where assignments happen, NOT here).
       return prisma.role.findMany({
         orderBy: { createdAt: 'asc' },
         select: {
@@ -27,13 +77,26 @@ export const adminRouter = router({
       });
     }),
 
-  userList: adminProcedure
+  userList: protectedProcedure
     .input(z.object({
       search: z.string().optional(),
       status: z.enum(['active', 'inactive', 'locked']).optional(),
     }).optional())
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'user.view')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      }
+
+      // PIC-98 PR-3a (F4): org-scope ALL User reads for non-platform callers.
+      // tenant_admin sees ONLY own-org users; platform_admin (with
+      // system.admin) still crosses orgs (F3 D3 survives by construction).
       const where: Record<string, unknown> = {};
+      if (!isPlatformAdmin(ctx) && ctx.orgId) {
+        where.orgId = ctx.orgId;
+      }
       if (input?.status) where.status = input.status;
       if (input?.search) {
         where.OR = [
@@ -62,13 +125,21 @@ export const adminRouter = router({
       });
     }),
 
-  getUser: adminProcedure
+  getUser: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'user.view')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      }
+
       const user = await prisma.user.findUnique({
         where: { id: input.id },
         select: {
           id: true,
+          orgId: true,
           name: true,
           email: true,
           status: true,
@@ -86,6 +157,15 @@ export const adminRouter = router({
       if (!user) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found.' });
       }
+
+      // PIC-98 PR-3a (F4): NOT-FOUND-shaped cross-org denial. tenant_admin
+      // in org A fetching an org-B user id gets the SAME response as
+      // fetching a fake id — no existence disclosure (mirror F3 isolation
+      // pattern). platform_admin still crosses (D3 survives).
+      if (!isPlatformAdmin(ctx) && ctx.orgId && user.orgId !== ctx.orgId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found.' });
+      }
+
       // Flatten roles and compute effective permissions
       const roles = user.userRoles.map((ur) => ur.role);
       const roleIds = roles.map((r) => r.id);
@@ -108,13 +188,27 @@ export const adminRouter = router({
       };
     }),
 
-  deactivateUser: adminProcedure
+  deactivateUser: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      if (!hasPerm(ctx, 'user.admin')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      }
+
       const user = await prisma.user.findUnique({ where: { id: input.id } });
       if (!user) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found.' });
       }
+
+      // PIC-98 PR-3a (F4): NOT-FOUND-shaped cross-org denial on deactivate.
+      // Prevents tenant_admin in org A from mutating org-B users.
+      if (!isPlatformAdmin(ctx) && ctx.orgId && user.orgId !== ctx.orgId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found.' });
+      }
+
       if (user.id === ctx.user.id) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'You cannot deactivate your own account.' });
       }
@@ -142,14 +236,24 @@ export const adminRouter = router({
       return updated;
     }),
 
-  createUser: adminProcedure
+  createUser: protectedProcedure
     .input(z.object({
       name: z.string().min(1, 'Name is required'),
       email: z.string().email('Valid email is required'),
       password: z.string().min(8, 'Password must be at least 8 characters'),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Check for duplicate email
+      if (!hasPerm(ctx, 'user.create')) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Insufficient permissions.',
+        });
+      }
+
+      // Check for duplicate email — emails are unique GLOBALLY (not per-org)
+      // so this stays a global check. PR-4 may introduce per-org email
+      // namespacing if needed for multi-tenant UX, but for PR-3a the global
+      // unique constraint is the source of truth.
       const existing = await prisma.user.findUnique({
         where: { email: input.email },
       });
@@ -160,9 +264,18 @@ export const adminRouter = router({
         });
       }
 
+      // PIC-98 PR-3a (F4): default new user's orgId to caller's org.
+      // tenant_admin can only create users in their own org by construction;
+      // platform_admin in current single-tenant state lands the same default
+      // (the master-provisioning procedure in PR-4 adds the surface for
+      // platform-admin to specify any orgId when multi-tenant goes live).
+      // Conditional spread avoids passing `orgId: undefined` (rejected by
+      // `exactOptionalPropertyTypes`); when ctx.orgId is null the field is
+      // omitted and Prisma's singleton `@default` on User.orgId fills it.
       const passwordHash = await hashPassword(input.password);
       const user = await prisma.user.create({
         data: {
+          ...(ctx.orgId ? { orgId: ctx.orgId } : {}),
           name: input.name,
           email: input.email,
           passwordHash,

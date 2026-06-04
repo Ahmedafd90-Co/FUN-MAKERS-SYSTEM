@@ -21,7 +21,7 @@ import { seedAppSettings } from './app-settings';
 import { seedStatusDictionaries } from './status-dictionaries';
 import { seedPermissions } from './permissions';
 import { seedRoles } from './roles';
-import { seedRolePermissions, seedMasterAdminAllPermissions } from './role-permissions';
+import { seedRolePermissions, seedMasterAdminAllPermissions, seedTenantAdminPermissions } from './role-permissions';
 import { seedNotificationTemplates } from './notification-templates';
 import { seedSampleEntity } from './sample-entity';
 import { seedSampleProject } from './sample-project';
@@ -85,6 +85,12 @@ async function main() {
   // seeded, so grant platform_admin the COMPLETE catalog. Replaces the early '*'
   // expansion in seedRolePermissions; supersedes per-domain platform_admin grants.
   await seedMasterAdminAllPermissions(prisma);
+  // PIC-98 PR-3a (F4) — tenant_admin curated grant. Same "run last" pattern:
+  // every catalog is in place so the resource-filter picks up sellable-module
+  // perms across all domain catalogs. PIC-92 invariant test asserts no
+  // tenant-scoped role holds posting.* — tenant_admin's curated set
+  // deliberately excludes posting (resource not in SELLABLE_MODULE_RESOURCES).
+  await seedTenantAdminPermissions(prisma);
   await seedProcurementWorkflowTemplates(prisma);
   await seedDocumentsWorkflowTemplates(prisma);
   await seedProcurementNotificationTemplates(prisma);

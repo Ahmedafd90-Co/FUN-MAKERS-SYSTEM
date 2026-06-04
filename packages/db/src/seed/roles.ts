@@ -12,6 +12,18 @@ const ROLES = [
   // platform_admin in this same PR) is the guardrail that catches
   // tenant_admin accidentally gaining posting.*.
   { code: 'platform_admin', name: 'Platform Admin', description: 'Full platform control, overrides, system administration; Fun Makers operator level (cross-tenant)' },
+  // PIC-98 PR-3a (F4) — tenant_admin: org-scoped administrator within ONE
+  // tenant. Manages own-org users (user.view/create/edit/admin), assigns own-
+  // org roles (role.view), and operates ALL sellable modules (commercial,
+  // procurement, budget, documents, drawings, layer1). Does NOT hold
+  // system.admin (so `isPlatformAdmin(ctx)` returns FALSE → chokepoint
+  // org-bypass does NOT fire; F3 D3 platform-admin bypass survives by
+  // construction). Does NOT hold posting.* — the PIC-92 retargeted invariant
+  // test (seed-coverage.test.ts) is the guardrail. Does NOT hold
+  // reference_data.*, workflow.* (templates), notification.* (templates),
+  // health.*, override.execute, screen.admin_* — those stay platform-only
+  // per PD ruling a0748f23. Curated grants in seed/role-permissions.ts.
+  { code: 'tenant_admin', name: 'Tenant Admin', description: 'Org-scoped administrator within one tenant; manages own-org users + roles, operates all sellable modules. CANNOT cross orgs; CANNOT reach platform-only surfaces (posting, reference-data, workflow templates, etc.)' },
   { code: 'project_director', name: 'Project Director', description: 'Project approvals, signatures, cross-project transfer approval' },
   { code: 'project_manager', name: 'Project Manager', description: 'Project operations, same-project reallocation only' },
   { code: 'site_team', name: 'Site Team', description: 'Raises material requests, uploads site documents' },
