@@ -3,8 +3,16 @@
  *
  * listAuditLogs()  — paginated, filterable audit log list
  * getAuditLog()    — single entry with full JSON
+ *
+ * PIC-98 PR-3c (F4) — every function takes `expectedOrgId: string | null`:
+ *   - string (non-null): caller is tenant_admin or other non-platform role.
+ *     Scope reads to this org via AuditLog.orgId (F2 PIC-96 direct column,
+ *     guard-visible). NOT_FOUND-shaped on cross-org by-id.
+ *   - null: caller is platform_admin (isPlatformAdmin(ctx) = true). Cross-org
+ *     bypass — F3 D3 survives by construction.
  */
 import { prisma } from '@fmksa/db';
+import { assertOrgScope } from '../scope-binding';
 
 export type AuditLogFilters = {
   action?: string | undefined;
@@ -30,8 +38,13 @@ export type AuditLogListItem = {
   actorName?: string | null;
 };
 
-export async function listAuditLogs(filters: AuditLogFilters = {}) {
+export async function listAuditLogs(
+  filters: AuditLogFilters & { expectedOrgId: string | null } = {
+    expectedOrgId: null,
+  },
+) {
   const {
+    expectedOrgId,
     action,
     resourceType,
     actorSource,
@@ -44,6 +57,11 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
   } = filters;
 
   const where: Record<string, unknown> = {};
+
+  // PR-3c: scope to caller's org unless platform-admin bypass.
+  if (expectedOrgId !== null) {
+    where['orgId'] = expectedOrgId;
+  }
 
   if (action) where['action'] = { contains: action, mode: 'insensitive' };
   if (resourceType) where['resourceType'] = resourceType;
@@ -96,6 +114,21 @@ export async function listAuditLogs(filters: AuditLogFilters = {}) {
   return { items, total };
 }
 
-export async function getAuditLog(id: string) {
-  return prisma.auditLog.findUnique({ where: { id } });
+/**
+ * Get a single audit log entry.
+ *
+ * PR-3c: expectedOrgId for cross-org NOT_FOUND-shaped denial via direct
+ * AuditLog.orgId (F2 PIC-96). assertOrgScope keeps the guard green at
+ * the service layer — F4_DEFERRED exemption lifted in PR-3c.
+ */
+export async function getAuditLog(id: string, expectedOrgId: string | null) {
+  const entry = await prisma.auditLog.findUnique({ where: { id } });
+  if (!entry) return null;
+
+  // PR-3c cross-org NOT-FOUND-shaped denial.
+  if (expectedOrgId !== null) {
+    assertOrgScope(entry, expectedOrgId, 'AuditLog', id);
+  }
+
+  return entry;
 }

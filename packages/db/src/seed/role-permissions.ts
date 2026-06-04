@@ -235,6 +235,12 @@ export async function seedTenantAdminPermissions(prisma: PrismaClient) {
     'project.create',
     'project.edit',
     'project.archive',
+    // PIC-98 PR-3c (F4): audit + override own-org reachability.
+    // tenant_admin GETS audit.view (read-only over AuditLog + OverrideLog
+    // both scoped to ctx.orgId via direct denormalized orgId columns).
+    // EXPLICITLY NOT GRANTED: audit.export — export is platform-only until
+    // a deliberate decision (export ≠ view). PR-3c is read-only reachability.
+    'audit.view',
   ];
 
   const grants = await prisma.permission.findMany({

@@ -53,10 +53,10 @@ const TENANT_MODELS = new Set<string>([
   'entity', 'project', 'department',
   // PIC-98 PR-2 (F4) — OverrideLog gained orgId (denormalized from
   // audit_logs parent) so tenant-admin reachability in PR-3c is
-  // guard-visible at the service layer. Adding here brings every by-id
-  // overrideLog read into the guard's enforcement scope. The current
-  // getOverrideLog (audit/override-list.ts:53) is exempt as F4_DEFERRED
-  // — adminProcedure-only today, same family as getAuditLog.
+  // guard-visible at the service layer. PR-3c lifted the F4_DEFERRED
+  // exemption: getOverrideLog (audit/override-list.ts:getOverrideLog)
+  // now asserts assertOrgScope(entry, expectedOrgId, 'OverrideLog', id)
+  // — same pattern as getAuditLog. Both are guard-visible.
   'overrideLog',
 ]);
 
@@ -177,12 +177,12 @@ const EXEMPTIONS: Exemption[] = [
   { file: 'reconciliation/service.ts', fn: 'reconcileProjectFinancials',
     category: 'F4_DEFERRED',
     reason: 'platform_admin platform surface (gates on posting.view per c4e77f1c); F4 splits + adds org-scope' },
-  { file: 'audit/list.ts', fn: 'getAuditLog',
-    category: 'F4_DEFERRED',
-    reason: 'platform_admin platform surface (adminProcedure-only router; same family as posting/budget/recon); F4 splits + adds org-scope' },
-  { file: 'audit/override-list.ts', fn: 'getOverrideLog',
-    category: 'F4_DEFERRED',
-    reason: 'platform_admin platform surface (adminProcedure-only router; audit.overrideDetail); PR-3c adds tenant-admin own-org reachability via OverrideLog.orgId (denormalized in PR-2). Until PR-3c lands, this stays admin-only and the F4_DEFERRED exemption matches getAuditLog' },
+  // PIC-98 PR-3c (F4) LIFTED both prior F4_DEFERRED exemptions:
+  //   - audit/list.ts:getAuditLog
+  //   - audit/override-list.ts:getOverrideLog
+  // Both functions now take `expectedOrgId: string | null` and assertOrgScope
+  // at the service layer; the guard sees the asserts and stays GREEN
+  // without an exemption. See SR-Canonical-Patterns; PD ruling 18b4853c.
 
   // -----------------------------------------------------------------------
   // HOTFIX_EXEMPT: PIC-97 hotfix (#71) router-asserted at the actual entry
