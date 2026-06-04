@@ -89,7 +89,7 @@ afterAll(async () => {
 
 describe('projectsService', () => {
   it('creates a project with default settings', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-1`,
       name: 'Test Project 1',
       entityId: testEntity.id,
@@ -113,7 +113,7 @@ describe('projectsService', () => {
 
   it('rejects duplicate project code', async () => {
     await expect(
-      projectsService.createProject({
+      projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `PROJ-T-${ts}-1`,
         name: 'Duplicate',
         entityId: testEntity.id,
@@ -126,7 +126,7 @@ describe('projectsService', () => {
 
   it('rejects invalid entity reference', async () => {
     await expect(
-      projectsService.createProject({
+      projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `PROJ-T-${ts}-bad-ent`,
         name: 'Bad Entity',
         entityId: '00000000-0000-0000-0000-000000000000',
@@ -139,7 +139,7 @@ describe('projectsService', () => {
 
   it('rejects invalid currency reference', async () => {
     await expect(
-      projectsService.createProject({
+      projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `PROJ-T-${ts}-bad-cur`,
         name: 'Bad Currency',
         entityId: testEntity.id,
@@ -151,7 +151,7 @@ describe('projectsService', () => {
   });
 
   it('updates a project and writes audit log', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-upd`,
       name: 'Before Update',
       entityId: testEntity.id,
@@ -184,7 +184,7 @@ describe('projectsService', () => {
   });
 
   it('archives a project with reason', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-arch`,
       name: 'To Archive',
       entityId: testEntity.id,
@@ -197,12 +197,13 @@ describe('projectsService', () => {
       project.id,
       'No longer needed',
       testUser.id,
+      '00000000-0000-0000-0000-000000000001',
     );
     expect(archived.status).toBe('archived');
   });
 
   it('rejects archive without reason', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-arch2`,
       name: 'No Reason Archive',
       entityId: testEntity.id,
@@ -212,7 +213,7 @@ describe('projectsService', () => {
     });
 
     await expect(
-      projectsService.archiveProject(project.id, '', testUser.id),
+      projectsService.archiveProject(project.id, '', testUser.id, '00000000-0000-0000-0000-000000000001'),
     ).rejects.toThrow(/reason is required/i);
   });
 });
@@ -225,7 +226,7 @@ describe('projectSettingsService', () => {
   let projectId: string;
 
   beforeAll(async () => {
-    const p = await projectsService.createProject({
+    const p = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-set`,
       name: 'Settings Test',
       entityId: testEntity.id,
@@ -274,7 +275,7 @@ describe('projectAssignmentsService', () => {
   let projectId: string;
 
   beforeAll(async () => {
-    const p = await projectsService.createProject({
+    const p = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-T-${ts}-asgn`,
       name: 'Assignment Test',
       entityId: testEntity.id,
@@ -286,7 +287,7 @@ describe('projectAssignmentsService', () => {
   });
 
   it('assigns a user to a project', async () => {
-    const a = await projectAssignmentsService.assign({
+    const a = await projectAssignmentsService.assign({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       projectId,
       userId: testUser2.id,
       roleId: testRole.id,
@@ -309,7 +310,7 @@ describe('projectAssignmentsService', () => {
   });
 
   it('revokes an assignment with reason', async () => {
-    const a = await projectAssignmentsService.assign({
+    const a = await projectAssignmentsService.assign({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       projectId,
       userId: testUser.id,
       roleId: testRole.id,
@@ -317,7 +318,7 @@ describe('projectAssignmentsService', () => {
       assignedBy: testUser.id,
     });
 
-    const revoked = await projectAssignmentsService.revoke({
+    const revoked = await projectAssignmentsService.revoke({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       assignmentId: a.id,
       reason: 'Reassigned to another project',
       revokedBy: testUser.id,
@@ -328,7 +329,7 @@ describe('projectAssignmentsService', () => {
   });
 
   it('rejects revoke without reason', async () => {
-    const a = await projectAssignmentsService.assign({
+    const a = await projectAssignmentsService.assign({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       projectId,
       userId: testUser2.id,
       roleId: testRole.id,
@@ -337,7 +338,7 @@ describe('projectAssignmentsService', () => {
     });
 
     await expect(
-      projectAssignmentsService.revoke({
+      projectAssignmentsService.revoke({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         assignmentId: a.id,
         reason: '',
         revokedBy: testUser.id,
@@ -347,14 +348,14 @@ describe('projectAssignmentsService', () => {
 
   it('revoked assignments do not appear in active list', async () => {
     // Create and immediately revoke
-    const a = await projectAssignmentsService.assign({
+    const a = await projectAssignmentsService.assign({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       projectId,
       userId: testUser.id,
       roleId: testRole.id,
       effectiveFrom: new Date(),
       assignedBy: testUser.id,
     });
-    await projectAssignmentsService.revoke({
+    await projectAssignmentsService.revoke({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       assignmentId: a.id,
       reason: 'Test revoke',
       revokedBy: testUser.id,

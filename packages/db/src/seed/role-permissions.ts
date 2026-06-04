@@ -215,13 +215,26 @@ export async function seedTenantAdminPermissions(prisma: PrismaClient) {
   ];
 
   // Admin-but-tenant-scoped specific perm codes — these gate the routes
-  // PR-3a scopes to ctx.orgId.
+  // PR-3a (admin.user* + roleList) and PR-3b (entities + projects) scope to
+  // ctx.orgId via service-layer expectedOrgId param.
   const ADMIN_TENANT_PERM_CODES = [
+    // PR-3a: admin.user* + admin.roleList surfaces
     'user.view',
     'user.create',
     'user.edit',
     'user.admin',
     'role.view',
+    // PIC-98 PR-3b (F4): entities + projects own-org reachability.
+    // tenant_admin GETS these to manage own-org entity hierarchy + project
+    // CRUD; service layer scopes to ctx.orgId via expectedOrgId pattern.
+    // EXPLICITLY NOT GRANTED: cross_project.read (PMO-style; tenants who
+    // want PMO behavior add a separate PMO role).
+    'entity.view',
+    'entity.edit',
+    'project.view',
+    'project.create',
+    'project.edit',
+    'project.archive',
   ];
 
   const grants = await prisma.permission.findMany({

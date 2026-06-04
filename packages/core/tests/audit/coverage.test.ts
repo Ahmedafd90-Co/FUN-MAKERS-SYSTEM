@@ -277,7 +277,7 @@ describe('audit coverage — workflow', () => {
 describe('audit coverage — entities', () => {
   it('entity creation writes entity.create', async () => {
     const before = new Date();
-    await entitiesService.createEntity({
+    await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `AC-ENT-CREATE-${ts}`,
       name: 'Audit Entity Create',
       type: 'subsidiary',
