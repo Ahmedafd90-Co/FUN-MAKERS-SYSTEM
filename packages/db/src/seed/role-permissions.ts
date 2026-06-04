@@ -130,3 +130,118 @@ export async function seedMasterAdminAllPermissions(prisma: PrismaClient) {
   }
   console.log(`  ✓ platform_admin granted all ${count} catalog permissions`);
 }
+
+/**
+ * PIC-98 PR-3a (F4) — tenant_admin curated grant.
+ *
+ * Runs LAST (like seedMasterAdminAllPermissions) so the full catalog is in
+ * place. Grants tenant_admin a curated subset:
+ *
+ *   - **Sellable modules** (all perms on these resources — mirrors the
+ *     MODULES registry in @fmksa/contracts/modules.ts):
+ *       commercial: ipa / ipc / variation / cost_proposal / tax_invoice /
+ *                   correspondence / commercial_dashboard /
+ *                   client_submission_history
+ *       procurement: rfq / purchase_order / vendor_contract /
+ *                    framework_agreement / supplier_invoice / credit_note /
+ *                    vendor / item_catalog / procurement_category /
+ *                    procurement_dashboard / quotation / project_vendor
+ *       budget:     budget / expense
+ *       documents:  document
+ *       drawings:   drawing
+ *       layer1:     intercompany_contract / prime_contract /
+ *                   project_participant / entity_legal_details
+ *   - **Admin-but-tenant-scoped surfaces** (specific codes — these gate the
+ *     admin.user* and admin.roleList routes that PR-3a scopes to ctx.orgId):
+ *       user.view / user.create / user.edit / user.admin / role.view
+ *
+ * **EXPLICITLY OMITTED** (the F4 split's load-bearing exclusions):
+ *   - system.admin  — the platform-admin marker; tenant_admin MUST NOT hold
+ *     it or `isPlatformAdmin(ctx)` would return true and the chokepoint
+ *     cross-org bypass would fire. F3 D3 survives only if tenant_admin
+ *     never gains this.
+ *   - posting.*     — PIC-92 c9ec11f6 ruled posting.* platform-only. The
+ *     PR-1 retargeted seed-coverage.test.ts ASSERTS no tenant-scoped role
+ *     holds posting.* — this curated grant must STAY consistent with that
+ *     invariant.
+ *   - reference_data.set/add/update — platform-only (PD ruling a0748f23).
+ *   - workflow.* (templates), notification.* (templates), health.overview
+ *     — admin-only per the PR-1 reachability table (workflow + health
+ *     routes still use adminProcedure; tenant_admin doesn't hold
+ *     system.admin so they can't reach them regardless of perms — this is
+ *     belt-and-suspenders).
+ *   - override.execute, screen.admin_*, role.edit — platform-admin scope.
+ *   - cross_project.read — PMO-style grant, NOT a default tenant_admin
+ *     grant (tenants who want PMO behavior add a separate PMO role).
+ *   - entity.*, project.* — PR-3b (entities/projects reachability scoping)
+ *     will add those grants alongside their org-scoping.
+ *   - audit.* — PR-3c.
+ *
+ * The narrowness is intentional: PR-3a's scope is ONLY the admin.user*
+ * routes + roleList + sellable modules (per PD ruling 97c04b5b). Other
+ * tenant-admin reachable surfaces land in PR-3b / PR-3c / PR-4.
+ */
+export async function seedTenantAdminPermissions(prisma: PrismaClient) {
+  console.log('  Seeding tenant_admin curated-permission grant (centralized, runs last)...');
+  const role = await prisma.role.findFirst({ where: { code: 'tenant_admin' } });
+  if (!role) {
+    console.warn('  ⚠ Role tenant_admin not found, skipping curated grant');
+    return;
+  }
+
+  // Sellable-module resources — every perm whose `resource` is in this set
+  // is granted to tenant_admin. Mirrors the MODULES registry; if MODULES
+  // gains a resource, this list must mirror (intentional duplication —
+  // seeding is a DB concern, contracts is a TypeScript-types concern, and
+  // we avoid pulling @fmksa/contracts into the seed runtime).
+  const SELLABLE_MODULE_RESOURCES = [
+    // commercial
+    'ipa', 'ipc', 'variation', 'cost_proposal', 'tax_invoice',
+    'correspondence', 'commercial_dashboard', 'client_submission_history',
+    // procurement
+    'rfq', 'purchase_order', 'vendor_contract', 'framework_agreement',
+    'supplier_invoice', 'credit_note', 'vendor', 'item_catalog',
+    'procurement_category', 'procurement_dashboard', 'quotation',
+    'project_vendor',
+    // budget
+    'budget', 'expense',
+    // documents
+    'document',
+    // drawings
+    'drawing',
+    // layer1
+    'intercompany_contract', 'prime_contract', 'project_participant',
+    'entity_legal_details',
+  ];
+
+  // Admin-but-tenant-scoped specific perm codes — these gate the routes
+  // PR-3a scopes to ctx.orgId.
+  const ADMIN_TENANT_PERM_CODES = [
+    'user.view',
+    'user.create',
+    'user.edit',
+    'user.admin',
+    'role.view',
+  ];
+
+  const grants = await prisma.permission.findMany({
+    where: {
+      OR: [
+        { resource: { in: SELLABLE_MODULE_RESOURCES } },
+        { code: { in: ADMIN_TENANT_PERM_CODES } },
+      ],
+    },
+  });
+
+  let count = 0;
+  for (const perm of grants) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } },
+      create: { roleId: role.id, permissionId: perm.id },
+      update: {},
+    });
+    count++;
+  }
+
+  console.log(`  ✓ tenant_admin granted ${count} curated permissions (sellable modules + admin.user/role surfaces)`);
+}
