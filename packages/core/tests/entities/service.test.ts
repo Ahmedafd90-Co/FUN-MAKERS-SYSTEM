@@ -45,7 +45,7 @@ afterAll(async () => {
 
 describe('entitiesService', () => {
   it('creates a parent entity', async () => {
-    const entity = await entitiesService.createEntity({
+    const entity = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-P1`,
       name: 'Parent Corp',
       type: 'parent',
@@ -60,14 +60,14 @@ describe('entitiesService', () => {
   });
 
   it('creates a subsidiary under a parent', async () => {
-    const parent = await entitiesService.createEntity({
+    const parent = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-P2`,
       name: 'Parent 2',
       type: 'parent',
       createdBy: testUser.id,
     });
 
-    const sub = await entitiesService.createEntity({
+    const sub = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-S1`,
       name: 'Subsidiary 1',
       type: 'subsidiary',
@@ -81,7 +81,7 @@ describe('entitiesService', () => {
 
   it('rejects duplicate code', async () => {
     await expect(
-      entitiesService.createEntity({
+      entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `ET-${ts}-P1`,
         name: 'Duplicate',
         type: 'parent',
@@ -96,7 +96,7 @@ describe('entitiesService', () => {
     });
 
     await expect(
-      entitiesService.createEntity({
+      entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `ET-${ts}-BAD1`,
         name: 'Bad Parent',
         type: 'parent',
@@ -108,7 +108,7 @@ describe('entitiesService', () => {
 
   it('rejects subsidiary without parentEntityId', async () => {
     await expect(
-      entitiesService.createEntity({
+      entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
         code: `ET-${ts}-BAD2`,
         name: 'Bad Subsidiary',
         type: 'subsidiary',
@@ -118,7 +118,7 @@ describe('entitiesService', () => {
   });
 
   it('updates an entity', async () => {
-    const entity = await entitiesService.createEntity({
+    const entity = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-UPD`,
       name: 'Before',
       type: 'branch',
@@ -129,13 +129,14 @@ describe('entitiesService', () => {
       entity.id,
       { name: 'After' },
       testUser.id,
+      '00000000-0000-0000-0000-000000000001',
     );
 
     expect(updated.name).toBe('After');
   });
 
   it('archives an entity with reason', async () => {
-    const entity = await entitiesService.createEntity({
+    const entity = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-ARCH`,
       name: 'To Archive',
       type: 'branch',
@@ -146,12 +147,13 @@ describe('entitiesService', () => {
       entity.id,
       'Closing branch',
       testUser.id,
+      '00000000-0000-0000-0000-000000000001',
     );
     expect(archived.status).toBe('archived');
   });
 
   it('rejects archive without reason', async () => {
-    const entity = await entitiesService.createEntity({
+    const entity = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-ARCH2`,
       name: 'No Reason',
       type: 'branch',
@@ -159,19 +161,19 @@ describe('entitiesService', () => {
     });
 
     await expect(
-      entitiesService.archiveEntity(entity.id, '', testUser.id),
+      entitiesService.archiveEntity(entity.id, '', testUser.id, '00000000-0000-0000-0000-000000000001'),
     ).rejects.toThrow(/reason is required/i);
   });
 
   it('getEntity includes parent and children', async () => {
-    const parent = await entitiesService.createEntity({
+    const parent = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-GP`,
       name: 'Get Parent',
       type: 'parent',
       createdBy: testUser.id,
     });
 
-    await entitiesService.createEntity({
+    await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-GC`,
       name: 'Get Child',
       type: 'subsidiary',
@@ -179,7 +181,7 @@ describe('entitiesService', () => {
       createdBy: testUser.id,
     });
 
-    const result = await entitiesService.getEntity(parent.id);
+    const result = await entitiesService.getEntity(parent.id, '00000000-0000-0000-0000-000000000001');
     expect(result.children.length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -195,7 +197,7 @@ describe('hierarchy helpers', () => {
   let siblingId: string;
 
   beforeAll(async () => {
-    const root = await entitiesService.createEntity({
+    const root = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-HR`,
       name: 'Root',
       type: 'parent',
@@ -203,7 +205,7 @@ describe('hierarchy helpers', () => {
     });
     rootId = root.id;
 
-    const mid = await entitiesService.createEntity({
+    const mid = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-HM`,
       name: 'Mid',
       type: 'subsidiary',
@@ -212,7 +214,7 @@ describe('hierarchy helpers', () => {
     });
     midId = mid.id;
 
-    const leaf = await entitiesService.createEntity({
+    const leaf = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-HL`,
       name: 'Leaf',
       type: 'branch',
@@ -221,7 +223,7 @@ describe('hierarchy helpers', () => {
     });
     leafId = leaf.id;
 
-    const sibling = await entitiesService.createEntity({
+    const sibling = await entitiesService.createEntity({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `ET-${ts}-HS`,
       name: 'Sibling',
       type: 'branch',

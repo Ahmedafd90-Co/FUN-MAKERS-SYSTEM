@@ -5,6 +5,7 @@
 
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { ScopeMismatchError } from '../scope-binding';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,24 +34,38 @@ export const projectAssignmentsService = {
   /**
    * Assign a user to a project with a specific role.
    */
-  async assign(input: AssignInput) {
+  async assign(input: AssignInput & { expectedOrgId: string | null }) {
     // Validate project exists
     const project = await prisma.project.findUnique({
       where: { id: input.projectId },
+      select: { id: true, orgId: true },
     });
     if (!project) {
       throw new Error(`Project "${input.projectId}" not found.`);
     }
 
+    // PIC-98 PR-3b (F4): cross-org NOT_FOUND-shaped on project. tenant_admin
+    // in org A cannot assign users to org-B projects.
+    if (input.expectedOrgId !== null && project.orgId !== input.expectedOrgId) {
+      throw new ScopeMismatchError('Project', input.projectId, 'org');
+    }
+
     // Validate user exists
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
+      select: { id: true, orgId: true },
     });
     if (!user) {
       throw new Error(`User "${input.userId}" not found.`);
     }
 
-    // Validate role exists
+    // PIC-98 PR-3b (F4): user must also be in caller's org (can't assign
+    // org-B users into org-A projects either direction).
+    if (input.expectedOrgId !== null && user.orgId !== input.expectedOrgId) {
+      throw new ScopeMismatchError('User', input.userId, 'org');
+    }
+
+    // Validate role exists (roles are platform-wide; no org scope needed)
     const role = await prisma.role.findUnique({
       where: { id: input.roleId },
     });
@@ -106,7 +121,7 @@ export const projectAssignmentsService = {
   /**
    * Revoke a project assignment. Reason is required.
    */
-  async revoke(input: RevokeInput) {
+  async revoke(input: RevokeInput & { expectedOrgId: string | null }) {
     if (!input.reason || input.reason.trim().length === 0) {
       throw new Error('Reason is required when revoking an assignment.');
     }
@@ -114,10 +129,24 @@ export const projectAssignmentsService = {
     const assignment = await prisma.$transaction(async (tx) => {
       const before = await tx.projectAssignment.findUnique({
         where: { id: input.assignmentId },
+        include: { project: { select: { orgId: true } } },
       });
       if (!before) {
         throw new Error(
           `Project assignment "${input.assignmentId}" not found.`,
+        );
+      }
+
+      // PIC-98 PR-3b (F4): cross-org NOT_FOUND-shaped on assignment's parent
+      // project. tenant_admin in org A cannot revoke org-B assignments.
+      if (
+        input.expectedOrgId !== null &&
+        before.project.orgId !== input.expectedOrgId
+      ) {
+        throw new ScopeMismatchError(
+          'ProjectAssignment',
+          input.assignmentId,
+          'org',
         );
       }
 

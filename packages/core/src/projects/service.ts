@@ -8,6 +8,7 @@
 import { prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { accessControlService } from '../access-control/service';
+import { ScopeMismatchError, assertOrgScope } from '../scope-binding';
 import { PROJECT_SETTINGS_DEFAULTS } from './project-settings-defaults';
 
 // ---------------------------------------------------------------------------
@@ -48,13 +49,24 @@ export const projectsService = {
    * Applies default project settings from project-settings-defaults.ts.
    * Writes an audit log entry.
    */
-  async createProject(input: CreateProjectInput) {
+  async createProject(
+    input: CreateProjectInput & { expectedOrgId: string | null },
+  ) {
     // Validate entity exists — its org is the new project's org (denormalized).
     const entity = await prisma.entity.findUnique({
       where: { id: input.entityId },
+      select: { id: true, orgId: true, code: true, name: true },
     });
     if (!entity) {
       throw new Error(`Entity "${input.entityId}" not found.`);
+    }
+
+    // PIC-98 PR-3b (F4): close the CREATE_FK leak — assert parent entity is in
+    // caller's org. tenant_admin in org A passing org-B entityId → NOT_FOUND-
+    // shaped denial (no existence disclosure). platform_admin with null
+    // expectedOrgId bypasses (F3 D3 survives).
+    if (input.expectedOrgId !== null && entity.orgId !== input.expectedOrgId) {
+      throw new ScopeMismatchError('Entity', input.entityId, 'org');
     }
 
     // Validate unique code. PIC-97 (F3): code is unique PER-ORG
@@ -267,7 +279,12 @@ export const projectsService = {
   /**
    * Archive a project. Sets status to 'archived' with a required reason.
    */
-  async archiveProject(id: string, reason: string, archivedBy: string) {
+  async archiveProject(
+    id: string,
+    reason: string,
+    archivedBy: string,
+    expectedOrgId: string | null,
+  ) {
     if (!reason || reason.trim().length === 0) {
       throw new Error('Reason is required when archiving a project.');
     }
@@ -276,6 +293,12 @@ export const projectsService = {
       const before = await tx.project.findUnique({ where: { id } });
       if (!before) {
         throw new Error(`Project "${id}" not found.`);
+      }
+
+      // PIC-98 PR-3b (F4): cross-org NOT_FOUND-shaped denial on archive.
+      // Prevents tenant_admin in org A from archiving org-B projects.
+      if (expectedOrgId !== null) {
+        assertOrgScope(before, expectedOrgId, 'Project', id);
       }
 
       if (before.status === 'archived') {

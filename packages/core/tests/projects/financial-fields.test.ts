@@ -55,7 +55,7 @@ afterAll(async () => {
 
 describe('Project Financial Fields (Phase D2)', () => {
   it('creates project with contractValue', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-FIN-${ts}-1`,
       name: 'Financial Test Project 1',
       entityId: testEntity.id,
@@ -70,7 +70,7 @@ describe('Project Financial Fields (Phase D2)', () => {
   });
 
   it('creates project without contractValue (field is null)', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-FIN-${ts}-2`,
       name: 'Financial Test Project 2',
       entityId: testEntity.id,
@@ -84,7 +84,7 @@ describe('Project Financial Fields (Phase D2)', () => {
   });
 
   it('updates project to set contractValue', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-FIN-${ts}-3`,
       name: 'Financial Test Project 3',
       entityId: testEntity.id,
@@ -104,7 +104,7 @@ describe('Project Financial Fields (Phase D2)', () => {
   });
 
   it('updates project to set revisedContractValue', async () => {
-    const project = await projectsService.createProject({
+    const project = await projectsService.createProject({ expectedOrgId: '00000000-0000-0000-0000-000000000001',
       code: `PROJ-FIN-${ts}-4`,
       name: 'Financial Test Project 4',
       entityId: testEntity.id,
