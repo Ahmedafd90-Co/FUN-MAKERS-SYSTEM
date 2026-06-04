@@ -3,8 +3,22 @@
  *
  * listOverrideLogs()  — paginated, filterable override log list
  * getOverrideLog()    — single entry with related audit log
+ *
+ * PIC-98 PR-3c (F4) — every function takes `expectedOrgId: string | null`:
+ *   - string (non-null): caller is tenant_admin or other non-platform role.
+ *     Scope reads to this org via OverrideLog.orgId (PR-2 denormalized
+ *     direct column — guard-visible, NOT a JOIN). NOT_FOUND-shaped on
+ *     cross-org by-id.
+ *   - null: caller is platform_admin (isPlatformAdmin(ctx) = true). Cross-org
+ *     bypass — F3 D3 survives by construction.
+ *
+ * The denormalized OverrideLog.orgId (PR-2 migration
+ * 20260603130100_pic98_pr2_add_overridelog_orgid) is the reason this
+ * lift is possible — see SR-Multi-Tenancy + the PR-2 migration SQL header
+ * for the binding rationale.
  */
 import { prisma } from '@fmksa/db';
+import { assertOrgScope } from '../scope-binding';
 
 export type OverrideLogFilters = {
   overrideType?: string | undefined;
@@ -15,8 +29,13 @@ export type OverrideLogFilters = {
   take?: number | undefined;
 };
 
-export async function listOverrideLogs(filters: OverrideLogFilters = {}) {
+export async function listOverrideLogs(
+  filters: OverrideLogFilters & { expectedOrgId: string | null } = {
+    expectedOrgId: null,
+  },
+) {
   const {
+    expectedOrgId,
     overrideType,
     overriderUserId,
     dateFrom,
@@ -26,6 +45,11 @@ export async function listOverrideLogs(filters: OverrideLogFilters = {}) {
   } = filters;
 
   const where: Record<string, unknown> = {};
+
+  // PR-3c: scope to caller's org via direct denormalized column.
+  if (expectedOrgId !== null) {
+    where['orgId'] = expectedOrgId;
+  }
 
   if (overrideType) where['overrideType'] = overrideType;
   if (overriderUserId) where['overriderUserId'] = overriderUserId;
@@ -50,9 +74,24 @@ export async function listOverrideLogs(filters: OverrideLogFilters = {}) {
   return { items, total };
 }
 
-export async function getOverrideLog(id: string) {
-  return prisma.overrideLog.findUnique({
+/**
+ * Get a single override log entry (with related audit log).
+ *
+ * PR-3c: expectedOrgId for cross-org NOT_FOUND-shaped denial via direct
+ * OverrideLog.orgId (PR-2 denorm). assertOrgScope keeps the guard green
+ * at the service layer — F4_DEFERRED exemption lifted in PR-3c.
+ */
+export async function getOverrideLog(id: string, expectedOrgId: string | null) {
+  const entry = await prisma.overrideLog.findUnique({
     where: { id },
     include: { auditLog: true },
   });
+  if (!entry) return null;
+
+  // PR-3c cross-org NOT-FOUND-shaped denial.
+  if (expectedOrgId !== null) {
+    assertOrgScope(entry, expectedOrgId, 'OverrideLog', id);
+  }
+
+  return entry;
 }
