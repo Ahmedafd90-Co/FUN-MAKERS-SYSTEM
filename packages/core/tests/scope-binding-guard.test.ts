@@ -589,3 +589,619 @@ describe('PIC-71 PR-2 — broken-fixture bite-proof (the guard distinguishes rea
     expect(v, 'createX must NOT appear in by-id read set (it uses .create)').toBeUndefined();
   });
 });
+
+// ===========================================================================
+// PIC-98 PR-4a (F4) — Router-layer scope-binding guard (carry-forward B)
+// ===========================================================================
+//
+// Closes the carry-forward (B) banked by PR-3a/3b/3c: router-layer org-
+// scoping idioms are INVISIBLE to the service-layer guard above (the User
+// model is intentionally excluded from TENANT_MODELS so auth/session can
+// span orgs; entities/projects/audit routers thread expectedOrgId into the
+// service layer where the assert lives — the assert is guard-visible at
+// the service, but the ROUTER doesn't prove it passes the right value).
+//
+// This extension AST-reads `apps/web/server/routers/{entities,projects,
+// audit,admin}.ts` and classifies each `protectedProcedure` handler against
+// one of two satisfying idioms:
+//
+//   IDIOM A — expectedOrgId-threading (entities/projects/audit):
+//     A service call (entitiesService.getEntity / archiveProject / etc.) is
+//     passed `isPlatformAdmin(ctx) ? null : ctx.orgId` as the expectedOrgId
+//     value. The KEY discrimination: bare `null` (which silently bypasses
+//     the service-layer `if (expectedOrgId !== null) assertOrgScope(...)`
+//     block) MUST fail the guard. PD 17d0a94b: non-negotiable.
+//
+//   IDIOM B — where-filter (admin.user* / projects.userSearch):
+//     A `where.orgId = ctx.orgId` assignment inside an `if (!isPlatformAdmin
+//     (ctx) && ctx.orgId)` guard, BEFORE the prisma tenant-model findMany.
+//
+// SAFE-BY-BUILDER: handlers using projectProcedure/entityProcedure (the
+// chokepoint enforces scope) or adminProcedure (system.admin gate;
+// cross-org by design) are not classified.
+//
+// NO-TENANT-COUPLING: handlers that don't touch tenant models or known
+// scoped services don't need scope binding.
+//
+// EXEMPTION TABLE: intentional cross-org reads (e.g., `projects.roleList`
+// returns the platform-wide role catalog) live in ROUTER_EXEMPTIONS with
+// a per-handler reason.
+//
+// BROKEN FIXTURE: `pr4-router-scope.fixture.ts` exports six handlers; the
+// classifier MUST distinguish all six (1 GOOD + 3 BAD for Idiom A, 1 GOOD
+// + 1 BAD for Idiom B). The literal-null bite (#2) is the PD-mandated
+// dead-assert proof.
+
+// ---------------------------------------------------------------------------
+// Router-layer config
+// ---------------------------------------------------------------------------
+
+/** Service method names known to require expectedOrgId. Last-arg or
+ * object-property convention; the classifier handles both shapes. */
+const KNOWN_SCOPED_SERVICES = new Set<string>([
+  // entitiesService (PR-3b)
+  'createEntity', 'getEntity', 'updateEntity', 'archiveEntity', 'listEntities',
+  // projectsService (PR-3b)
+  'createProject', 'archiveProject',
+  // projectAssignmentsService (PR-3b)
+  'assign', 'revoke',
+  // audit services (PR-3c)
+  'listAuditLogs', 'getAuditLog', 'listOverrideLogs', 'getOverrideLog',
+]);
+
+/** TRPC procedure builders considered "safe by builder" — chokepoint or
+ * system.admin gate already enforces scope at a higher layer. */
+const SAFE_BUILDERS = new Set<string>([
+  'projectProcedure',  // chokepoint asserts user has project access
+  'entityProcedure',   // chokepoint asserts entity membership
+  'adminProcedure',    // system.admin gate; cross-org intentional
+  'publicProcedure',   // no auth at all; never reads tenant data
+]);
+
+/** Router-handler exemptions — intentional cross-org reads on
+ * protectedProcedure. Each entry MUST have a per-handler reason. */
+type RouterExemptCategory = 'PLATFORM_WIDE_READ' | 'ROUTER_DELEGATED';
+
+interface RouterExemption {
+  file: string;       // router filename, e.g., 'projects.ts'
+  handler: string;    // procedure path, e.g., 'roleList' or 'settings.get'
+  category: RouterExemptCategory;
+  reason: string;
+}
+
+const ROUTER_EXEMPTIONS: RouterExemption[] = [
+  {
+    file: 'projects.ts',
+    handler: 'roleList',
+    category: 'PLATFORM_WIDE_READ',
+    reason: 'roles are platform-wide by design (same taxonomy across orgs: platform_admin/tenant_admin/project_manager/etc.); intentional sharing per CAT-D3 positive proof in PR-3b isolation test',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// AST helpers — Idiom A classification
+// ---------------------------------------------------------------------------
+
+/** Does this expression match the canonical `isPlatformAdmin(ctx) ? null : ctx.orgId` pattern? */
+function isExpectedOrgIdConditional(expr: ts.Expression): boolean {
+  if (!ts.isConditionalExpression(expr)) return false;
+  // condition: isPlatformAdmin(ctx) (or isPlatformAdmin(anyArg))
+  const condIsCall =
+    ts.isCallExpression(expr.condition) &&
+    ts.isIdentifier(expr.condition.expression) &&
+    expr.condition.expression.text === 'isPlatformAdmin';
+  if (!condIsCall) return false;
+  // whenTrue: null literal
+  const whenTrueIsNull = expr.whenTrue.kind === ts.SyntaxKind.NullKeyword;
+  // whenFalse: ctx.orgId (PropertyAccessExpression on identifier `ctx` with name `orgId`)
+  const whenFalseIsCtxOrgId =
+    ts.isPropertyAccessExpression(expr.whenFalse) &&
+    ts.isIdentifier(expr.whenFalse.expression) &&
+    expr.whenFalse.expression.text === 'ctx' &&
+    expr.whenFalse.name.text === 'orgId';
+  return whenTrueIsNull && whenFalseIsCtxOrgId;
+}
+
+/** Trace an Identifier reference back to its `const`/`let` declaration in the
+ * given fn body. Returns the initializer expression, or undefined if not found. */
+function findVariableInitializer(name: string, body: ts.Block): ts.Expression | undefined {
+  let found: ts.Expression | undefined;
+  function visit(node: ts.Node) {
+    if (found) return;
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      node.initializer
+    ) {
+      found = node.initializer;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(body);
+  return found;
+}
+
+/** Classify the VALUE expression passed as expectedOrgId. Handles direct
+ * literal/conditional or Identifier reference traced to its declaration. */
+function classifyExpectedOrgIdValue(
+  expr: ts.Expression,
+  body: ts.Block,
+): 'conditional' | 'literal-null' | 'wrong-source' {
+  if (isExpectedOrgIdConditional(expr)) return 'conditional';
+  if (expr.kind === ts.SyntaxKind.NullKeyword) return 'literal-null';
+  if (ts.isIdentifier(expr)) {
+    const init = findVariableInitializer(expr.text, body);
+    if (init) return classifyExpectedOrgIdValue(init, body);
+  }
+  return 'wrong-source';
+}
+
+/** Find any CallExpression in the body whose method name is in
+ * KNOWN_SCOPED_SERVICES. Returns the call nodes. */
+function findKnownServiceCalls(body: ts.Block): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = [];
+  function visit(node: ts.Node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.name) &&
+      KNOWN_SCOPED_SERVICES.has(node.expression.name.text)
+    ) {
+      calls.push(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(body);
+  return calls;
+}
+
+/** Find the expectedOrgId-shaped expression in a service call's args.
+ * Returns the expression node, or undefined if none is present. */
+function findExpectedOrgIdExpr(call: ts.CallExpression): ts.Expression | undefined {
+  // Strategy: look in every argument. For ObjectLiteralExpression args, look
+  // for a property named `expectedOrgId`. For positional args, look for the
+  // expression itself if it's null/Identifier-named-expectedOrgId/Conditional.
+  for (const arg of call.arguments) {
+    // Object-arg shape: { ...input, expectedOrgId } or { expectedOrgId: ... }
+    if (ts.isObjectLiteralExpression(arg)) {
+      for (const prop of arg.properties) {
+        if (
+          ts.isPropertyAssignment(prop) &&
+          ts.isIdentifier(prop.name) &&
+          prop.name.text === 'expectedOrgId'
+        ) {
+          return prop.initializer;
+        }
+        if (
+          ts.isShorthandPropertyAssignment(prop) &&
+          prop.name.text === 'expectedOrgId'
+        ) {
+          // Shorthand `{ expectedOrgId }` — return the identifier
+          return prop.name;
+        }
+      }
+    }
+    // Positional arg: a null literal, an Identifier `expectedOrgId`, or a
+    // ConditionalExpression matching the pattern.
+    if (arg.kind === ts.SyntaxKind.NullKeyword) {
+      return arg as ts.Expression;
+    }
+    if (ts.isIdentifier(arg) && arg.text === 'expectedOrgId') {
+      return arg;
+    }
+    if (isExpectedOrgIdConditional(arg)) {
+      return arg;
+    }
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// AST helpers — Idiom B classification (where-filter)
+// ---------------------------------------------------------------------------
+
+/** Find any prisma.<tenantModel>.findMany|count|findFirst calls (write/non-by-id
+ * read paths) in the handler body. Returns the call nodes. */
+function findTenantModelListCalls(body: ts.Block): ts.CallExpression[] {
+  // User is intentionally NOT in TENANT_MODELS for the service-layer guard
+  // above (auth/session must span orgs). For the router-layer guard,
+  // admin.userList / projects.userSearch DO need to scope, so we include
+  // `user` (plus drawing/document/notification which routers may list).
+  const ROUTER_LIST_MODELS = new Set<string>([
+    'user',
+    ...TENANT_MODELS,
+  ]);
+  const LIST_METHODS = new Set(['findMany', 'count', 'aggregate', 'groupBy']);
+  const calls: ts.CallExpression[] = [];
+  function visit(node: ts.Node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.name) &&
+      LIST_METHODS.has(node.expression.name.text)
+    ) {
+      const inner = node.expression.expression;
+      if (
+        ts.isPropertyAccessExpression(inner) &&
+        ts.isIdentifier(inner.expression) &&
+        inner.expression.text === 'prisma' &&
+        ROUTER_LIST_MODELS.has(inner.name.text)
+      ) {
+        calls.push(node);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(body);
+  return calls;
+}
+
+/** Does the handler body contain a `where.orgId = ctx.orgId` (or `where['orgId']
+ * = ctx.orgId`) assignment? */
+function hasWhereOrgIdAssignment(body: ts.Block): boolean {
+  let found = false;
+  function visit(node: ts.Node) {
+    if (found) return;
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(node.left) &&
+      ts.isIdentifier(node.left.expression) &&
+      node.left.expression.text === 'where' &&
+      node.left.name.text === 'orgId'
+    ) {
+      found = true;
+      return;
+    }
+    // Bracket form: where['orgId'] = ctx.orgId
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isElementAccessExpression(node.left) &&
+      ts.isIdentifier(node.left.expression) &&
+      node.left.expression.text === 'where' &&
+      ts.isStringLiteral(node.left.argumentExpression) &&
+      node.left.argumentExpression.text === 'orgId'
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(body);
+  return found;
+}
+
+/** Does the handler body do a post-fetch `if (!isPlatformAdmin(ctx) && ...
+ * X.orgId !== ctx.orgId) throw NOT_FOUND` (the admin.getUser / deactivateUser
+ * idiom)? */
+function hasPostFetchOrgIdCheck(body: ts.Block): boolean {
+  let found = false;
+  function visit(node: ts.Node) {
+    if (found) return;
+    if (ts.isIfStatement(node)) {
+      // Look for `X.orgId !== ctx.orgId` somewhere in the condition
+      let hasOrgIdCheck = false;
+      function findOrgIdCheck(n: ts.Node) {
+        if (
+          ts.isBinaryExpression(n) &&
+          n.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+        ) {
+          for (const side of [n.left, n.right]) {
+            if (
+              ts.isPropertyAccessExpression(side) &&
+              ts.isIdentifier(side.name) &&
+              side.name.text === 'orgId'
+            ) {
+              hasOrgIdCheck = true;
+              return;
+            }
+          }
+        }
+        ts.forEachChild(n, findOrgIdCheck);
+      }
+      findOrgIdCheck(node.expression);
+      if (hasOrgIdCheck) {
+        // Verify there's a throw in then-branch
+        let hasThrow = false;
+        function findThrow(n: ts.Node) {
+          if (ts.isThrowStatement(n)) { hasThrow = true; return; }
+          ts.forEachChild(n, findThrow);
+        }
+        findThrow(node.thenStatement);
+        if (hasThrow) found = true;
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(body);
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// Router-handler enumerator + classifier
+// ---------------------------------------------------------------------------
+
+type RouterIdiom =
+  | 'conditional'         // Idiom A GOOD
+  | 'literal-null'        // Idiom A BAD #2 (THE non-negotiable bite)
+  | 'wrong-source'        // Idiom A BAD #3
+  | 'dropped'             // Idiom A BAD #1 (KNOWN service called without expectedOrgId)
+  | 'where-filter'        // Idiom B GOOD (inline where.orgId or post-fetch check)
+  | 'where-dropped'       // Idiom B BAD (tenant findMany with no scope)
+  | 'safe-by-builder'     // projectProcedure/entityProcedure/adminProcedure/publicProcedure
+  | 'no-tenant-coupling'; // protectedProcedure that doesn't touch tenant models or services
+
+interface RouterHandler {
+  file: string;     // bare filename, e.g., 'entities.ts'
+  handler: string;  // dot-path, e.g., 'create' or 'assignments.assign'
+  builder: string;  // procedure builder, e.g., 'protectedProcedure'
+  idiom: RouterIdiom;
+  exemption?: RouterExemption;
+}
+
+/** Walk the leftmost expression chain to find the procedure-builder identifier. */
+function findProcedureBuilder(expr: ts.Expression): string | undefined {
+  let cur: ts.Expression = expr;
+  while (true) {
+    if (ts.isCallExpression(cur)) { cur = cur.expression; continue; }
+    if (ts.isPropertyAccessExpression(cur)) { cur = cur.expression; continue; }
+    break;
+  }
+  if (ts.isIdentifier(cur)) return cur.text;
+  return undefined;
+}
+
+/** Find the handler arrow function passed to .query()/.mutation() in a
+ * procedure chain. Returns the BlockStatement body, or undefined. */
+function findHandlerBody(expr: ts.Expression): ts.Block | undefined {
+  // Walk outward from the outermost call to find .query/.mutation
+  let outermost: ts.CallExpression | undefined;
+  if (ts.isCallExpression(expr)) outermost = expr;
+  while (outermost) {
+    const callee = outermost.expression;
+    if (ts.isPropertyAccessExpression(callee)) {
+      const methodName = callee.name.text;
+      if (methodName === 'query' || methodName === 'mutation') {
+        const handlerArg = outermost.arguments[0];
+        if (
+          handlerArg &&
+          (ts.isArrowFunction(handlerArg) || ts.isFunctionExpression(handlerArg)) &&
+          handlerArg.body &&
+          ts.isBlock(handlerArg.body)
+        ) {
+          return handlerArg.body;
+        }
+        return undefined;
+      }
+      // Walk into the receiver
+      if (ts.isCallExpression(callee.expression)) {
+        outermost = callee.expression;
+        continue;
+      }
+    }
+    break;
+  }
+  return undefined;
+}
+
+/** Classify a router-handler body using the live idioms above. */
+function classifyRouterHandler(body: ts.Block, _builder: string): RouterIdiom {
+  // Check Idiom A first: any KNOWN_SCOPED_SERVICES call?
+  const serviceCalls = findKnownServiceCalls(body);
+  if (serviceCalls.length > 0) {
+    // For each known service call, look for the expectedOrgId arg
+    let sawDropped = false;
+    for (const call of serviceCalls) {
+      const expr = findExpectedOrgIdExpr(call);
+      if (!expr) { sawDropped = true; continue; }
+      const verdict = classifyExpectedOrgIdValue(expr, body);
+      // Worst-case wins: literal-null > wrong-source > dropped > conditional
+      if (verdict === 'literal-null') return 'literal-null';
+      if (verdict === 'wrong-source') return 'wrong-source';
+      // 'conditional' continues to check others
+    }
+    if (sawDropped) return 'dropped';
+    return 'conditional';
+  }
+  // Idiom B: tenant-model findMany without scope?
+  const listCalls = findTenantModelListCalls(body);
+  if (listCalls.length > 0) {
+    if (hasWhereOrgIdAssignment(body) || hasPostFetchOrgIdCheck(body)) {
+      return 'where-filter';
+    }
+    return 'where-dropped';
+  }
+  // Also check post-fetch idiom for by-id reads without a service call
+  // (e.g., admin.getUser pattern: prisma.user.findUnique + post-fetch check)
+  if (hasPostFetchOrgIdCheck(body)) return 'where-filter';
+  return 'no-tenant-coupling';
+}
+
+/** Walk a router file's AST and extract every handler with its builder + classification. */
+function extractRouterHandlers(sf: ts.SourceFile): RouterHandler[] {
+  const handlers: RouterHandler[] = [];
+  const fileName = sf.fileName.split('/').pop() ?? sf.fileName;
+
+  // Walk for PropertyAssignment where the value is a procedure chain ending in
+  // .query()/.mutation(). Track nesting via parent property-assignment chain
+  // to build dot-paths like `assignments.assign`.
+  function visit(node: ts.Node, pathPrefix: string[]) {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+      const propName = node.name.text;
+      const initializer = node.initializer;
+      // Sub-router: { ... } object literal passed directly OR via Identifier ref
+      if (ts.isObjectLiteralExpression(initializer)) {
+        for (const prop of initializer.properties) {
+          visit(prop, [...pathPrefix, propName]);
+        }
+      }
+      // Procedure chain: <builder>.input(...).query(handler) or .mutation(handler)
+      if (ts.isCallExpression(initializer)) {
+        const builder = findProcedureBuilder(initializer);
+        if (builder !== undefined) {
+          const body = findHandlerBody(initializer);
+          if (body !== undefined) {
+            const handlerPath = [...pathPrefix, propName].join('.');
+            const idiom = SAFE_BUILDERS.has(builder)
+              ? 'safe-by-builder'
+              : classifyRouterHandler(body, builder);
+            const exemption = ROUTER_EXEMPTIONS.find(
+              (e) => e.file === fileName && e.handler === handlerPath,
+            );
+            handlers.push({
+              file: fileName,
+              handler: handlerPath,
+              builder,
+              idiom,
+              ...(exemption ? { exemption } : {}),
+            });
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, pathPrefix));
+  }
+  visit(sf, []);
+  return handlers;
+}
+
+// ---------------------------------------------------------------------------
+// Router-layer tests
+// ---------------------------------------------------------------------------
+
+const ROUTERS_ROOT = join(__dirname, '..', '..', '..', 'apps', 'web', 'server', 'routers');
+const ROUTER_FILES = ['entities.ts', 'projects.ts', 'audit.ts', 'admin.ts'];
+
+describe('PIC-98 PR-4a (F4) — router-layer scope-binding guard (carry-forward B)', () => {
+  const allRouterHandlers: RouterHandler[] = [];
+  for (const file of ROUTER_FILES) {
+    const path = join(ROUTERS_ROOT, file);
+    const content = readFileSync(path, 'utf-8');
+    const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
+    allRouterHandlers.push(...extractRouterHandlers(sf));
+  }
+
+  it('PROPERTY: every protectedProcedure handler in entities/projects/audit/admin routers binds scope (Idiom A or B) OR is exempt', () => {
+    const failures: string[] = [];
+    for (const h of allRouterHandlers) {
+      // safe-by-builder + no-tenant-coupling + conditional + where-filter all pass.
+      // dropped / literal-null / wrong-source / where-dropped fail UNLESS exempt.
+      const isFail =
+        h.idiom === 'dropped' ||
+        h.idiom === 'literal-null' ||
+        h.idiom === 'wrong-source' ||
+        h.idiom === 'where-dropped';
+      if (isFail && !h.exemption) {
+        failures.push(`RED: ${h.file}:${h.handler} builder=${h.builder} idiom=${h.idiom}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(
+        `${failures.length} unscoped router handler(s):\n  ${failures.join('\n  ')}`,
+      );
+    }
+  });
+
+  it('METRICS: coverage is sane (handlers discovered across all 4 routers)', () => {
+    const filesSeen = new Set(allRouterHandlers.map((h) => h.file));
+    expect(filesSeen.size, 'all 4 router files must contribute at least 1 handler').toBe(4);
+    // Coarse lower bound — if this drops below ~15 the enumerator missed something
+    expect(allRouterHandlers.length, 'router handler total — too few suggests enumerator drift').toBeGreaterThan(15);
+  });
+
+  it('IDIOM A COVERAGE: at least one entities/projects/audit handler is classified `conditional` (live expectedOrgId-threading exists on main)', () => {
+    const conditionalCount = allRouterHandlers.filter(
+      (h) => h.idiom === 'conditional' && ['entities.ts', 'projects.ts', 'audit.ts'].includes(h.file),
+    ).length;
+    expect(conditionalCount, 'live conditional-threaded handlers must exist post-PR-3b/3c').toBeGreaterThan(0);
+  });
+
+  it('IDIOM B COVERAGE: admin.ts contributes at least one `where-filter` handler (live admin.userList / getUser scoping)', () => {
+    const whereFilterCount = allRouterHandlers.filter(
+      (h) => h.idiom === 'where-filter' && h.file === 'admin.ts',
+    ).length;
+    expect(whereFilterCount, 'live where-filter handlers must exist in admin.ts post-PR-3a').toBeGreaterThan(0);
+  });
+
+  it('ROUTER EXEMPTION HYGIENE: every router-exemption entry matches a discovered handler', () => {
+    const orphans: string[] = [];
+    for (const e of ROUTER_EXEMPTIONS) {
+      const matched = allRouterHandlers.some(
+        (h) => h.file === e.file && h.handler === e.handler,
+      );
+      if (!matched) {
+        orphans.push(`${e.file}:${e.handler} (${e.category}) — exempt entry has no matching handler`);
+      }
+    }
+    if (orphans.length > 0) {
+      throw new Error(`${orphans.length} orphan router-exemptions:\n  ${orphans.join('\n  ')}`);
+    }
+  });
+});
+
+describe('PIC-98 PR-4a (F4) — router-guard broken-fixture bite-proof (the guard distinguishes 3 RED cases)', () => {
+  const FIXTURE_FILE = join(__dirname, 'fixtures', 'pr4-router-scope.fixture.ts');
+  const content = readFileSync(FIXTURE_FILE, 'utf-8');
+  const sf = ts.createSourceFile(FIXTURE_FILE, content, ts.ScriptTarget.Latest, true);
+
+  // The fixture handlers are top-level `export async function NAME(...)` —
+  // not procedure chains. Classify each by walking the body directly.
+  const fixtureBodies = new Map<string, ts.Block>();
+  function visit(node: ts.Node) {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name &&
+      node.body &&
+      ts.isBlock(node.body)
+    ) {
+      fixtureBodies.set(node.name.text, node.body);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sf);
+
+  function classifyFixture(fnName: string): RouterIdiom {
+    const body = fixtureBodies.get(fnName);
+    if (!body) throw new Error(`Fixture handler ${fnName} not found`);
+    return classifyRouterHandler(body, 'protectedProcedure');
+  }
+
+  // -----------------------------------------------------------------------
+  // IDIOM A — expectedOrgId-threading
+  // -----------------------------------------------------------------------
+
+  it('IDIOM A GREEN: goodConditional reaches `isPlatformAdmin(ctx) ? null : ctx.orgId`', () => {
+    expect(classifyFixture('goodConditional')).toBe('conditional');
+  });
+
+  it('IDIOM A RED #1 (DROPPED): droppedExpectedOrgId calls service with no expectedOrgId at all', () => {
+    expect(classifyFixture('droppedExpectedOrgId')).toBe('dropped');
+  });
+
+  it('IDIOM A RED #2 (LITERAL NULL — THE non-negotiable bite): literalNullExpectedOrgId passes bare `null`', () => {
+    // PD 17d0a94b: this is THE dead-assert case. The service guard
+    // `if (expectedOrgId !== null) assertOrgScope(...)` silently bypasses
+    // when expectedOrgId is bare null. If the classifier returns
+    // `conditional` here, the guard is theater.
+    expect(classifyFixture('literalNullExpectedOrgId')).toBe('literal-null');
+  });
+
+  it('IDIOM A RED #3 (WRONG SOURCE): hardcodedExpectedOrgId passes a literal string', () => {
+    expect(classifyFixture('hardcodedExpectedOrgId')).toBe('wrong-source');
+  });
+
+  // -----------------------------------------------------------------------
+  // IDIOM B — where-filter
+  // -----------------------------------------------------------------------
+
+  it('IDIOM B GREEN: goodWhereFilter sets `where.orgId = ctx.orgId` inside isPlatformAdmin guard', () => {
+    expect(classifyFixture('goodWhereFilter')).toBe('where-filter');
+  });
+
+  it('IDIOM B RED: droppedWhereFilter calls prisma.user.findMany with no where.orgId', () => {
+    expect(classifyFixture('droppedWhereFilter')).toBe('where-dropped');
+  });
+});
