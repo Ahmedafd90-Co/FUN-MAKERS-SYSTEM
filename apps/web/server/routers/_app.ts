@@ -23,6 +23,7 @@ import { budgetRouter } from './budget';
 import { reconciliationRouter } from './reconciliation';
 import { importRouter } from './import';
 import { layer1Router } from './layer1';
+import { platformAdminRouter } from './platform-admin';
 
 export const appRouter = router({
   auth: authRouter,
@@ -44,6 +45,7 @@ export const appRouter = router({
   reconciliation: reconciliationRouter,
   import: importRouter,
   layer1: layer1Router,
+  platformAdmin: platformAdminRouter,
 });
 
 export type AppRouter = typeof appRouter;

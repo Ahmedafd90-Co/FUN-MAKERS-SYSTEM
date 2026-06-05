@@ -22,7 +22,7 @@
  */
 
 import { prisma } from '@fmksa/db';
-import { auditService } from '../audit/service';
+import { auditService, type TransactionClient } from '../audit/service';
 import { assertOrgScope, ScopeMismatchError } from '../scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -89,9 +89,19 @@ export const entitiesService = {
    *     scope (or platform-admin bypass).
    *   - root: expectedOrgId becomes new orgId; platform_admin with null
    *     expectedOrgId throws PlatformRootEntityRequiresOrgError.
+   *
+   * PR-4b: optional `tx` parameter for transactional composition by
+   *   platformAdminService.provisionOrg. Behavior-preserving:
+   *     - tx omitted (default): parent lookup + uniqueness check use bare
+   *       `prisma`; entity.create + audit.log wrapped in own `prisma.$transaction`
+   *       — IDENTICAL line-for-line to pre-PR-4b behavior.
+   *     - tx supplied: all DB operations (parent lookup, uniqueness check,
+   *       entity.create, audit.log) use the caller's tx — participates in
+   *       the outer transaction (provisionOrg's atomic onboarding).
    */
   async createEntity(
     input: CreateEntityInput & { expectedOrgId: string | null },
+    tx?: TransactionClient,
   ) {
     const { expectedOrgId, ...createData } = input;
 
@@ -106,6 +116,82 @@ export const entitiesService = {
         'An entity of type "subsidiary" must have a parentEntityId.',
       );
     }
+
+    // PR-4b: tx-supplied path — caller's tx participates in all DB ops.
+    if (tx) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const txAny = tx as any;
+      let orgId: string;
+      if (createData.parentEntityId) {
+        const parent = await txAny.entity.findUnique({
+          where: { id: createData.parentEntityId },
+          select: { id: true, orgId: true },
+        });
+        if (!parent) {
+          throw new ScopeMismatchError(
+            'Entity',
+            createData.parentEntityId,
+            'org',
+          );
+        }
+        if (expectedOrgId !== null && parent.orgId !== expectedOrgId) {
+          throw new ScopeMismatchError(
+            'Entity',
+            createData.parentEntityId,
+            'org',
+          );
+        }
+        orgId = parent.orgId;
+      } else {
+        if (expectedOrgId === null) {
+          throw new PlatformRootEntityRequiresOrgError();
+        }
+        orgId = expectedOrgId;
+      }
+      const existing = await txAny.entity.findFirst({
+        where: { orgId, code: createData.code },
+      });
+      if (existing) {
+        throw new Error(`Entity code "${createData.code}" already exists.`);
+      }
+      const e = await txAny.entity.create({
+        data: {
+          orgId,
+          code: createData.code,
+          name: createData.name,
+          type: createData.type,
+          parentEntityId: createData.parentEntityId ?? null,
+          status: createData.status ?? 'active',
+          metadataJson: createData.metadata
+            ? JSON.parse(JSON.stringify(createData.metadata))
+            : null,
+        },
+        include: { parent: true, children: true },
+      });
+      await auditService.log(
+        {
+          actorUserId: createData.createdBy,
+          actorSource: 'user',
+          action: 'entity.create',
+          resourceType: 'entity',
+          resourceId: e.id,
+          beforeJson: {},
+          afterJson: {
+            id: e.id,
+            code: e.code,
+            name: e.name,
+            type: e.type,
+            orgId: e.orgId,
+            parentEntityId: e.parentEntityId,
+            status: e.status,
+          },
+        },
+        tx,
+      );
+      return e;
+    }
+
+    // ORIGINAL CODE PATH (tx omitted) — UNCHANGED line-for-line below:
 
     // 2. Resolve orgId — root vs subsidiary
     let orgId: string;
