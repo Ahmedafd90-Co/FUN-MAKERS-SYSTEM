@@ -46,6 +46,7 @@
 export const MODULES = {
   commercial: [
     'ipa',
+    'ipa_forecast',
     'ipc',
     'variation',
     'cost_proposal',

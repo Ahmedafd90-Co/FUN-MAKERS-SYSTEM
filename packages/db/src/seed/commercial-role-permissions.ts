@@ -2,6 +2,15 @@ import type { PrismaClient } from '@prisma/client';
 
 const DASHBOARD_PERMS = ['commercial_dashboard.view', 'client_submission_history.view'];
 
+// PIC-99 PR-1 (M1) — IPA forecast permission groupings.
+// PD ruling 4a70d247: view broad (all 13 commercial roles see commercial data),
+// edit narrow (qs_commercial + project_manager + cost_controller — the three
+// roles that AUTHOR forecast numbers; PM sets strategic targets, QS drafts from
+// BOQ, CC owns rebaselining/variance ownership). Author roles also need .view
+// since edit doesn't grant view — FORECAST_EDIT carries both.
+const FORECAST_VIEW = ['ipa_forecast.view'];
+const FORECAST_EDIT = ['ipa_forecast.view', 'ipa_forecast.edit'];
+
 function expand(family: string, actions: string[]): string[] {
   return actions.map(a => `${family}.${a}`);
 }
@@ -21,6 +30,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view', 'review', 'approve', 'sign']),
     ...expand('correspondence', ['view', 'review', 'approve', 'sign', 'issue']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   project_manager: [
     ...expand('ipa', ['view', 'review']),
@@ -30,6 +40,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view', 'review', 'issue']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_EDIT,
   ],
   contracts_manager: [
     ...expand('ipa', ['view', 'review', 'issue']),
@@ -39,6 +50,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view', 'review']),
     ...expand('correspondence', ['view', 'create', 'edit', 'delete', 'submit', 'review', 'issue']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   qs_commercial: [
     ...expand('ipa', ['view', 'create', 'edit', 'delete', 'submit']),
@@ -49,6 +61,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view', 'create', 'edit', 'delete', 'submit']),
     ...expand('correspondence', ['view', 'create', 'edit', 'delete', 'submit']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_EDIT,
   ],
   finance: [
     ...expand('ipa', ['view', 'review']),
@@ -58,6 +71,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view', 'create', 'edit', 'delete', 'review', 'sign', 'issue']),
     ...expand('correspondence', ['view']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   cost_controller: [
     ...expand('ipa', ['view']),
@@ -67,6 +81,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view', 'review']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_EDIT,
   ],
   site_team: [
     ...expand('ipa', ['view']),
@@ -76,6 +91,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view', 'create', 'edit', 'delete']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   design: [
     ...expand('ipa', ['view']),
@@ -85,6 +101,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view', 'create', 'edit', 'delete']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   qa_qc: [
     ...expand('ipa', ['view']),
@@ -94,6 +111,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   procurement: [
     ...expand('ipa', ['view']),
@@ -103,6 +121,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   document_controller: [
     ...expand('ipa', ['view', 'issue']),
@@ -112,6 +131,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view', 'issue']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   pmo: [
     ...expand('ipa', ['view']),
@@ -121,6 +141,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view']),
     ...expand('correspondence', ['view']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
   executive_approver: [
     ...expand('ipa', ['view', 'review', 'approve', 'sign']),
@@ -131,6 +152,7 @@ const ROLE_COMMERCIAL_PERMISSIONS: Record<string, string[]> = {
     ...expand('tax_invoice', ['view', 'review', 'approve']),
     ...expand('correspondence', ['view', 'review', 'approve', 'sign']),
     ...DASHBOARD_PERMS,
+    ...FORECAST_VIEW,
   ],
 };
 

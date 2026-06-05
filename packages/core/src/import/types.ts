@@ -27,6 +27,12 @@ export type ImportConflict =
   | {
       type: 'budget_category_missing';
       categoryCodeFromSheet: string;
+    }
+  | {
+      // PIC-99 PR-1 (M1) — forecast period collision with existing active forecast
+      type: 'ipa_forecast_period_exists';
+      existingForecastId: string;
+      existingPeriodNumber: number;
     };
 
 export interface ValidatedRow<TParsed = unknown> {
@@ -78,6 +84,17 @@ export interface ParsedIpaHistoryRow {
   signedAt: string | null;
   issuedAt: string | null;
   description: string | null;
+}
+
+// PIC-99 PR-1 (M1) — IPA forecast row shape (per-period plan of record).
+// Forecast inherits the project's currencyCode at commit time, so currency
+// is NOT a row-level field (the committer resolves it from project.currencyCode).
+// Smaller surface than IPA history — no workflow status, no posting date.
+export interface ParsedIpaForecastRow {
+  periodNumber: number;
+  periodStart: string; // ISO yyyy-mm-dd
+  forecastAmount: string;
+  notes: string | null;
 }
 
 // Narrow typed access helpers — the sheet parser always returns strings,

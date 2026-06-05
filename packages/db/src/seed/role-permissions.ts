@@ -196,7 +196,7 @@ export async function seedTenantAdminPermissions(prisma: PrismaClient) {
   // we avoid pulling @fmksa/contracts into the seed runtime).
   const SELLABLE_MODULE_RESOURCES = [
     // commercial
-    'ipa', 'ipc', 'variation', 'cost_proposal', 'tax_invoice',
+    'ipa', 'ipa_forecast', 'ipc', 'variation', 'cost_proposal', 'tax_invoice',
     'correspondence', 'commercial_dashboard', 'client_submission_history',
     // procurement
     'rfq', 'purchase_order', 'vendor_contract', 'framework_agreement',
