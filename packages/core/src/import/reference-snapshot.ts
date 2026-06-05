@@ -32,7 +32,22 @@ export interface IpaReferenceSnapshot {
   }>;
 }
 
-export type ReferenceSnapshot = BudgetReferenceSnapshot | IpaReferenceSnapshot;
+// PIC-99 PR-1 (M1) — forecast snapshot captures the active (deletedAt:null)
+// forecast period set per project so the validator can detect period-number
+// collisions at validate time + the commit path can refuse on drift.
+export interface IpaForecastReferenceSnapshot {
+  kind: 'ipa_forecast';
+  existingForecasts: Array<{
+    id: string;
+    periodNumber: number;
+    periodStart: string;
+  }>;
+}
+
+export type ReferenceSnapshot =
+  | BudgetReferenceSnapshot
+  | IpaReferenceSnapshot
+  | IpaForecastReferenceSnapshot;
 
 export async function buildReferenceSnapshot(
   importType: ImportType,
@@ -46,6 +61,22 @@ export async function buildReferenceSnapshot(
     return {
       kind: 'budget_baseline',
       categories: cats.map((c) => ({ code: c.code, name: c.name })),
+    };
+  }
+
+  if (importType === 'ipa_forecast') {
+    const existing = await prisma.ipaForecast.findMany({
+      where: { projectId, deletedAt: null },
+      select: { id: true, periodNumber: true, periodStart: true },
+      orderBy: { periodNumber: 'asc' },
+    });
+    return {
+      kind: 'ipa_forecast',
+      existingForecasts: existing.map((e) => ({
+        id: e.id,
+        periodNumber: e.periodNumber,
+        periodStart: e.periodStart.toISOString(),
+      })),
     };
   }
 
@@ -96,6 +127,14 @@ export function describeSnapshotDrift(
     const jb = JSON.stringify(b.existingIpas);
     if (ja !== jb) {
       return 'Project IPA set changed since validation (new/removed/edited IPA). Re-validate this batch.';
+    }
+    return null;
+  }
+  if (a.kind === 'ipa_forecast' && b.kind === 'ipa_forecast') {
+    const ja = JSON.stringify(a.existingForecasts);
+    const jb = JSON.stringify(b.existingForecasts);
+    if (ja !== jb) {
+      return 'Project IPA forecast set changed since validation (new/removed/edited forecast). Re-validate this batch.';
     }
     return null;
   }

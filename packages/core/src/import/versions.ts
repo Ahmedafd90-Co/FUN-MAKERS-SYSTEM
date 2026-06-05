@@ -17,9 +17,12 @@ import type { ImportType } from '@fmksa/db';
 export const PARSER_VERSIONS: Record<ImportType, string> = {
   budget_baseline: '2026.04.15.01',
   ipa_history: '2026.04.15.01',
+  // PIC-99 PR-1 (M1) — forecast import added; initial parser version.
+  ipa_forecast: '2026.06.05.01',
 };
 
 export const VALIDATOR_SCHEMA_VERSIONS: Record<ImportType, string> = {
   budget_baseline: '2026.04.15.01',
   ipa_history: '2026.04.15.01',
+  ipa_forecast: '2026.06.05.01',
 };

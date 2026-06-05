@@ -57,6 +57,22 @@ COMMERCIAL_PERMISSIONS.push(
     resource: 'client_submission_history',
     action: 'view',
   },
+  // PIC-99 PR-1 (M1) — IPA forecast (per-period plan of record).
+  // Only view + edit (no workflow — forecast is planning data, not a postable
+  // artifact). PD ruling 4a70d247: view broad (all 13 commercial roles),
+  // edit narrow (qs_commercial + project_manager + cost_controller).
+  {
+    code: 'ipa_forecast.view',
+    description: 'View IPA forecast per-period plan',
+    resource: 'ipa_forecast',
+    action: 'view',
+  },
+  {
+    code: 'ipa_forecast.edit',
+    description: 'Create, edit, and delete IPA forecast rows',
+    resource: 'ipa_forecast',
+    action: 'edit',
+  },
 );
 
 export async function seedCommercialPermissions(prisma: PrismaClient) {

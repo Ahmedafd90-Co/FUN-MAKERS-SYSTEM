@@ -144,6 +144,7 @@ model Organization {
 
   // Reverse relations — per-tenant scoped transactional models (PIC-75)
   ipas                 Ipa[]
+  ipaForecasts         IpaForecast[]
   ipcs                 Ipc[]
   variations           Variation[]
   costProposals        CostProposal[]
@@ -413,6 +414,7 @@ model Project {
   postingEvents              PostingEvent[]
   // Module 2 — Commercial Engine relations
   ipas                       Ipa[]
+  ipaForecasts               IpaForecast[]
   ipcs                       Ipc[]
   variations                 Variation[]
   costProposals              CostProposal[]
@@ -1273,6 +1275,45 @@ model Ipa {
   @@index([projectId, origin])
   @@index([projectId, periodFrom, periodTo])
   @@map("ipas")
+}
+
+/// PIC-99 PR-1 (M1) — IpaForecast: per-period IPA plan of record.
+/// Anchored to the same periodNumber grain as Ipa. Pairs 1:1 with Ipa at query time.
+/// Not a posting-ledger participant — forecast is planning data, not truth.
+///
+/// SR-Multi-Tenancy: born org-scoped at @default(singleton); compound @@unique
+/// ([orgId, projectId, periodNumber]) per SR-Canonical-Patterns.
+///
+/// Soft-delete via deletedAt + deletedBy (PD ruling 4a70d247) — preserves
+/// audited historical record. Active reads filter deletedAt:null; PR-2
+/// cost-sheet aggregation will skip soft-deleted rows.
+model IpaForecast {
+  id             String    @id @default(uuid()) @map("id")
+  // PIC-99 PR-1: per-tenant scope (singleton default during single-tenant phase)
+  orgId          String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  projectId      String    @map("project_id")
+  periodNumber   Int       @map("period_number")
+  periodStart    DateTime  @map("period_start")
+  forecastAmount Decimal   @map("forecast_amount") @db.Decimal(18, 2)
+  currency       String    @map("currency")
+  notes          String?   @map("notes")
+  createdBy      String    @map("created_by")
+  updatedBy      String?   @map("updated_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  // Soft-delete — deletedAt-null reads are "active"; soft-deleted rows
+  // preserved for audit + PR-2 aggregation skip.
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by")
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  // PIC-99 PR-1 multi-tenancy: per-tenant compound unique on periodNumber
+  // (NOT global [projectId, periodNumber] — see SR-Multi-Tenancy)
+  @@unique([orgId, projectId, periodNumber])
+  @@index([projectId, periodStart])
+  @@map("ipa_forecasts")
 }
 
 model Ipc {
@@ -2501,6 +2542,7 @@ model EngineerInstruction {
 enum ImportType {
   budget_baseline @map("budget_baseline")
   ipa_history     @map("ipa_history")
+  ipa_forecast    @map("ipa_forecast")
 
   @@map("import_type")
 }

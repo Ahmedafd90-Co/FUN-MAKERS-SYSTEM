@@ -1,6 +1,7 @@
 export * from './reference-number';
 export * from './posting-hooks';
 export * from './ipa';
+export * from './forecast';
 export * from './ipc';
 export * from './variation';
 export * from './cost-proposal';

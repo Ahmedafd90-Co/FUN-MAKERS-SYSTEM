@@ -58,6 +58,11 @@ const TENANT_MODELS = new Set<string>([
   // now asserts assertOrgScope(entry, expectedOrgId, 'OverrideLog', id)
   // — same pattern as getAuditLog. Both are guard-visible.
   'overrideLog',
+  // PIC-99 PR-1 (M1) — IpaForecast born org-scoped (first sellable model on
+  // the completed MT-spine). By-id reads in commercial/forecast/service.ts
+  // bind via assertProjectScope; reachability proven by CAT4 RED→GREEN in
+  // apps/web/tests/e2e/pic99-pr1-ipa-forecast-isolation.test.ts.
+  'ipaForecast',
 ]);
 
 const BY_ID_METHODS = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst']);
@@ -98,6 +103,9 @@ const EXEMPTIONS: Exemption[] = [
   { file: 'commercial/dashboard/service.ts', fn: 'getCommercialDashboard',
     category: 'SAFE',
     reason: 'findUniqueOrThrow({where:{id: projectId}}) — id IS the projectProcedure-validated scope; assert would be tautology' },
+  { file: 'commercial/forecast/service.ts', fn: 'getForecastVsActual',
+    category: 'SAFE',
+    reason: 'findUniqueOrThrow({where:{id: projectId}}) on Project — id IS the projectProcedure-validated scope; assert would be tautology (PIC-99 PR-1; same shape as getFinancialKpis/getCommercialDashboard above)' },
   { file: 'commercial/variation/service.ts', fn: 'transitionVariation',
     category: 'SAFE',
     reason: 'post-tx re-fetch by id AFTER `existing` already loaded+asserted in same fn; id is sourced from the validated existing.id' },

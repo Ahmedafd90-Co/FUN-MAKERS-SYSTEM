@@ -35,11 +35,14 @@ import {
   type ReferenceSnapshot,
   type BudgetReferenceSnapshot,
   type IpaReferenceSnapshot,
+  type IpaForecastReferenceSnapshot,
 } from './reference-snapshot';
 import { validateBudgetBaselineRow } from './validators/budget-baseline';
 import { validateIpaHistoryRow } from './validators/ipa-history';
+import { validateIpaForecastRow } from './validators/ipa-forecast';
 import { commitBudgetBaselineRow } from './committers/budget-baseline';
 import { commitIpaHistoryRow } from './committers/ipa-history';
+import { commitIpaForecastRow } from './committers/ipa-forecast';
 import type { ImportBatchSummary } from './types';
 
 // ---------------------------------------------------------------------------
@@ -202,8 +205,12 @@ export async function validateBatch(batchId: string, actorUserId: string, expect
   let invalidCount = 0;
   let conflictCount = 0;
 
-  // Per-batch state the IPA validator needs for intra-batch duplicate detection.
-  const seenPeriodNumbers = new Map<number, number>();
+  // Per-batch state for intra-batch duplicate detection. Separate maps per
+  // import type because the two periodNumber spaces are independent
+  // (an ipa_history row in period 3 and an ipa_forecast row in period 3 are
+  // unrelated).
+  const seenIpaHistoryPeriodNumbers = new Map<number, number>();
+  const seenIpaForecastPeriodNumbers = new Map<number, number>();
 
   await prisma.$transaction(async (tx) => {
     for (const row of batch.rows) {
@@ -216,13 +223,20 @@ export async function validateBatch(batchId: string, actorUserId: string, expect
           raw,
           snapshot as BudgetReferenceSnapshot,
         );
+      } else if (batch.importType === 'ipa_forecast') {
+        result = validateIpaForecastRow(
+          row.rowNumber,
+          raw,
+          snapshot as IpaForecastReferenceSnapshot,
+          seenIpaForecastPeriodNumbers,
+        );
       } else {
         result = validateIpaHistoryRow(
           row.rowNumber,
           raw,
           snapshot as IpaReferenceSnapshot,
           projectCurrency,
-          seenPeriodNumbers,
+          seenIpaHistoryPeriodNumbers,
         );
       }
 
@@ -348,7 +362,10 @@ export async function commitBatch(batchId: string, actorUserId: string, expected
         where: { status: 'valid' },
         orderBy: { rowNumber: 'asc' },
       },
-      project: { select: { entityId: true } },
+      // PIC-99 PR-1: select currencyCode so the ipa_forecast committer can
+      // inherit project currency without a separate by-id Project read (which
+      // would require a SAFE exemption on scope-binding-guard).
+      project: { select: { entityId: true, currencyCode: true } },
     },
   });
   // PIC-97 hotfix: tenant scope — the batch must belong to the caller's project.
@@ -416,6 +433,19 @@ export async function commitBatch(batchId: string, actorUserId: string, expected
             tx as unknown as Prisma.TransactionClient,
             {
               projectId: batch.projectId,
+              batchId: batch.id,
+              importRowId: row.id,
+              rowNumber: row.rowNumber,
+              actorUserId,
+            },
+            row.parsedJson as any,
+          );
+        } else if (batch.importType === 'ipa_forecast') {
+          return await commitIpaForecastRow(
+            tx as unknown as Prisma.TransactionClient,
+            {
+              projectId: batch.projectId,
+              projectCurrency: batch.project.currencyCode,
               batchId: batch.id,
               importRowId: row.id,
               rowNumber: row.rowNumber,

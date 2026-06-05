@@ -5,6 +5,7 @@
  */
 import { router } from '../../trpc';
 import { ipaRouter } from './ipa';
+import { forecastRouter } from './forecast';
 import { ipcRouter } from './ipc';
 import { variationRouter } from './variation';
 import { costProposalRouter } from './cost-proposal';
@@ -16,6 +17,7 @@ import { engineerInstructionRouter } from './engineer-instruction';
 
 export const commercialRouter = router({
   ipa: ipaRouter,
+  forecast: forecastRouter,
   ipc: ipcRouter,
   variation: variationRouter,
   costProposal: costProposalRouter,
