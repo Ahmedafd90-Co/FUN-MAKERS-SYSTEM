@@ -395,7 +395,7 @@ describe('PIC-99 PR-1 (M1) — IpaForecast cross-tenant isolation', () => {
     expect(actions, 'audit must include ipa_forecast.delete').toContain('ipa_forecast.delete');
   });
 
-  it('POS: upsert RESTORES a soft-deleted forecast (clears deletedAt; audits as ipa_forecast.restore)', async () => {
+  it('POS: upsert RESTORES a soft-deleted forecast (clears deletedAt; audits as ipa_forecast.restore — NOT .update)', async () => {
     const caller = appRouter.createCaller(makeCtx(tenantAdminA));
 
     // Create + soft-delete period 7
@@ -408,7 +408,8 @@ describe('PIC-99 PR-1 (M1) — IpaForecast cross-tenant isolation', () => {
     });
     await caller.commercial.forecast.delete({ projectId: projectAId, periodNumber: 7 });
 
-    // Re-upsert period 7 → restores soft-deleted row
+    // Re-upsert period 7 → restores soft-deleted row (compound unique slot was
+    // still occupied by the soft-deleted row; this proves restore-not-insert).
     const restored = await caller.commercial.forecast.upsert({
       projectId: projectAId,
       periodNumber: 7,
@@ -417,15 +418,33 @@ describe('PIC-99 PR-1 (M1) — IpaForecast cross-tenant isolation', () => {
       currency: 'SAR',
       notes: 'restored',
     });
-    expect(restored!.id, 'restore returns the SAME id (preserved row)').toBe(created!.id);
+    expect(restored!.id, 'restore returns the SAME id (preserved row, not a new insert)').toBe(created!.id);
     expect(restored!.deletedAt, 'restore clears deletedAt').toBeNull();
     expect(restored!.deletedBy, 'restore clears deletedBy').toBeNull();
     expect(restored!.forecastAmount.toString()).toBe('2500000');
 
-    // Audit shows the restore action
-    const audit = await prisma.auditLog.findMany({
-      where: { resourceType: 'ipa_forecast', resourceId: created!.id, action: 'ipa_forecast.restore' },
+    // CRITICAL ASSERTION (PD ruling 4a70d247 follow-up): the audit trail
+    // must distinguish restore-from-soft-delete vs plain update. A reader
+    // of the audit log seeing "create → delete → restore" understands the
+    // lifecycle; "create → delete → update" would mislead about whether
+    // the row was actually re-created vs simply edited.
+    //
+    // Strict-equality assert on the FULL action sequence proves:
+    //   1. .restore was emitted (positive)
+    //   2. .update was NOT emitted for the restore (negative — would be
+    //      actions[2] === 'ipa_forecast.update')
+    //   3. Order matches the operational story (create → delete → restore)
+    const allAudit = await prisma.auditLog.findMany({
+      where: { resourceType: 'ipa_forecast', resourceId: created!.id },
+      orderBy: { createdAt: 'asc' },
     });
-    expect(audit.length, 'restore must emit ipa_forecast.restore audit entry').toBeGreaterThan(0);
+    expect(
+      allAudit.map((a) => a.action),
+      'audit sequence MUST be create → delete → restore (NOT create → delete → update)',
+    ).toEqual([
+      'ipa_forecast.create',
+      'ipa_forecast.delete',
+      'ipa_forecast.restore',
+    ]);
   });
 });
