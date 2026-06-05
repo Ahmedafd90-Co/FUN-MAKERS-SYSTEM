@@ -1,4 +1,5 @@
 export { accessControlService } from './service';
+export { getPermissionCodes } from './permissions';
 export { PermissionDeniedError } from './errors';
 export {
   OVERRIDE_POLICY,
