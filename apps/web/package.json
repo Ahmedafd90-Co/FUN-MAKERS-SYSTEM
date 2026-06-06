@@ -33,6 +33,7 @@
     "@trpc/server": "^11",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "exceljs": "^4.4.0",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "next-auth": "5.0.0-beta.30",
@@ -43,6 +44,7 @@
     "superjson": "^2.2.6",
     "tailwind-merge": "^2.5.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
