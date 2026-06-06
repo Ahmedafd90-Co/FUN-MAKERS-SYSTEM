@@ -1,5 +1,6 @@
 export * from './reference-number';
 export * from './posting-hooks';
+export * from './revised-contract-value';
 export * from './ipa';
 export * from './forecast';
 export * from './ipc';

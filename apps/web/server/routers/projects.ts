@@ -31,6 +31,7 @@ import {
   projectSettingsService,
   projectAssignmentsService,
   ScopeMismatchError,
+  getRevisedContractValue,
 } from '@fmksa/core';
 import { accessControlService } from '@fmksa/core';
 import {
@@ -170,7 +171,16 @@ export const projectsRouter = router({
     }),
 
   get: projectProcedure.input(GetProjectSchema).query(async ({ ctx, input }) => {
-    return projectsService.getProject(input.id, ctx.user.id);
+    const project = await projectsService.getProject(input.id, ctx.user.id);
+    // PIC-104 — revised contract value is system-derived (contractValue + Σ
+    // approved variation deltas) via the shared gate, NOT the stale stored
+    // `revisedContractValue` column. The project-detail Financial Baseline card
+    // reads `revisedContractValueDerived` so it agrees with the dashboard
+    // (revised_budget KPI) + the monthly cost-sheet (anticipatedContractAmount),
+    // which compute the same value live. The stored column is now vestigial
+    // (no reader) — dropping it is a separate follow-up.
+    const derived = await getRevisedContractValue(input.projectId);
+    return { ...project, revisedContractValueDerived: derived ? derived.toString() : null };
   }),
 
   create: protectedProcedure

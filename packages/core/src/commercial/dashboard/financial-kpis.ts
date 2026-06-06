@@ -25,6 +25,9 @@ import {
   type KpiDefinition,
   type KpiDrilldown,
 } from './kpi-definitions';
+// PIC-104 — shared approved-variation gate (single source; replaces the
+// previously-inline copy that drifted from project-detail).
+import { getApprovedVariationDelta } from '../revised-contract-value';
 
 // ---------------------------------------------------------------------------
 // Types — service response
@@ -108,7 +111,7 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
     overdueInvoiceCollections,
     varSubmitted,
     varApproved,
-    variationDeltaAgg,
+    approvedVariationDelta,
     poCommitted,
     siApproved,
     expApproved,
@@ -196,24 +199,11 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
       _sum: { approvedCostImpact: true },
     }),
 
-    // System-derived revised contract value from approved variations
-    // Revised Contract Value = contractValue + SUM(approved variation deltas)
-    // VOs: count client_approved and closed with non-null approvedCostImpact
-    // COs: count approved_internal, signed, issued, closed with non-null approvedCostImpact
-    // This replaces the manual revisedContractValue field on Project.
-    prisma.variation.aggregate({
-      where: {
-        projectId,
-        approvedCostImpact: { not: null },
-        OR: [
-          // VOs: client must have approved
-          { subtype: 'vo', status: { in: ['client_approved', 'closed'] } },
-          // COs: internal approval sufficient (CO doesn't go to client)
-          { subtype: 'change_order', status: { in: ['approved_internal', 'signed', 'issued', 'closed'] } },
-        ],
-      },
-      _sum: { approvedCostImpact: true },
-    }),
+    // System-derived revised contract value from approved variations.
+    // PIC-104 — shared approved-variation gate via getApprovedVariationDelta
+    // (was an inline copy of the VO/CO split gate; now the single source that
+    // project-detail + cost-sheet also consume). Same value; same gate.
+    getApprovedVariationDelta(projectId),
 
     // KPI: committed_cost — PO totals in approved+ statuses
     prisma.purchaseOrder.aggregate({
@@ -279,8 +269,9 @@ export async function getFinancialKpis(projectId: string): Promise<FinancialKpis
   const budget = project.contractValue ? toDecimal(project.contractValue) : null;
   // Revised Contract Value = contractValue + SUM(approved variation deltas)
   // System-derived: no manual revisedContractValue field needed.
-  const approvedDeltas = toDecimal(variationDeltaAgg._sum.approvedCostImpact);
-  const revisedBudget = budget !== null ? budget.plus(approvedDeltas) : null;
+  // PIC-104 — approvedVariationDelta is the shared-helper Decimal (was an
+  // inline aggregate's _sum). Same value; single-sourced gate.
+  const revisedBudget = budget !== null ? budget.plus(approvedVariationDelta) : null;
 
   // Variation KPIs
   const submittedVarImpact = toDecimal(varSubmitted._sum.costImpact);

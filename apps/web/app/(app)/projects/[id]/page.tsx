@@ -93,7 +93,11 @@ export default function ProjectWorkspacePage() {
             ? { code: project.currency.code, name: project.currency.name, symbol: project.currency.symbol }
             : null,
           contractValue: toStringOrNull(project.contractValue),
-          revisedContractValue: toStringOrNull(project.revisedContractValue),
+          // PIC-104 — feed the LIVE system-derived revised CV (contractValue +
+          // approved variation deltas), not the stale stored column. Makes the
+          // card's "(derived) … automatically derived from approved variation
+          // deltas" label honest + agree with dashboard/cost-sheet.
+          revisedContractValue: toStringOrNull(project.revisedContractValueDerived),
         }}
       />
     </>
