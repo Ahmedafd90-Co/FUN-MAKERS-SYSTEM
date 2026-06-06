@@ -57,6 +57,9 @@ import {
   TI_ISSUED_PLUS,
   VAR_SUBMITTED_PLUS,
 } from '../dashboard/kpi-definitions';
+// PIC-104 — shared approved-variation gate (single source; replaces the
+// previously-inline copy that drifted from project-detail).
+import { getApprovedVariationDelta } from '../revised-contract-value';
 import type {
   CurrencyTotals,
   IpaMonthCell,
@@ -213,7 +216,7 @@ async function computeProjectRow(
     invoices,
     collections,
     varSubmitted,
-    variationDeltaAgg,
+    approvedVariationDelta,
   ] = await Promise.all([
     // IpaForecast — all ACTIVE rows (PIC-99 PR-1 soft-delete seam:
     // `deletedAt: null` drops soft-deleted forecasts from the report).
@@ -276,23 +279,9 @@ async function computeProjectRow(
       _sum: { costImpact: true },
     }),
 
-    // Approved variation delta — split gate (matches revised-contract-value.ts)
-    prisma.variation.aggregate({
-      where: {
-        projectId,
-        approvedCostImpact: { not: null },
-        OR: [
-          { subtype: 'vo', status: { in: ['client_approved', 'closed'] } },
-          {
-            subtype: 'change_order',
-            status: {
-              in: ['approved_internal', 'signed', 'issued', 'closed'],
-            },
-          },
-        ],
-      },
-      _sum: { approvedCostImpact: true },
-    }),
+    // Approved variation delta — PIC-104: shared gate via getApprovedVariationDelta
+    // (was an inline copy of the VO/CO split gate; now the single source).
+    getApprovedVariationDelta(projectId),
   ]);
 
   // ── Group per month ───────────────────────────────────────────────
@@ -374,14 +363,12 @@ async function computeProjectRow(
     ? decStr(toDecimal(project.contractValue))
     : null;
   const proposedVariation = decStr(toDecimal(varSubmitted._sum.costImpact));
-  const approvedVariation = decStr(toDecimal(variationDeltaAgg._sum.approvedCostImpact));
+  // PIC-104 — approvedVariationDelta is the shared-helper Decimal (was an
+  // inline aggregate's _sum). Same value; single-sourced gate.
+  const approvedVariation = decStr(approvedVariationDelta);
   const anticipatedContractAmount =
     project.contractValue
-      ? decStr(
-          toDecimal(project.contractValue).plus(
-            toDecimal(variationDeltaAgg._sum.approvedCostImpact),
-          ),
-        )
+      ? decStr(toDecimal(project.contractValue).plus(approvedVariationDelta))
       : null;
 
   return {
