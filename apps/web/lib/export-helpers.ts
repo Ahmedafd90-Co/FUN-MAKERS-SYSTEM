@@ -118,6 +118,7 @@ export function parseExportFormat(
 
 function sanitizeFilename(name: string): string {
   // Strip path separators + control chars; keep it tight.
+  // eslint-disable-next-line no-control-regex
   return name.replace(/[\x00-\x1f/\\?%*:|"<>]/g, '_');
 }
 
