@@ -60,6 +60,47 @@ async function recordAbsorptionException(params: {
 // ---------------------------------------------------------------------------
 
 /**
+ * PIC-101 — Decrement a BudgetLine's committedAmount by `amount`, bounded at 0.
+ *
+ * Returns the actual amount released (≤ amount). Bounded relief:
+ *   - Never drives committedAmount negative.
+ *   - The returned value lets the caller record exactly what was released so
+ *     audit logs stay honest.
+ *
+ * Used by:
+ *   - absorbSupplierInvoiceActual — progressive relief as invoices land, so
+ *     committed + actual stops double-counting the same money.
+ *   - reversePoCommitment — full PO rollback releases only the residual (a
+ *     partially-invoiced PO has already had part of its commitment released).
+ *
+ * NOTE (scope-binding guard): BudgetLine is NOT a TENANT_MODEL — it is a child
+ * of ProjectBudget, scoped via budgetId. This by-id read on an already-resolved
+ * budget line id therefore does not require a tenant-scope assertion (matches
+ * the existing resolveBudgetLine by-key read).
+ */
+async function releaseCommitmentBounded(
+  budgetLineId: string,
+  amount: Prisma.Decimal,
+): Promise<Prisma.Decimal> {
+  return prisma.$transaction(async (tx) => {
+    const line = await tx.budgetLine.findUniqueOrThrow({
+      where: { id: budgetLineId },
+      select: { committedAmount: true },
+    });
+    const current = new Prisma.Decimal(line.committedAmount.toString());
+    const released = current.lessThan(amount) ? current : amount;
+    if (released.isZero() || released.isNegative()) {
+      return new Prisma.Decimal(0);
+    }
+    await tx.budgetLine.update({
+      where: { id: budgetLineId },
+      data: { committedAmount: { decrement: released } },
+    });
+    return released;
+  });
+}
+
+/**
  * Resolve a ProcurementCategory id to the matching BudgetLine within a
  * project's budget. Returns the resolution result or a reasonCode string
  * explaining why it failed.
@@ -248,12 +289,11 @@ export async function reversePoCommitment(
 
     const amount = new Prisma.Decimal(po.totalAmount.toString());
 
-    await prisma.budgetLine.update({
-      where: { id: resolved.budgetLine.id },
-      data: {
-        committedAmount: { decrement: amount },
-      },
-    });
+    // PIC-101 — bounded relief: SIs against this PO may have already
+    // progressively released commitment, so the residual is < amount. Release
+    // only what remains; without the bound, cancelling a partially-invoiced PO
+    // drives committedAmount negative.
+    const released = await releaseCommitmentBounded(resolved.budgetLine.id, amount);
 
     await auditService.log({
       actorUserId,
@@ -266,12 +306,13 @@ export async function reversePoCommitment(
         committedAmount: resolved.budgetLine.committedAmount.toString(),
       },
       afterJson: {
-        committedAmount: resolved.budgetLine.committedAmount.minus(amount).toString(),
+        committedAmount: resolved.budgetLine.committedAmount.minus(released).toString(),
         purchaseOrderId,
-        decrementedBy: amount.toString(),
+        decrementedBy: released.toString(),
+        requestedDecrement: amount.toString(),
       },
     });
-    return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: amount.toString() };
+    return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: released.toString() };
   } catch (err) {
     try {
       const exId = await recordAbsorptionException({
@@ -350,6 +391,28 @@ export async function absorbSupplierInvoiceActual(
       },
     });
 
+    // PIC-101 — commitment relief (the double-count fix). When the SI is linked
+    // to a PO, the obligation placed at PO-approval time is now being realized
+    // as actual cost. Without relief, committedAmount stays up AND actualAmount
+    // rises → committed + actual double-counts the same money (so any honest
+    // "remaining = budget − committed − actual" understates what's left).
+    // Release on the PO's category line (where the obligation was originally
+    // placed), bounded at 0. The actual-absorption target uses
+    // si.categoryId ?? si.PO.categoryId; the relief target is always
+    // PO.categoryId — correct even if SI and PO categories diverge.
+    let releasedOnLineId: string | null = null;
+    let releasedAmountStr = '0';
+    if (si.purchaseOrder?.categoryId) {
+      const poResolved = await resolveBudgetLine(projectId, si.purchaseOrder.categoryId);
+      if (poResolved.ok) {
+        const released = await releaseCommitmentBounded(poResolved.budgetLine.id, amount);
+        releasedOnLineId = poResolved.budgetLine.id;
+        releasedAmountStr = released.toString();
+      }
+      // If the PO category can't resolve to a budget line, the commitment was
+      // never absorbed there either — nothing to release; actual still lands.
+    }
+
     await auditService.log({
       actorUserId,
       actorSource: 'system',
@@ -364,6 +427,9 @@ export async function absorbSupplierInvoiceActual(
         actualAmount: resolved.budgetLine.actualAmount.plus(amount).toString(),
         supplierInvoiceId,
         incrementedBy: amount.toString(),
+        // PIC-101 — commitment released on the PO's line as actual landed.
+        commitmentReleasedOnLineId: releasedOnLineId,
+        commitmentReleasedBy: releasedAmountStr,
       },
     });
     return { absorbed: true, budgetLineId: resolved.budgetLine.id, amount: amount.toString() };

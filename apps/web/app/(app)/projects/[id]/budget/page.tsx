@@ -253,7 +253,11 @@ export default function ProjectBudgetPage() {
                             </TableCell>
                             <TableCell
                               className={`text-right font-mono tabular-nums text-sm ${
-                                variance < 0 ? 'text-destructive' : ''
+                                // PIC-101 — variance is now committed + actual − budget:
+                                // POSITIVE = over budget (bad → destructive); negative = under.
+                                // (The old formula was budget − actual, where positive meant
+                                // under budget — the sign convention inverted with the math fix.)
+                                variance > 0 ? 'text-destructive' : ''
                               }`}
                             >
                               {formatMoney(variance)}
