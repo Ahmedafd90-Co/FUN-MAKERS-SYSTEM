@@ -212,7 +212,12 @@ export function BudgetOverviewCard({
                         </TableHeader>
                         <TableBody>
                           {lines.map((line) => {
-                            const lineRemaining = line.budgetAmount - line.committedAmount;
+                            // PIC-101 — read the service's remainingAmount
+                            // (budget − committed − actual) instead of recomputing
+                            // budget − committed inline. Keeps the workspace Overview
+                            // card reconciled with the Budget page; the old inline
+                            // formula excluded actual and disagreed once spend landed.
+                            const lineRemaining = line.remainingAmount;
                             const isImported = line.importBatchId != null;
                             const hasDrift =
                               line.lastImportedAmount != null &&

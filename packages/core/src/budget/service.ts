@@ -329,8 +329,13 @@ export async function getBudgetSummary(projectId: string) {
       budgetAmount,
       committedAmount,
       actualAmount,
-      remainingAmount: budgetAmount - committedAmount,
-      varianceAmount: budgetAmount - actualAmount,
+      // PIC-101 budget-truth fix — single consistent denominator across row + summary.
+      //   remaining = budget − committed − actual  (what's left after obligations AND spend)
+      //   variance  = committed + actual − budget  (signed: + over / 0 on-plan / − under)
+      // Was: remaining = budget − committed (excluded actual); variance = budget − actual
+      // (ignored commitments) — two different denominators that never reconciled.
+      remainingAmount: budgetAmount - committedAmount - actualAmount,
+      varianceAmount: committedAmount + actualAmount - budgetAmount,
       notes: line.notes,
       // Import provenance — non-null when this line was written by an import commit.
       // lastImportedAmount is the frozen "what the sheet said" value and is NOT
@@ -343,9 +348,14 @@ export async function getBudgetSummary(projectId: string) {
     };
   });
 
-  // remainingBudget = internalRevised - totalCommitted
-  // (committed = obligations placed: POs, subcontracts — conservative metric)
-  const remainingBudget = internalRevised - totalCommitted;
+  // PIC-101 budget-truth fix — summary uses the SAME denominator as the rows so
+  // Σ(row.remainingAmount) === remainingBudget by construction.
+  //   remainingBudget = totalBudgeted − totalCommitted − totalActual
+  //   totalVariance   = totalCommitted + totalActual − totalBudgeted  (= Σ row variance)
+  // Was: internalRevised − totalCommitted — a THIRD denominator (internalRevised,
+  // not totalBudgeted; excluded totalActual) that couldn't reconcile with the rows.
+  const remainingBudget = totalBudgeted - totalCommitted - totalActual;
+  const totalVariance = totalCommitted + totalActual - totalBudgeted;
 
   return {
     projectId: budget.projectId,
@@ -358,6 +368,7 @@ export async function getBudgetSummary(projectId: string) {
     totalCommitted,
     totalActual,
     remainingBudget,
+    totalVariance,
     lines,
   };
 }
