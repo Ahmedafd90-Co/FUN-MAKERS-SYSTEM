@@ -2,6 +2,7 @@ import { prisma, Prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { recordAbsorptionException } from '../budget/absorption';
 import { assertProjectScope } from '../scope-binding';
+import { resolveProjectOrgId } from '../org-resolution';
 import {
   EI_TRANSITIONS,
   EI_TERMINAL_STATUSES,
@@ -38,8 +39,10 @@ export async function createEi(input: CreateEiInput, actorUserId: string) {
   const rate = input.reserveRate ?? 0.5;
   const reserveAmount = input.estimatedValue * rate;
 
+  const orgId = await resolveProjectOrgId(input.projectId);
   const ei = await prisma.engineerInstruction.create({
     data: {
+      orgId,
       projectId: input.projectId,
       title: input.title,
       description: input.description ?? null,

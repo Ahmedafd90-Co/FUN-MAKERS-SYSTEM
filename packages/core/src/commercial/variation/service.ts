@@ -8,6 +8,7 @@ import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { getVariationTransitions, VARIATION_TERMINAL_STATUSES, VARIATION_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Action -> status mapping
@@ -41,8 +42,10 @@ function getTypeCode(subtype: string): string {
 // ---------------------------------------------------------------------------
 
 export async function createVariation(input: CreateVariationInput, actorUserId: string) {
+  const orgId = await resolveProjectOrgId(input.projectId);
   const variation = await prisma.variation.create({
     data: {
+      orgId,
       projectId: input.projectId,
       subtype: input.subtype as any,
       status: 'draft',

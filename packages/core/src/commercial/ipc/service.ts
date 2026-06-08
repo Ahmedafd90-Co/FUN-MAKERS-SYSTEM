@@ -7,6 +7,7 @@ import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { IPC_TRANSITIONS, IPC_TERMINAL_STATUSES, IPC_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Action → status mapping
@@ -52,8 +53,10 @@ export async function createIpc(input: CreateIpcInput, actorUserId: string) {
     );
   }
 
+  const orgId = await resolveProjectOrgId(input.projectId);
   const ipc = await prisma.ipc.create({
     data: {
+      orgId,
       projectId: input.projectId,
       ipaId: input.ipaId,
       status: 'draft',
