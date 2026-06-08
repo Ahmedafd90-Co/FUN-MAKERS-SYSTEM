@@ -31,6 +31,7 @@ import { prisma, Prisma } from '@fmksa/db';
 import type { IpaStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { IPA_APPROVED_PLUS } from '../dashboard/kpi-definitions';
 
 // ---------------------------------------------------------------------------
@@ -179,8 +180,9 @@ export async function upsertForecast(input: UpsertForecastInput, actorUserId: st
     return updated;
   }
 
+  const orgId = await resolveProjectOrgId(input.projectId);
   const created = await prisma.ipaForecast.create({
-    data: { ...data, createdBy: actorUserId },
+    data: { ...data, orgId, createdBy: actorUserId },
   });
   await auditService.log({
     actorUserId,

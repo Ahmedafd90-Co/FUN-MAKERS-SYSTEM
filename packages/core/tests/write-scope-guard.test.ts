@@ -71,20 +71,16 @@ interface Exemption {
   reason: string;
 }
 const KNOWN_DEFAULT_RELIANT: Exemption[] = [
-  // Harvested from this guard's own enumeration (108-A first run). 32 entries
-  // cover 33 sites (posting/service.ts `post` has 2 creates). Each is a PIC-108
+  // Harvested from this guard's own enumeration (108-A first run); shrinks per
+  // batch. 108-B (commercial, 8 sites) landed → 24 entries now cover 25 sites
+  // (posting/service.ts `post` has 2 creates). Each remaining is a PIC-108
   // cutover-scope site that omits orgId today → fix = derive orgId from the
-  // parent (project.orgId / entity.orgId) at cutover; remove the entry then.
+  // parent (project.orgId / entity.orgId); remove the entry then.
 
-  // --- 108-B (commercial) — derive from project.orgId ---
-  { file: 'commercial/ipa/service.ts', fn: 'createIpa', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/ipc/service.ts', fn: 'createIpc', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/variation/service.ts', fn: 'createVariation', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/cost-proposal/service.ts', fn: 'createCostProposal', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/tax-invoice/service.ts', fn: 'createTaxInvoice', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/correspondence/service.ts', fn: 'createCorrespondence', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'commercial/forecast/service.ts', fn: 'upsertForecast', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
-  { file: 'engineer-instruction/service.ts', fn: 'createEi', reason: 'PIC-108 cutover (108-B) — relies on orgId @default; derive from project.orgId' },
+  // --- 108-B (commercial) — ✅ SUPPLIED (PIC-108-B): all 8 (ipa/ipc/variation/
+  //     cost-proposal/tax-invoice/correspondence/forecast/engineer-instruction) now
+  //     derive orgId from project.orgId via resolveProjectOrgId; removed from this
+  //     table (the table shrinks per batch — empty at end-of-F is the completion gate). ---
 
   // --- 108-C (procurement) — derive from project.orgId (catalog/category/vendor: entity.orgId) ---
   { file: 'procurement/purchase-order/service.ts', fn: 'createPurchaseOrder', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from project.orgId' },

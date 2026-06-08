@@ -2,6 +2,7 @@ import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CostProposalStatus } from '@fmksa/db';
 import type { CreateCostProposalInput, UpdateCostProposalInput, ListFilterInput } from '@fmksa/contracts';
 import { auditService, type TransactionClient } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
@@ -40,8 +41,10 @@ export async function createCostProposal(input: CreateCostProposalInput, actorUs
   // no orphaned entity. The 'workflow.started' emit (→ email, non-rollback-able)
   // is DEFERRED out of the transaction and dispatched only AFTER commit.
   const { cp, deferred } = await prisma.$transaction(async (tx) => {
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
     const cp = await (tx as any).costProposal.create({
       data: {
+        orgId,
         projectId: input.projectId,
         variationId: input.variationId ?? null,
         status: 'draft',

@@ -2,6 +2,7 @@ import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { TaxInvoiceStatus } from '@fmksa/db';
 import type { CreateTaxInvoiceInput, UpdateTaxInvoiceInput, TaxInvoiceListInput } from '@fmksa/contracts';
 import { auditService, type TransactionClient } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
@@ -66,10 +67,12 @@ export async function createTaxInvoice(input: CreateTaxInvoiceInput, actorUserId
   // generation was already transactional; it now shares the tx with audit + seed.
   // 'workflow.started' (→ email) is deferred and dispatched after commit.
   const { taxInvoice, deferred } = await prisma.$transaction(async (tx) => {
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
     const invoiceNumber = await generateReferenceNumber(input.projectId, 'INVNUM', tx);
 
     const created = await (tx as any).taxInvoice.create({
       data: {
+        orgId,
         projectId: input.projectId,
         ipcId: input.ipcId,
         status: 'draft',

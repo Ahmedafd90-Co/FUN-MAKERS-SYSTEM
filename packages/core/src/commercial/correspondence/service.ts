@@ -7,6 +7,7 @@ import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { getCorrespondenceTransitions, CORRESPONDENCE_TERMINAL_STATUSES, CORRESPONDENCE_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
@@ -65,8 +66,10 @@ function getTypeCode(subtype: string): string {
 // ---------------------------------------------------------------------------
 
 export async function createCorrespondence(input: CreateCorrespondenceInput, actorUserId: string) {
+  const orgId = await resolveProjectOrgId(input.projectId);
   const correspondence = await prisma.correspondence.create({
     data: {
+      orgId,
       projectId: input.projectId,
       subtype: input.subtype as any,
       status: 'draft',

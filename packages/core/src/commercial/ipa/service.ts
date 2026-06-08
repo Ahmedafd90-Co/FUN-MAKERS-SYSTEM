@@ -7,6 +7,7 @@ import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../reference-number/service';
 import { IPA_TRANSITIONS, IPA_TERMINAL_STATUSES, IPA_WORKFLOW_MANAGED_ACTIONS } from './transitions';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Action → status mapping
@@ -29,8 +30,10 @@ const ACTION_TO_STATUS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export async function createIpa(input: CreateIpaInput, actorUserId: string) {
+  const orgId = await resolveProjectOrgId(input.projectId);
   const ipa = await prisma.ipa.create({
     data: {
+      orgId,
       projectId: input.projectId,
       status: 'draft',
       periodNumber: input.periodNumber,
