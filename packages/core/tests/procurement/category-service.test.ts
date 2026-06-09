@@ -15,6 +15,11 @@ const { mockPrisma, mockAuditLog } = vi.hoisted(() => {
       delete: vi.fn(),
       count: vi.fn(),
     },
+    // PIC-108-C: createCategory now derives orgId via resolveEntityOrgId(entityId, tx).
+    // ENTITY_ID belongs to the singleton tenant, so the entity read returns org #1.
+    entity: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ orgId: '00000000-0000-0000-0000-000000000001' }),
+    },
   };
   return { mockPrisma, mockAuditLog };
 });

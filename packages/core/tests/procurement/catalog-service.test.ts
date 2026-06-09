@@ -15,6 +15,11 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
       update: vi.fn(),
       count: vi.fn(),
     },
+    // PIC-108-C: createCatalogItem now derives orgId via resolveEntityOrgId(entityId, tx).
+    // ENTITY_ID belongs to the singleton tenant, so the entity read returns org #1.
+    entity: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({ orgId: '00000000-0000-0000-0000-000000000001' }),
+    },
   };
   // $transaction executes the callback with mockPrisma as the tx client
   mockPrisma.$transaction = vi.fn().mockImplementation((cb: (tx: any) => any) => cb(mockPrisma));

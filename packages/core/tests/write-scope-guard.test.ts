@@ -72,25 +72,20 @@ interface Exemption {
 }
 const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   // Harvested from this guard's own enumeration (108-A first run); shrinks per
-  // batch. 108-B (commercial, 8 sites) landed → 24 entries now cover 25 sites
-  // (posting/service.ts `post` has 2 creates). Each remaining is a PIC-108
-  // cutover-scope site that omits orgId today → fix = derive orgId from the
-  // parent (project.orgId / entity.orgId); remove the entry then.
+  // batch. 108-B (commercial 8) + 108-C (procurement 8) landed → 16 entries now
+  // cover 17 sites (posting/service.ts `post` has 2 creates). Each remaining is a
+  // PIC-108 cutover-scope site that omits orgId today → fix = derive orgId from
+  // the parent (project.orgId / entity.orgId); remove the entry then.
 
   // --- 108-B (commercial) — ✅ SUPPLIED (PIC-108-B): all 8 (ipa/ipc/variation/
   //     cost-proposal/tax-invoice/correspondence/forecast/engineer-instruction) now
   //     derive orgId from project.orgId via resolveProjectOrgId; removed from this
   //     table (the table shrinks per batch — empty at end-of-F is the completion gate). ---
 
-  // --- 108-C (procurement) — derive from project.orgId (catalog/category/vendor: entity.orgId) ---
-  { file: 'procurement/purchase-order/service.ts', fn: 'createPurchaseOrder', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from project.orgId' },
-  { file: 'procurement/rfq/materialisation.ts', fn: 'materialiseAward', reason: 'PIC-108 cutover (108-C) — CANARY: sibling vendorContract.create supplies project.orgId, this PO does not; derive from project.orgId' },
-  { file: 'procurement/supplier-invoice/service.ts', fn: 'createSupplierInvoice', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from project.orgId' },
-  { file: 'procurement/credit-note/service.ts', fn: 'createCreditNote', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from project.orgId' },
-  { file: 'procurement/expense/service.ts', fn: 'createExpense', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from project.orgId' },
-  { file: 'procurement/vendor/service.ts', fn: 'createVendor', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from entity.orgId' },
-  { file: 'procurement/catalog/service.ts', fn: 'createCatalogItem', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from entity.orgId' },
-  { file: 'procurement/category/service.ts', fn: 'createCategory', reason: 'PIC-108 cutover (108-C) — relies on orgId @default; derive from entity.orgId' },
+  // --- 108-C (procurement) — ✅ SUPPLIED (PIC-108-C): all 8 (PO ×2 incl. the
+  //     rfq/materialisation canary + supplier-invoice/credit-note/expense via
+  //     resolveProjectOrgId; vendor/catalog/category via resolveEntityOrgId)
+  //     now supply orgId; removed from this table. ---
 
   // --- 108-D (budget + docs + drawings) — derive from project.orgId ---
   { file: 'budget/service.ts', fn: 'createBudget', reason: 'PIC-108 cutover (108-D) — relies on orgId @default; derive from project.orgId' },

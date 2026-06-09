@@ -32,6 +32,7 @@
 
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { assertProjectScope } from '../../scope-binding';
 import { generateReferenceNumber, generateOrgScopedNumber } from '../../commercial/reference-number/service';
 
@@ -172,8 +173,10 @@ export async function materialiseAward(
     if (input.materialiseAs === 'po') {
       const created = await prisma.$transaction(async (tx) => {
         const poNumber = await generateReferenceNumber(input.projectId, 'PO', tx);
+        const orgId = await resolveProjectOrgId(input.projectId, tx);
         return (tx as typeof prisma).purchaseOrder.create({
           data: {
+            orgId,
             projectId: input.projectId,
             vendorId: awardedQuotation!.vendorId,
             rfqId: input.rfqId,

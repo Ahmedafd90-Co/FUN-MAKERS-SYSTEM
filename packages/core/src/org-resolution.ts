@@ -38,3 +38,31 @@ export async function resolveProjectOrgId(
   });
   return orgId;
 }
+
+/**
+ * PIC-108-C — entity-scoped sibling of {@link resolveProjectOrgId}. Vendor,
+ * ItemCatalog and ProcurementCategory are ENTITY-scoped (no `projectId`), so
+ * their `orgId` is the entity's `orgId` — the established pattern already used
+ * inline by `procurement/framework-agreement/service.ts`. Same SAFE by-id read
+ * justification: `id` is the entity-scope chokepoint; the write-side guard
+ * (PIC-108-A) enforces that the resulting `orgId` is supplied.
+ */
+type EntityOrgReader = {
+  entity: {
+    findUniqueOrThrow: (args: {
+      where: { id: string };
+      select: { orgId: true };
+    }) => Promise<{ orgId: string }>;
+  };
+};
+
+export async function resolveEntityOrgId(
+  entityId: string,
+  client: unknown = prisma,
+): Promise<string> {
+  const { orgId } = await (client as EntityOrgReader).entity.findUniqueOrThrow({
+    where: { id: entityId },
+    select: { orgId: true },
+  });
+  return orgId;
+}
