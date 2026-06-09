@@ -6,6 +6,7 @@
 import { prisma, Prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { CreditNoteStatus } from '@fmksa/db';
 import { auditService, type TransactionClient } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import {
   workflowInstanceService,
   TemplateNotActiveError,
@@ -48,8 +49,10 @@ export async function createCreditNote(
   // translate a uniqueness P2002 into a tenant-scoped message.
   try {
     const { record, deferred } = await prisma.$transaction(async (tx) => {
+      const orgId = await resolveProjectOrgId(input.projectId, tx);
       const record = await (tx as any).creditNote.create({
         data: {
+          orgId,
           projectId: input.projectId,
           vendorId: input.vendorId,
           subtype: input.subtype as any,

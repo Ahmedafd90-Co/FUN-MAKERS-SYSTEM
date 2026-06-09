@@ -6,6 +6,7 @@
 import { prisma, Prisma } from '@fmksa/db';
 import type { CreateCatalogItemInput, UpdateCatalogItemInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { resolveEntityOrgId } from '../../org-resolution';
 import { nextItemCode } from './validation';
 import { assertEntityScope } from '../../scope-binding';
 
@@ -27,9 +28,11 @@ export async function createCatalogItem(input: CreateCatalogItemInput, actorUser
             select: { itemCode: true },
           });
           const itemCode = nextItemCode(last?.itemCode ?? null);
+          const orgId = await resolveEntityOrgId(input.entityId, tx);
 
           return (tx as any).itemCatalog.create({
             data: {
+              orgId,
               entityId: input.entityId,
               itemCode,
               description: input.description ?? input.name,

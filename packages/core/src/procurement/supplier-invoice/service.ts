@@ -7,6 +7,7 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { SupplierInvoiceStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
@@ -55,9 +56,11 @@ export async function createSupplierInvoice(
 ) {
   const record = await prisma.$transaction(async (tx) => {
     const invoiceNumber = await generateReferenceNumber(input.projectId, 'SI', tx);
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
 
     return (tx as any).supplierInvoice.create({
       data: {
+        orgId,
         projectId: input.projectId,
         vendorId: input.vendorId,
         purchaseOrderId: input.purchaseOrderId ?? null,

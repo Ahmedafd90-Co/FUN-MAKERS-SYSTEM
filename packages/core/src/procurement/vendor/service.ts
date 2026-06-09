@@ -7,6 +7,7 @@ import { prisma, Prisma } from '@fmksa/db';
 import type { VendorStatus } from '@fmksa/db';
 import type { CreateVendorInput, UpdateVendorInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { resolveEntityOrgId } from '../../org-resolution';
 import { VENDOR_TRANSITIONS, VENDOR_TERMINAL_STATUSES, ACTION_TO_STATUS } from './transitions';
 import { nextVendorCode, EDITABLE_STATUSES } from './validation';
 import { assertEntityScope } from '../../scope-binding';
@@ -29,9 +30,11 @@ export async function createVendor(input: CreateVendorInput, actorUserId: string
             select: { vendorCode: true },
           });
           const vendorCode = nextVendorCode(last?.vendorCode ?? null);
+          const orgId = await resolveEntityOrgId(input.entityId, tx);
 
           return (tx as any).vendor.create({
             data: {
+              orgId,
               entityId: input.entityId,
               vendorCode,
               name: input.name,

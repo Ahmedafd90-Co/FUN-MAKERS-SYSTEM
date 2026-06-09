@@ -7,6 +7,7 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { PurchaseOrderStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { postingService } from '../../posting/service';
 import { generateReferenceNumber } from '../../commercial/reference-number/service';
 import { assertProjectScope } from '../../scope-binding';
@@ -65,9 +66,11 @@ export async function createPurchaseOrder(
 ) {
   const record = await prisma.$transaction(async (tx) => {
     const poNumber = await generateReferenceNumber(input.projectId, 'PO', tx);
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
 
     return (tx as any).purchaseOrder.create({
       data: {
+        orgId,
         projectId: input.projectId,
         vendorId: input.vendorId,
         rfqId: input.rfqId ?? null,

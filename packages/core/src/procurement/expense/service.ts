@@ -6,6 +6,7 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { ExpenseStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { postingService } from '../../posting/service';
 import { assertProjectScope } from '../../scope-binding';
 import {
@@ -65,8 +66,10 @@ export async function createExpense(
   },
   actorUserId: string,
 ) {
+  const orgId = await resolveProjectOrgId(input.projectId);
   const record = await prisma.expense.create({
     data: {
+      orgId,
       projectId: input.projectId,
       subtype: input.subtype as any,
       title: input.title,

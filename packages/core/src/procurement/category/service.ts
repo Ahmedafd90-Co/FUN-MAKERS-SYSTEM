@@ -6,6 +6,7 @@
 import { prisma } from '@fmksa/db';
 import type { CreateCategoryInput, UpdateCategoryInput, EntityListFilterInput } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
+import { resolveEntityOrgId } from '../../org-resolution';
 import { deriveChildLevel, defaultTopLevel } from './validation';
 import { assertEntityScope } from '../../scope-binding';
 
@@ -26,8 +27,10 @@ export async function createCategory(input: CreateCategoryInput, actorUserId: st
     level = deriveChildLevel(parent.level);
   }
 
+  const orgId = await resolveEntityOrgId(input.entityId);
   const category = await prisma.procurementCategory.create({
     data: {
+      orgId,
       entityId: input.entityId,
       name: input.name,
       code: input.code ?? input.name.toUpperCase().replace(/\s+/g, '-').slice(0, 20),
