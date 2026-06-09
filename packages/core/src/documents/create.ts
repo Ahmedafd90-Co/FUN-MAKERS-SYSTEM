@@ -73,6 +73,7 @@ export async function createDocument(input: CreateDocumentInput) {
   const document = await (prisma as any).$transaction(async (tx: any) => {
     const doc = await tx.document.create({
       data: {
+        orgId: project.orgId,
         projectId,
         recordType: recordType ?? null,
         recordId: recordId ?? null,

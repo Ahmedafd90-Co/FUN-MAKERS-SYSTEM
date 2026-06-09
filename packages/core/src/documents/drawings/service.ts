@@ -21,6 +21,7 @@
 import { prisma, runAsWorkflowEngine } from '@fmksa/db';
 import type { DrawingDiscipline, DrawingRevisionStatus } from '@fmksa/db';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 import { assertProjectScope } from '../../scope-binding';
 import {
   DRAWING_REVISION_TRANSITIONS,
@@ -48,8 +49,10 @@ export async function createDrawing(
   },
   actorUserId: string,
 ) {
+  const orgId = await resolveProjectOrgId(input.projectId);
   const record = await prisma.drawing.create({
     data: {
+      orgId,
       projectId: input.projectId,
       drawingNumber: input.drawingNumber,
       title: input.title,
