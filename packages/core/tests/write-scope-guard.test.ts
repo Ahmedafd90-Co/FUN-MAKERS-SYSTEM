@@ -72,10 +72,11 @@ interface Exemption {
 }
 const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   // Harvested from this guard's own enumeration (108-A first run); shrinks per
-  // batch. 108-B (commercial 8) + 108-C (procurement 8) + 108-D (budget+docs 4)
-  // landed → 12 entries now cover 13 sites (posting/service.ts `post` has 2 creates).
-  // Each remaining is a PIC-108 cutover-scope site that omits orgId today → fix =
-  // derive orgId from the parent (project.orgId / entity.orgId); remove the entry then.
+  // batch. 108-B (commercial 8) + 108-C (procurement 8) + 108-D (budget+docs 4) +
+  // 108-E (posting+audit+import 8) landed → 4 entries / 4 sites remain (all 108-F:
+  // layer1 + workflow). Each remaining is a PIC-108 cutover-scope site that omits
+  // orgId today → fix = derive orgId from the parent (project.orgId); remove the
+  // entry then. EMPTY at end-of-F is the completion gate (then 108-G drops @default).
 
   // --- 108-B (commercial) — ✅ SUPPLIED (PIC-108-B): all 8 (ipa/ipc/variation/
   //     cost-proposal/tax-invoice/correspondence/forecast/engineer-instruction) now
@@ -92,15 +93,15 @@ const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   //     createDrawing via resolveProjectOrgId; documents createDocument reuses its
   //     already-fetched project.orgId) now supply orgId; removed from this table. ---
 
-  // --- 108-E (posting + audit + import) — derive from the record's project.orgId ---
-  { file: 'posting/service.ts', fn: 'post', reason: 'PIC-108 cutover (108-E) — relies on orgId @default (2 creates in this fn); derive from project.orgId' },
-  { file: 'posting/reversal.ts', fn: 'reversePostingEvent', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from the original event/project.orgId' },
-  { file: 'audit/service.ts', fn: 'log', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from the audited record/project.orgId' },
-  { file: 'audit/override.ts', fn: 'withOverride', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from the audit_log parent orgId' },
-  { file: 'import/committers/budget-baseline.ts', fn: 'commitBudgetBaselineRow', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from project.orgId' },
-  { file: 'import/committers/ipa-forecast.ts', fn: 'commitIpaForecastRow', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from project.orgId' },
-  { file: 'import/committers/ipa-history.ts', fn: 'commitIpaHistoryRow', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from project.orgId' },
-  { file: 'import/service.ts', fn: 'stageBatch', reason: 'PIC-108 cutover (108-E) — relies on orgId @default; derive from project.orgId' },
+  // --- 108-E (posting + audit + import) — ✅ SUPPLIED (PIC-108-E): all 8 fns
+  //     now supply orgId — posting/service `post` (×2 postingEvent) +
+  //     import committers (budget-baseline projectBudget / ipa-forecast / ipa-history)
+  //     + import/service stageBatch (importBatch) via resolveProjectOrgId;
+  //     posting/reversal (→ original.orgId) + audit/override overrideLog
+  //     (→ auditEntry.orgId) are parent-reuse, no new read; audit/service `log`
+  //     via Option A′ (`entry.orgId ?? SINGLETON_ORG_ID`, ledger callers thread it).
+  //     Removed from this table. NON-tenant children carry no orgId column and are
+  //     correctly untouched: postingException, importRow, budgetLine, budgetAdjustment. ---
 
   // --- 108-F (layer1 + workflow) — derive from project.orgId ---
   { file: 'layer1/intercompany-contracts/service.ts', fn: 'createIntercompanyContract', reason: 'PIC-108 cutover (108-F) — relies on orgId @default; derive from project.orgId' },

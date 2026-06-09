@@ -1,4 +1,4 @@
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 
 /**
  * Minimal transaction client type. Within a Prisma `$transaction` callback
@@ -27,6 +27,14 @@ export type AuditEntry = {
   resourceType: string;
   resourceId: string;
   projectId?: string | null;
+  /**
+   * PIC-108-E (Option A′): tenant attribution for this audit row. Callers that
+   * have the org in hand (the ledger-write paths) thread it; un-threaded /
+   * platform-level callers omit it and the chokepoint falls back to the
+   * singleton (matching the column @default — behavior-preserving). Threading
+   * the remaining ~194 callers + dropping the @default is the banked carry-forward.
+   */
+  orgId?: string | null;
   beforeJson: JsonValue;
   afterJson: JsonValue;
   reason?: string | null;
@@ -58,6 +66,9 @@ export const auditService = {
 
     return client.auditLog.create({
       data: {
+        // PIC-108-E (A′): caller-threaded org or the singleton fallback (= the
+        // column @default). No DB read in this hot chokepoint by design.
+        orgId: entry.orgId ?? SINGLETON_ORG_ID,
         actorUserId: entry.actorUserId ?? null,
         actorSource: entry.actorSource,
         action: entry.action,

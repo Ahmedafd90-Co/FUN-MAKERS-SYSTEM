@@ -47,3 +47,8 @@ export { PERMISSIONS } from './seed/permissions';
 export { COMMERCIAL_PERMISSIONS } from './seed/commercial-permissions';
 export { PROCUREMENT_PERMISSIONS } from './seed/procurement-permissions';
 export { PERMISSION_CATALOG, isValidPermission, assertValidPermission } from './seed/permission-catalog';
+// PIC-108-E: canonical multi-tenant singleton org id. Single source of truth is
+// seed/organizations.ts; re-exported here so service code (audit chokepoint)
+// can attribute un-threaded/platform-level writes to the singleton without
+// duplicating the literal.
+export { SINGLETON_ORG_ID } from './seed/organizations';

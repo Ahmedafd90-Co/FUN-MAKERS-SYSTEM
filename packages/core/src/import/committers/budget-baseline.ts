@@ -20,6 +20,7 @@
 import type { Prisma } from '@fmksa/db';
 import type { ImportIssue, ParsedBudgetBaselineRow, RowCommitResult } from '../types';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 type Tx = Prisma.TransactionClient;
 
@@ -35,6 +36,12 @@ export async function commitBudgetBaselineRow(
   parsed: ParsedBudgetBaselineRow,
 ): Promise<RowCommitResult> {
   const errors: ImportIssue[] = [];
+
+  // PIC-108-E: tenant org for any orgId-bearing row this committer writes (the
+  // bootstrap ProjectBudget create + the threaded audit row). The imported
+  // budget belongs to ctx.projectId's org. (budgetLine/budgetAdjustment carry
+  // no orgId — they derive tenancy via budgetId → projectBudget.)
+  const orgId = await resolveProjectOrgId(ctx.projectId, tx);
 
   const category = await tx.budgetCategory.findUnique({
     where: { code: parsed.categoryCode },
@@ -56,6 +63,7 @@ export async function commitBudgetBaselineRow(
   if (!budget) {
     budget = await tx.projectBudget.create({
       data: {
+        orgId,
         projectId: ctx.projectId,
         internalBaseline: 0,
         internalRevised: 0,
@@ -128,6 +136,8 @@ export async function commitBudgetBaselineRow(
       resourceType: 'budget_line',
       resourceId: line.id,
       projectId: ctx.projectId,
+      orgId, // PIC-108-E (A′): thread the resolved org into the audit row
+
       beforeJson: { budgetAmount: beforeAmount },
       afterJson: {
         budgetAmount: afterAmount,

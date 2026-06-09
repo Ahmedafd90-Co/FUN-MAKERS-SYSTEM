@@ -25,6 +25,7 @@
 import { prisma, Prisma, type ImportType, type ImportBatchStatus, type ImportRowStatus } from '@fmksa/db';
 import { auditService } from '../audit/service';
 import { assertProjectScope } from '../scope-binding';
+import { resolveProjectOrgId } from '../org-resolution';
 
 import { PARSER_VERSIONS, VALIDATOR_SCHEMA_VERSIONS } from './versions';
 import { parseXlsx } from './parse-sheet';
@@ -121,8 +122,12 @@ export async function stageBatch(input: {
   };
 
   const batch = await prisma.$transaction(async (tx) => {
+    // PIC-108-E: the import batch belongs to input.projectId's org (tx client so
+    // the read joins this transaction). importRow carries no orgId (child of batch).
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
     const created = await tx.importBatch.create({
       data: {
+        orgId,
         projectId: input.projectId,
         importType: input.importType,
         sourceFileName: input.sourceFileName,
@@ -151,6 +156,8 @@ export async function stageBatch(input: {
         resourceType: 'import_batch',
         resourceId: created.id,
         projectId: input.projectId,
+        orgId, // PIC-108-E (A′): thread the resolved org into the audit row
+
         beforeJson: null,
         afterJson: {
           importType: input.importType,

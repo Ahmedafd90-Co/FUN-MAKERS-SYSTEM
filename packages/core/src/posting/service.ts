@@ -1,6 +1,7 @@
 import { prisma } from '@fmksa/db';
 import type { PostingOrigin } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { resolveProjectOrgId } from '../org-resolution';
 import {
   validatePayload,
   UnknownEventTypeError,
@@ -52,6 +53,12 @@ export const postingService = {
    * 3. Create event in a transaction with an audit log entry.
    */
   async post(input: PostInput) {
+    // PIC-108-E: resolve the tenant org once (input.projectId is required) and
+    // reuse it for BOTH postingEvent creates (failed-event + posted-event) and
+    // the threaded audit log. An append-only ledger row must carry its project's
+    // org, never the singleton @default.
+    const orgId = await resolveProjectOrgId(input.projectId);
+
     // 1. Validate event type + payload
     let parsed: unknown;
     try {
@@ -67,6 +74,7 @@ export const postingService = {
       // for traceability, then create exception.
       const event = await prisma.postingEvent.create({
         data: {
+          orgId,
           eventType: input.eventType,
           sourceService: input.sourceService,
           sourceRecordType: input.sourceRecordType,
@@ -110,6 +118,7 @@ export const postingService = {
     return prisma.$transaction(async (tx) => {
       const event = await tx.postingEvent.create({
         data: {
+          orgId,
           eventType: input.eventType,
           sourceService: input.sourceService,
           sourceRecordType: input.sourceRecordType,
@@ -133,6 +142,8 @@ export const postingService = {
           resourceType: 'posting_event',
           resourceId: event.id,
           projectId: input.projectId,
+          orgId, // PIC-108-E (A′): thread the resolved org into the audit row
+
           beforeJson: {},
           afterJson: {
             eventType: input.eventType,
