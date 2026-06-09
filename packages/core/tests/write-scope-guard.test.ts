@@ -72,10 +72,10 @@ interface Exemption {
 }
 const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   // Harvested from this guard's own enumeration (108-A first run); shrinks per
-  // batch. 108-B (commercial 8) + 108-C (procurement 8) landed → 16 entries now
-  // cover 17 sites (posting/service.ts `post` has 2 creates). Each remaining is a
-  // PIC-108 cutover-scope site that omits orgId today → fix = derive orgId from
-  // the parent (project.orgId / entity.orgId); remove the entry then.
+  // batch. 108-B (commercial 8) + 108-C (procurement 8) + 108-D (budget+docs 4)
+  // landed → 12 entries now cover 13 sites (posting/service.ts `post` has 2 creates).
+  // Each remaining is a PIC-108 cutover-scope site that omits orgId today → fix =
+  // derive orgId from the parent (project.orgId / entity.orgId); remove the entry then.
 
   // --- 108-B (commercial) — ✅ SUPPLIED (PIC-108-B): all 8 (ipa/ipc/variation/
   //     cost-proposal/tax-invoice/correspondence/forecast/engineer-instruction) now
@@ -87,11 +87,10 @@ const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   //     resolveProjectOrgId; vendor/catalog/category via resolveEntityOrgId)
   //     now supply orgId; removed from this table. ---
 
-  // --- 108-D (budget + docs + drawings) — derive from project.orgId ---
-  { file: 'budget/service.ts', fn: 'createBudget', reason: 'PIC-108 cutover (108-D) — relies on orgId @default; derive from project.orgId' },
-  { file: 'budget/absorption.ts', fn: 'recordAbsorptionException', reason: 'PIC-108 cutover (108-D) — relies on orgId @default; derive from project.orgId' },
-  { file: 'documents/create.ts', fn: 'createDocument', reason: 'PIC-108 cutover (108-D) — relies on orgId @default; derive from project.orgId (or record parent)' },
-  { file: 'documents/drawings/service.ts', fn: 'createDrawing', reason: 'PIC-108 cutover (108-D) — relies on orgId @default; derive from project.orgId' },
+  // --- 108-D (budget + docs + drawings) — ✅ SUPPLIED (PIC-108-D): all 4
+  //     (budget createBudget, budget/absorption recordAbsorptionException, drawings
+  //     createDrawing via resolveProjectOrgId; documents createDocument reuses its
+  //     already-fetched project.orgId) now supply orgId; removed from this table. ---
 
   // --- 108-E (posting + audit + import) — derive from the record's project.orgId ---
   { file: 'posting/service.ts', fn: 'post', reason: 'PIC-108 cutover (108-E) — relies on orgId @default (2 creates in this fn); derive from project.orgId' },

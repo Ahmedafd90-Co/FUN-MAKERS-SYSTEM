@@ -10,6 +10,7 @@
 import { prisma } from '@fmksa/db';
 import type { BudgetAdjustmentType } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { resolveProjectOrgId } from '../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Get
@@ -42,9 +43,11 @@ export async function createBudget(
   actorUserId: string,
 ) {
   const budget = await prisma.$transaction(async (tx) => {
+    const orgId = await resolveProjectOrgId(input.projectId, tx);
     // Create the header — internalRevised starts equal to internalBaseline
     const created = await (tx as any).projectBudget.create({
       data: {
+        orgId,
         projectId: input.projectId,
         internalBaseline: input.internalBaseline,
         internalRevised: input.internalBaseline,

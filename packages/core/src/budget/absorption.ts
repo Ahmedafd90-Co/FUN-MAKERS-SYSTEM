@@ -16,6 +16,7 @@
 
 import { prisma, Prisma } from '@fmksa/db';
 import { auditService } from '../audit/service';
+import { resolveProjectOrgId } from '../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Return types — every caller knows exactly what happened
@@ -39,8 +40,10 @@ async function recordAbsorptionException(params: {
   message: string;
   severity?: string;
 }): Promise<string> {
+  const orgId = await resolveProjectOrgId(params.projectId);
   const ex = await prisma.budgetAbsorptionException.create({
     data: {
+      orgId,
       projectId: params.projectId,
       sourceModule: params.sourceModule,
       sourceRecordType: params.sourceRecordType,
