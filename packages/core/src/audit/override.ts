@@ -89,6 +89,11 @@ export async function withOverride<T>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (tx as any).overrideLog.create({
       data: {
+        // PIC-108-E: inherit the parent audit entry's org (created just above,
+        // in hand — no new read). Matches the F4 PR-2 backfill rule
+        // (overrideLog.orgId ← audit_logs.org_id). Platform-level overrides
+        // carry no project, so this is the singleton — consistent by design.
+        orgId: auditEntry.orgId,
         auditLogId: auditEntry.id,
         overrideType,
         overriderUserId: actorUserId,

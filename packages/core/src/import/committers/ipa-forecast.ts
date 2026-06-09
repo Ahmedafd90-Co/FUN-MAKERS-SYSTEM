@@ -27,6 +27,7 @@
 import type { Prisma } from '@fmksa/db';
 import type { ImportIssue, ParsedIpaForecastRow, RowCommitResult } from '../types';
 import { auditService } from '../../audit/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 type Tx = Prisma.TransactionClient;
 
@@ -44,10 +45,14 @@ export async function commitIpaForecastRow(
 ): Promise<RowCommitResult> {
   const errors: ImportIssue[] = [];
 
+  // PIC-108-E: the imported forecast belongs to ctx.projectId's org.
+  const orgId = await resolveProjectOrgId(ctx.projectId, tx);
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const created = await (tx as any).ipaForecast.create({
       data: {
+        orgId,
         projectId: ctx.projectId,
         periodNumber: parsed.periodNumber,
         periodStart: new Date(parsed.periodStart),
@@ -66,6 +71,8 @@ export async function commitIpaForecastRow(
         resourceType: 'ipa_forecast',
         resourceId: created.id,
         projectId: ctx.projectId,
+        orgId, // PIC-108-E (A′): thread the resolved org into the audit row
+
         beforeJson: null,
         afterJson: {
           periodNumber: parsed.periodNumber,

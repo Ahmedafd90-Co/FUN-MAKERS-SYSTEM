@@ -56,6 +56,9 @@ export async function reversePostingEvent(input: ReverseInput) {
     // Create the reversal event
     const reversalEvent = await tx.postingEvent.create({
       data: {
+        // PIC-108-E: a reversal carries the reversed event's exact org (the
+        // original is already fetched above — no new read, no re-derivation).
+        orgId: original.orgId,
         eventType: original.eventType,
         sourceService: original.sourceService,
         sourceRecordType: original.sourceRecordType,
@@ -84,6 +87,8 @@ export async function reversePostingEvent(input: ReverseInput) {
         resourceType: 'posting_event',
         resourceId: originalEventId,
         projectId: original.projectId,
+        orgId: original.orgId, // PIC-108-E (A′): same org as the reversed event
+
         beforeJson: { status: original.status, reversedByEventId: null },
         afterJson: {
           reversalEventId: reversalEvent.id,

@@ -25,6 +25,7 @@ import type { Prisma, PrismaClient, IpaStatus } from '@fmksa/db';
 import type { ImportIssue, ParsedIpaHistoryRow, RowCommitResult } from '../types';
 import { auditService } from '../../audit/service';
 import { postingService } from '../../posting/service';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 type Tx = Prisma.TransactionClient;
 
@@ -83,9 +84,14 @@ export async function commitIpaHistoryRow(
 
   const { postedAt, source: postingDateSource } = pickPostedAt(parsed);
 
+  // PIC-108-E: the imported IPA belongs to ctx.projectId's org (uses the passed
+  // prisma client — this committer manages its own transaction via postingService).
+  const orgId = await resolveProjectOrgId(ctx.projectId, prisma);
+
   // Create the IPA record (origin=imported_historical).
   const ipa = await prisma.ipa.create({
     data: {
+      orgId,
       projectId: ctx.projectId,
       status: parsed.status as IpaStatus,
       periodNumber: parsed.periodNumber,
@@ -118,6 +124,8 @@ export async function commitIpaHistoryRow(
     resourceType: 'ipa',
     resourceId: ipa.id,
     projectId: ctx.projectId,
+    orgId, // PIC-108-E (A′): thread the resolved org into the audit row
+
     beforeJson: null,
     afterJson: {
       id: ipa.id,
