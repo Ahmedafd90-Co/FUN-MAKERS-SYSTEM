@@ -23,6 +23,16 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
     intercompanyContract: {
       findFirst: vi.fn(),
     },
+    // PIC-108-F: createProjectParticipant now resolves the project's orgId via
+    // resolveProjectOrgId (tenant attribution for the create) — model the
+    // dependency: the org this test's project genuinely belongs to (the
+    // singleton; assertions unchanged). Same mock-update class as PIC-108-C
+    // (PD e0190513 precedent).
+    project: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        orgId: '00000000-0000-0000-0000-000000000001',
+      }),
+    },
   };
   class PrismaClientKnownRequestError extends Error {
     code: string;

@@ -13,6 +13,7 @@ import type {
 } from '@fmksa/contracts';
 import { auditService } from '../../audit/service';
 import { assertProjectScope } from '../../scope-binding';
+import { resolveProjectOrgId } from '../../org-resolution';
 
 // ---------------------------------------------------------------------------
 // Create
@@ -31,10 +32,15 @@ export async function createProjectParticipant(
     );
   }
 
+  // PIC-108-F: the participant is project-scoped — it belongs to its project's
+  // org (record.org = its own project's org, the established cutover rule).
+  const orgId = await resolveProjectOrgId(input.projectId);
+
   let record;
   try {
     record = await prisma.projectParticipant.create({
       data: {
+        orgId,
         projectId: input.projectId,
         entityId: input.entityId,
         role: input.role,

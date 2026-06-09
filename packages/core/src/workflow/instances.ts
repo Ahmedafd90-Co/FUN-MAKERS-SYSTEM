@@ -105,7 +105,10 @@ async function validateStartInstance(params: StartInstanceParams) {
     throw new Error(`Template "${templateCode}" has no steps.`);
   }
 
-  return { template, firstStep };
+  // PIC-108-F: the project is already fetched above for the existence check —
+  // return it so callers can thread project.orgId into the instance write
+  // (parent-in-hand; no extra query).
+  return { template, firstStep, project };
 }
 
 /** The instance + action + audit DB writes, on the given client (base or a tx). */
@@ -115,11 +118,15 @@ async function writeStartInstanceRows(
   template: any,
   firstStep: any,
   now: Date,
+  orgId: string,
 ) {
   const { recordType, recordId, projectId, startedBy, resolutionSource } = params;
 
   const instance = await client.workflowInstance.create({
     data: {
+      // PIC-108-F: the instance belongs to its project's org (threaded from the
+      // project validateStartInstance already fetched).
+      orgId,
       templateId: template.id,
       recordType,
       recordId,
@@ -201,12 +208,12 @@ export const workflowInstanceService = {
    * - Returns instance with current step info
    */
   async startInstance(input: StartInstanceParams) {
-    const { template, firstStep } = await validateStartInstance(input);
+    const { template, firstStep, project } = await validateStartInstance(input);
     const now = new Date();
 
     // Own $transaction (unchanged behavior), then inline post-commit emit.
     const result = await (prisma as any).$transaction(async (txClient: any) =>
-      writeStartInstanceRows(txClient, input, template, firstStep, now),
+      writeStartInstanceRows(txClient, input, template, firstStep, now, project.orgId),
     );
 
     // Publish event (outside transaction)
@@ -238,10 +245,17 @@ export const workflowInstanceService = {
   async startInstanceDeferred(
     input: StartInstanceParams & { tx: TransactionClient },
   ): Promise<{ instanceId: string; deferredEvent: DeferredWorkflowEvent }> {
-    const { template, firstStep } = await validateStartInstance(input);
+    const { template, firstStep, project } = await validateStartInstance(input);
     const now = new Date();
 
-    const instance = await writeStartInstanceRows(input.tx, input, template, firstStep, now);
+    const instance = await writeStartInstanceRows(
+      input.tx,
+      input,
+      template,
+      firstStep,
+      now,
+      project.orgId,
+    );
 
     return {
       instanceId: instance.id as string,

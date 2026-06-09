@@ -21,8 +21,14 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
       delete: vi.fn(),
     },
     // PIC-60: createIntercompanyContract loads Project for currencyCode resolution.
+    // PIC-108-F: the same read now also selects orgId (tenant attribution for the
+    // create) — the mock models the org this test's project genuinely belongs to
+    // (the singleton; assertions unchanged).
     project: {
-      findUniqueOrThrow: vi.fn().mockResolvedValue({ currencyCode: 'SAR' }),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        currencyCode: 'SAR',
+        orgId: '00000000-0000-0000-0000-000000000001',
+      }),
     },
   };
   class PrismaClientKnownRequestError extends Error {

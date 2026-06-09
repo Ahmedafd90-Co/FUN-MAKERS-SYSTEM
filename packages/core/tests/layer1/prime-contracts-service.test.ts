@@ -24,7 +24,13 @@ const { mockPrisma, mockAuditLog, mockPrismaNamespace } = vi.hoisted(() => {
     },
     project: {
       // PIC-60: createPrimeContract loads Project for currencyCode resolution.
-      findUniqueOrThrow: vi.fn().mockResolvedValue({ currencyCode: 'SAR' }),
+      // PIC-108-F: the same read now also selects orgId (tenant attribution for
+      // the participant ensure-create) — the mock models the org this test's
+      // project genuinely belongs to (the singleton; assertions unchanged).
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        currencyCode: 'SAR',
+        orgId: '00000000-0000-0000-0000-000000000001',
+      }),
       update: vi.fn(),
     },
   };

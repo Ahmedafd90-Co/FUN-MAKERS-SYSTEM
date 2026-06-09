@@ -71,12 +71,15 @@ interface Exemption {
   reason: string;
 }
 const KNOWN_DEFAULT_RELIANT: Exemption[] = [
-  // Harvested from this guard's own enumeration (108-A first run); shrinks per
-  // batch. 108-B (commercial 8) + 108-C (procurement 8) + 108-D (budget+docs 4) +
-  // 108-E (posting+audit+import 8) landed → 4 entries / 4 sites remain (all 108-F:
-  // layer1 + workflow). Each remaining is a PIC-108 cutover-scope site that omits
-  // orgId today → fix = derive orgId from the parent (project.orgId); remove the
-  // entry then. EMPTY at end-of-F is the completion gate (then 108-G drops @default).
+  // ⛳ TABLE EMPTY — THE PIC-108 COMPLETION GATE (108-F was the last supply batch).
+  // 108-B (commercial 8) + 108-C (procurement 8) + 108-D (budget+docs 4) +
+  // 108-E (posting+audit+import 8) + 108-F (layer1 3 + workflow 1) all landed:
+  // EVERY create/createMany/upsert on an orgId-bearing tenant model in
+  // packages/core/src supplies orgId from a dynamic, unconditional source. This
+  // empty table is the machine-checked proof that gates 108-G (dropping the
+  // @default singleton — EXCLUDING AuditLog until the ~194-caller A′ threading
+  // pass lands; see the PIC-108-E carry-forward). A new tenant-model write that
+  // omits orgId now FAILS this guard — add the orgId supply, not a table entry.
 
   // --- 108-B (commercial) — ✅ SUPPLIED (PIC-108-B): all 8 (ipa/ipc/variation/
   //     cost-proposal/tax-invoice/correspondence/forecast/engineer-instruction) now
@@ -103,11 +106,14 @@ const KNOWN_DEFAULT_RELIANT: Exemption[] = [
   //     Removed from this table. NON-tenant children carry no orgId column and are
   //     correctly untouched: postingException, importRow, budgetLine, budgetAdjustment. ---
 
-  // --- 108-F (layer1 + workflow) — derive from project.orgId ---
-  { file: 'layer1/intercompany-contracts/service.ts', fn: 'createIntercompanyContract', reason: 'PIC-108 cutover (108-F) — relies on orgId @default; derive from project.orgId' },
-  { file: 'layer1/prime-contracts/service.ts', fn: 'createPrimeContract', reason: 'PIC-108 cutover (108-F) — relies on orgId @default; projectParticipant derive from project.orgId' },
-  { file: 'layer1/project-participants/service.ts', fn: 'createProjectParticipant', reason: 'PIC-108 cutover (108-F) — relies on orgId @default; derive from project.orgId' },
-  { file: 'workflow/instances.ts', fn: 'writeStartInstanceRows', reason: 'PIC-108 cutover (108-F) — relies on orgId @default; derive from the instance record/project.orgId' },
+  // --- 108-F (layer1 + workflow) — ✅ SUPPLIED (PIC-108-F): all 4 —
+  //     intercompany-contracts createIntercompanyContract + prime-contracts
+  //     createPrimeContract (participant ensure-create) reuse the project read
+  //     they already make (select widened to include orgId — no new query);
+  //     project-participants createProjectParticipant via resolveProjectOrgId;
+  //     workflow/instances writeStartInstanceRows threads project.orgId from
+  //     validateStartInstance's existing project fetch (no new query).
+  //     Removed from this table — TABLE NOW EMPTY (see the gate note above). ---
 ];
 
 type Verdict = 'supplied' | 'omit' | 'literal';

@@ -67,9 +67,11 @@ export async function createPrimeContract(
   // PIC-60 audit D2.04: resolve currency from Project.currencyCode (NOT NULL in
   // schema). Loaded outside the transaction — read-only, stable value, and keeps
   // the existing test mocks (which mock a narrow `tx` subset) unchanged.
+  // PIC-108-F: orgId selected on the same read — the auto-created participant
+  // belongs to its project's org (parent-in-hand, no extra query).
   const projectForCurrency = await prisma.project.findUniqueOrThrow({
     where: { id: input.projectId },
-    select: { currencyCode: true },
+    select: { currencyCode: true, orgId: true },
   });
 
   return prisma.$transaction(async (tx) => {
@@ -93,6 +95,7 @@ export async function createPrimeContract(
     if (!existingParticipant) {
       await tx.projectParticipant.create({
         data: {
+          orgId: projectForCurrency.orgId,
           projectId: input.projectId,
           entityId: input.contractingEntityId,
           role: 'prime_contractor',
