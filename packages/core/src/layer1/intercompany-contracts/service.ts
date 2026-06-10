@@ -98,13 +98,16 @@ export async function createIntercompanyContract(
 
   // PIC-60 audit D2.04: resolve currency from Project, not hardcoded 'SAR'.
   // Project.currencyCode is NOT NULL in schema so this is always defined.
+  // PIC-108-F: orgId selected on the same read — the contract belongs to its
+  // project's org (parent-in-hand, no extra query).
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: input.projectId },
-    select: { currencyCode: true },
+    select: { currencyCode: true, orgId: true },
   });
 
   const record = await prisma.intercompanyContract.create({
     data: {
+      orgId: project.orgId,
       projectId: input.projectId,
       fromEntityId: input.fromEntityId,
       toEntityId: input.toEntityId,
