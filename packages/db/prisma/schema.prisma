@@ -188,7 +188,7 @@ model Organization {
 model User {
   id               String     @id @default(uuid()) @map("id")
   // PIC-95 (F1) — per-tenant membership (singleton default during single-tenant phase)
-  orgId            String     @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId            String @map("org_id")
   email            String     @unique @map("email")
   name             String     @map("name")
   passwordHash     String     @map("password_hash")
@@ -323,7 +323,7 @@ enum EntityStatus {
 model Entity {
   id             String       @id @default(uuid()) @map("id")
   // PIC-95 (F1) — per-tenant scope (singleton default during single-tenant phase)
-  orgId          String       @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId          String @map("org_id")
   // PIC-96 (F2) — code is per-tenant unique, not global (see @@unique([orgId, code]))
   code           String       @map("code")
   name           String       @map("name")
@@ -382,7 +382,7 @@ model Project {
   id                   String        @id @default(uuid()) @map("id")
   // PIC-95 (F1) — denormalized per-tenant scope; derives from Entity.orgId
   // (Org → Entity → Project). Singleton default during single-tenant phase.
-  orgId                String        @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                String @map("org_id")
   // PIC-96 (F2) — code is per-tenant unique, not global (see @@unique([orgId, code]))
   code                 String        @map("code")
   name                 String        @map("name")
@@ -579,7 +579,7 @@ model WorkflowStep {
 model WorkflowInstance {
   id            String         @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId         String         @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId         String @map("org_id")
   templateId    String         @map("template_id")
   recordType    String         @map("record_type")
   recordId      String         @map("record_id")
@@ -663,7 +663,7 @@ enum DocumentStatus {
 model Document {
   id               String           @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId            String           @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId            String @map("org_id")
   projectId        String           @map("project_id")
   recordType       String?          @map("record_type")
   recordId         String?          @map("record_id")
@@ -764,7 +764,7 @@ enum PostingOrigin {
 model PostingEvent {
   id                String        @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId             String        @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   eventType         String        @map("event_type")
   sourceService     String        @map("source_service")
   sourceRecordType  String        @map("source_record_type")
@@ -816,7 +816,7 @@ model PostingException {
 model BudgetAbsorptionException {
   id               String    @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId            String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId            String @map("org_id")
   projectId        String    @map("project_id")
   sourceModule     String    @map("source_module") // 'procurement', 'engineer_instruction'
   sourceRecordType String    @map("source_record_type") // 'purchase_order', 'supplier_invoice', etc.
@@ -894,7 +894,7 @@ model OverrideLog {
   // — without an orgId column, every audit override read would require a
   // JOIN-derived check and the guard would have to exempt it (the
   // F2 OverrideLog gap surfaced in PR-1 phase A recon).
-  orgId           String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId           String @map("org_id")
   auditLogId      String   @map("audit_log_id")
   overrideType    String   @map("override_type")
   overriderUserId String   @map("overrider_user_id")
@@ -1231,7 +1231,7 @@ enum CorrespondenceStatus {
 model Ipa {
   id                String    @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId             String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   projectId         String    @map("project_id")
   status            IpaStatus @default(draft) @map("status")
   referenceNumber   String?   @map("reference_number")
@@ -1290,7 +1290,7 @@ model Ipa {
 model IpaForecast {
   id             String    @id @default(uuid()) @map("id")
   // PIC-99 PR-1: per-tenant scope (singleton default during single-tenant phase)
-  orgId          String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId          String @map("org_id")
   projectId      String    @map("project_id")
   periodNumber   Int       @map("period_number")
   periodStart    DateTime  @map("period_start")
@@ -1319,7 +1319,7 @@ model IpaForecast {
 model Ipc {
   id                String    @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId             String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   projectId         String    @map("project_id")
   ipaId             String    @map("ipa_id")
   status            IpcStatus @default(draft) @map("status")
@@ -1351,7 +1351,7 @@ model Ipc {
 model Variation {
   id                     String                @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId                  String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                  String @map("org_id")
   projectId              String                @map("project_id")
   subtype                VariationSubtype      @map("subtype")
   status                 VariationStatus       @default(draft) @map("status")
@@ -1398,7 +1398,7 @@ model Variation {
 model CostProposal {
   id                String             @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId             String             @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   projectId         String             @map("project_id")
   variationId       String?            @map("variation_id")
   status            CostProposalStatus @default(draft) @map("status")
@@ -1434,7 +1434,7 @@ model TaxInvoice {
   id              String           @id @default(uuid()) @map("id")
   // PIC-75: ZATCA Phase 2 tenant-scoped invoice number space (per-tenant
   // sequential), not project-scoped. orgId is the only scope partition.
-  orgId           String           @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId           String @map("org_id")
   projectId       String           @map("project_id")
   ipcId           String           @map("ipc_id")
   status          TaxInvoiceStatus @default(draft) @map("status")
@@ -1497,7 +1497,7 @@ model InvoiceCollection {
 model Correspondence {
   id                     String                @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId                  String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                  String @map("org_id")
   projectId              String                @map("project_id")
   subtype                CorrespondenceSubtype @map("subtype")
   status                 CorrespondenceStatus  @default(draft) @map("status")
@@ -1553,7 +1553,7 @@ model ReferenceCounter {
   // PIC-84 (F2 Batch 3) — per-tenant scope; orgId derived INTERNALLY by
   // generateReferenceNumber (its 10 callers stay unchanged). Additive column,
   // singleton default — atomic metadata-only on PG14+.
-  orgId      String @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId      String @map("org_id")
   projectId  String @map("project_id")
   typeCode   String @map("type_code")
   lastNumber Int    @default(0) @map("last_number")
@@ -1662,7 +1662,7 @@ enum QuotationStatus {
 model Vendor {
   id                 String       @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId              String       @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId              String @map("org_id")
   entityId           String       @map("entity_id")
   vendorCode         String       @map("vendor_code")
   name               String
@@ -1725,7 +1725,7 @@ model ProjectVendor {
 model ProcurementCategory {
   id        String                   @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId     String                   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId     String @map("org_id")
   entityId  String                   @map("entity_id")
   name      String
   code      String
@@ -1755,7 +1755,7 @@ model ProcurementCategory {
 model ItemCatalog {
   id          String   @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId       String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId       String @map("org_id")
   entityId    String   @map("entity_id")
   itemCode    String   @map("item_code")
   description String
@@ -1786,7 +1786,7 @@ model VendorContract {
   // VC carries TWO unique identifiers: contractNumber (customer-facing, stays
   // globally unique) and referenceNumber (internal sequential, becomes
   // per-tenant project-scoped via compound key below).
-  orgId            String               @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId            String @map("org_id")
   projectId        String               @map("project_id")
   vendorId         String               @map("vendor_id")
   contractNumber   String               @map("contract_number")
@@ -1835,7 +1835,7 @@ model VendorContract {
 model FrameworkAgreement {
   id                  String                   @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId               String                   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId               String @map("org_id")
   vendorId            String                   @map("vendor_id")
   projectId           String?                  @map("project_id")
   entityId            String                   @map("entity_id")
@@ -1892,7 +1892,7 @@ model RFQ {
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
   // RFQ carries TWO unique identifiers: rfqNumber (customer-facing, stays
   // globally unique) and referenceNumber (internal sequential, per-tenant).
-  orgId              String    @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId              String @map("org_id")
   projectId          String    @map("project_id")
   rfqNumber          String    @map("rfq_number")
   title              String
@@ -2069,7 +2069,7 @@ model PurchaseOrder {
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
   // PO carries TWO unique identifiers: poNumber (customer-facing, stays
   // globally unique) and referenceNumber (internal sequential, per-tenant).
-  orgId                 String              @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                 String @map("org_id")
   projectId             String              @map("project_id")
   vendorId              String              @map("vendor_id")
   rfqId                 String?             @map("rfq_id")
@@ -2137,7 +2137,7 @@ model PurchaseOrderItem {
 model SupplierInvoice {
   id              String                @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId           String                @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId           String @map("org_id")
   projectId       String                @map("project_id")
   vendorId        String                @map("vendor_id")
   purchaseOrderId String?               @map("purchase_order_id")
@@ -2174,7 +2174,7 @@ model SupplierInvoice {
 model Expense {
   id                   String             @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId                String             @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                String @map("org_id")
   projectId            String             @map("project_id")
   subtype              ExpenseSubtype
   title                String
@@ -2232,7 +2232,7 @@ model Expense {
 model CreditNote {
   id                String            @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId             String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   projectId         String            @map("project_id")
   vendorId          String            @map("vendor_id")
   subtype           CreditNoteSubtype
@@ -2386,7 +2386,7 @@ model BudgetCategory {
 model ProjectBudget {
   id                String   @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId             String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId             String @map("org_id")
   projectId         String   @unique @map("project_id")
   internalBaseline  Decimal  @map("internal_baseline") @db.Decimal(18, 2)
   internalRevised   Decimal  @map("internal_revised") @db.Decimal(18, 2)
@@ -2487,7 +2487,7 @@ model BudgetAdjustment {
 model EngineerInstruction {
   id              String   @id @default(uuid()) @map("id")
   // PIC-75: per-tenant scope (singleton default during single-tenant phase)
-  orgId           String   @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId           String @map("org_id")
   projectId       String   @map("project_id")
   referenceNumber String?  @map("reference_number")
   title           String   @map("title")
@@ -2572,7 +2572,7 @@ enum ImportRowStatus {
 model ImportBatch {
   id                         String            @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId                      String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId                      String @map("org_id")
   projectId                  String            @map("project_id")
   importType                 ImportType        @map("import_type")
   sourceFileName             String            @map("source_file_name")
@@ -2740,7 +2740,7 @@ enum IntercompanyContractStatus {
 model ProjectParticipant {
   id        String                 @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId     String                 @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId     String @map("org_id")
   projectId String                 @map("project_id")
   entityId  String                 @map("entity_id")
   role      ProjectParticipantRole
@@ -2801,7 +2801,7 @@ model PrimeContract {
 model IntercompanyContract {
   id                 String                         @id @default(uuid())
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId              String                         @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId              String @map("org_id")
   projectId          String                         @map("project_id")
   fromEntityId       String                         @map("from_entity_id")
   toEntityId         String                         @map("to_entity_id")
@@ -2909,7 +2909,7 @@ enum DrawingRevisionStatus {
 model Drawing {
   id                 String            @id @default(uuid()) @map("id")
   // PIC-96 (F2) — per-tenant scope (singleton default during single-tenant phase)
-  orgId              String            @default("00000000-0000-0000-0000-000000000001") @map("org_id")
+  orgId              String @map("org_id")
   projectId          String            @map("project_id")
   drawingNumber      String            @map("drawing_number")
   title              String            @map("title")

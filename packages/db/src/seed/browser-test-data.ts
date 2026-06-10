@@ -214,6 +214,7 @@ export async function seedBrowserTestData() {
     },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       projectId: PROJECT_ID,
       vendorId: vendor.id,
       poNumber: 'PO-AY-2026-001',
@@ -237,6 +238,7 @@ export async function seedBrowserTestData() {
     },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       projectId: PROJECT_ID,
       vendorId: vendor.id,
       poNumber: 'PO-AY-2026-002',
@@ -314,6 +316,7 @@ export async function seedBrowserTestData() {
     },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       projectId: PROJECT_ID,
       vendorId: vendor.id,
       subtype: 'credit_note',
