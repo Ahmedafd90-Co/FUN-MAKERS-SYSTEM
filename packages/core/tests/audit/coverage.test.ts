@@ -8,7 +8,7 @@
  * the Module 1 service layer rather than testing audit log mechanics.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { auditService } from '../../src/audit/service';
 import { postingService } from '../../src/posting/service';
 import { reversePostingEvent } from '../../src/posting/reversal';
@@ -41,6 +41,7 @@ beforeAll(async () => {
 
   const user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `${ts}@test.com`,
       name: 'Audit Coverage User',
       passwordHash: 'test-hash',
@@ -71,6 +72,7 @@ beforeAll(async () => {
 
   const entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-AC-${ts}`,
       name: 'Audit Coverage Entity',
       type: 'parent',
@@ -87,6 +89,7 @@ beforeAll(async () => {
 
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-AC-${ts}`,
       name: 'Audit Coverage Project',
       entityId: testEntityId,

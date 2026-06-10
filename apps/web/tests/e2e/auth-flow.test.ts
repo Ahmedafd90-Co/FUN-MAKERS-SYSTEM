@@ -13,7 +13,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   authService,
@@ -58,6 +58,7 @@ beforeAll(async () => {
   // --- Test user for profile flow ---
   const testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `e2e-auth-${Date.now()}-a@test.com`,
       name: 'E2E Auth User',
       passwordHash,
@@ -79,6 +80,7 @@ beforeAll(async () => {
   // --- User for lockout test ---
   const lockoutUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `e2e-lockout-${Date.now()}@test.com`,
       name: 'E2E Lockout User',
       passwordHash,
@@ -100,6 +102,7 @@ beforeAll(async () => {
   // --- User for password change test ---
   const pwUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `e2e-pwchange-${Date.now()}@test.com`,
       name: 'E2E Password Change User',
       passwordHash,

@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { createIpc, transitionIpc } from '../../src/commercial/ipc/service';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
@@ -70,7 +70,7 @@ describe('IPC Workflow Convergence Proof', () => {
 
     // Create entity + project
     const entity = await prisma.entity.create({
-      data: { code: `ENT-IPCWF-${ts}`, name: 'IPC Workflow Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-IPCWF-${ts}`, name: 'IPC Workflow Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -78,6 +78,7 @@ describe('IPC Workflow Convergence Proof', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-IPCWF-${ts}`, name: 'IPC Workflow Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },
@@ -91,6 +92,7 @@ describe('IPC Workflow Convergence Proof', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-${roleCode}-${ts}@ipc-wf.test`,
           passwordHash: 'test-hash',

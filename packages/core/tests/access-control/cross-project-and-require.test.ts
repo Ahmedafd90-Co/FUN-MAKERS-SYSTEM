@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { canReadAcrossProjects } from '../../src/access-control/cross-project';
 import { requirePermission } from '../../src/access-control/service';
 import { PermissionDeniedError } from '../../src/access-control/errors';
@@ -26,6 +26,7 @@ beforeAll(async () => {
   assertTestDb();
   masterAdminUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `cross-proj-admin-${Date.now()}@test.com`,
       name: 'Cross-Project Admin',
       passwordHash: 'test-hash',
@@ -35,6 +36,7 @@ beforeAll(async () => {
 
   regularUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `cross-proj-regular-${Date.now()}@test.com`,
       name: 'Cross-Project Regular',
       passwordHash: 'test-hash',

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { projectsService } from '../../src/projects/service';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -14,7 +14,7 @@ let testUser: { id: string };
 beforeAll(async () => {
   assertTestDb();
   testEntity = await prisma.entity.create({
-    data: { code: `ENT-FIN-${ts}`, name: 'Financial Fields Test Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-FIN-${ts}`, name: 'Financial Fields Test Entity', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -22,6 +22,7 @@ beforeAll(async () => {
   });
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `fin-test-${ts}@test.com`, name: 'Financial Fields Tester',
       passwordHash: 'test-hash', status: 'active',
     },

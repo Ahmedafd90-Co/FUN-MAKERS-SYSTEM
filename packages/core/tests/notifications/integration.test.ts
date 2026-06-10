@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   notify,
@@ -41,6 +41,7 @@ describe('Task 1.8.11 — Notification Lifecycle', () => {
     assertTestDb();
     user = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `lifecycle-${ts}@test.com`,
         name: 'Lifecycle User',
         passwordHash: 'hash',
@@ -122,6 +123,7 @@ describe('Task 1.8.12 — Idempotency', () => {
     [userA, userB] = await Promise.all([
       prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           email: `idem-a-${ts}@test.com`,
           name: 'Idempotency User A',
           passwordHash: 'hash',
@@ -130,6 +132,7 @@ describe('Task 1.8.12 — Idempotency', () => {
       }),
       prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           email: `idem-b-${ts}@test.com`,
           name: 'Idempotency User B',
           passwordHash: 'hash',
@@ -266,6 +269,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     [starterUser, approverUser] = await Promise.all([
       prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           email: `e2e-starter-${ts}@test.com`,
           name: 'E2E Starter',
           passwordHash: 'hash',
@@ -274,6 +278,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
       }),
       prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           email: `e2e-approver-${ts}@test.com`,
           name: 'E2E Approver',
           passwordHash: 'hash',
@@ -285,6 +290,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     // Create entity and project
     entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         name: `Entity ${ts}`,
         code: `ENT-${ts}`,
         type: 'parent',
@@ -294,6 +300,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
 
     project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         name: `Project ${ts}`,
         code: `PRJ-${ts}`,
         entityId: entity.id,
@@ -377,6 +384,7 @@ describe('Task 1.8.13 — Workflow -> Notification E2E', () => {
     // Create workflow instance pointing at step2 (simulating step1 just approved)
     instance = await (prisma as any).workflowInstance.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         templateId: wfTemplate.id,
         recordType: 'document',
         recordId: `doc-e2e-${ts}`,

@@ -8,7 +8,7 @@
  *   - Audit trail completeness for post + reverse
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { postingService } from '../../src/posting/service';
 import { reversePostingEvent, PostingReversalError } from '../../src/posting/reversal';
 
@@ -19,6 +19,7 @@ describe('posting lifecycle — post → reverse → verify', () => {
   beforeAll(async () => {
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-PLC-${ts}`,
         name: 'Posting Lifecycle Entity',
         type: 'parent',
@@ -34,6 +35,7 @@ describe('posting lifecycle — post → reverse → verify', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PRJ-PLC-${ts}`,
         name: 'Posting Lifecycle Project',
         entityId: entity.id,

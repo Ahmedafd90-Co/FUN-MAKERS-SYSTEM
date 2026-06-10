@@ -31,6 +31,7 @@ export async function seedBrowserTestData() {
     where: { entityId_code: { entityId: ENTITY_ID, code: 'materials' } },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       entityId: ENTITY_ID,
       code: 'materials',
       name: 'Materials',
@@ -44,6 +45,7 @@ export async function seedBrowserTestData() {
     where: { entityId_code: { entityId: ENTITY_ID, code: 'equipment_and_plant' } },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       entityId: ENTITY_ID,
       code: 'equipment_and_plant',
       name: 'Equipment and Plant',
@@ -57,6 +59,7 @@ export async function seedBrowserTestData() {
     where: { entityId_vendorCode: { entityId: ENTITY_ID, vendorCode: 'VND-RAJHI-001' } },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       entityId: ENTITY_ID,
       vendorCode: 'VND-RAJHI-001',
       name: 'Al Rajhi Construction Co.',
@@ -118,6 +121,7 @@ export async function seedBrowserTestData() {
     where: { projectId_periodNumber: { projectId: PROJECT_ID, periodNumber: 3 } },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       projectId: PROJECT_ID,
       status: 'draft',
       periodNumber: 3,
@@ -141,6 +145,7 @@ export async function seedBrowserTestData() {
     where: { id: '00000000-0000-0000-0000-000000000901' },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       id: '00000000-0000-0000-0000-000000000901',
       projectId: PROJECT_ID,
       ipaId: ipa.id,
@@ -161,6 +166,7 @@ export async function seedBrowserTestData() {
     where: { id: '00000000-0000-0000-0000-000000000902' },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       id: '00000000-0000-0000-0000-000000000902',
       projectId: PROJECT_ID,
       subtype: 'vo',
@@ -182,6 +188,7 @@ export async function seedBrowserTestData() {
     where: { id: '00000000-0000-0000-0000-000000000903' },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       id: '00000000-0000-0000-0000-000000000903',
       projectId: PROJECT_ID,
       subtype: 'claim',
@@ -250,6 +257,7 @@ export async function seedBrowserTestData() {
     where: { id: '00000000-0000-0000-0000-000000000904' },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       id: '00000000-0000-0000-0000-000000000904',
       projectId: PROJECT_ID,
       vendorId: vendor.id,
@@ -274,6 +282,7 @@ export async function seedBrowserTestData() {
     where: { id: '00000000-0000-0000-0000-000000000905' },
     update: {},
     create: {
+      orgId: SINGLETON_ORG_ID,
       id: '00000000-0000-0000-0000-000000000905',
       projectId: PROJECT_ID,
       subtype: 'equipment',

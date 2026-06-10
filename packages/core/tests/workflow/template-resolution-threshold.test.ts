@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { resolveTemplate } from '../../src/workflow/template-resolution';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -50,6 +50,7 @@ describe('PIC-41 — amount-triggered tier-escalation mechanism', () => {
 
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: TEST_ENTITY_CODE,
         name: 'PIC-41 Threshold Test Entity',
         type: 'parent',
@@ -60,6 +61,7 @@ describe('PIC-41 — amount-triggered tier-escalation mechanism', () => {
 
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: TEST_PROJECT_CODE,
         name: 'PIC-41 Threshold Test Project',
         entityId: entity.id,

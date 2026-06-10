@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../../helpers/assert-test-db';
 import { computeRfqSlaSnapshot } from '../../../src/procurement/rfq/sla';
 
@@ -31,7 +31,7 @@ describe('PIC-53 — RFQ SLA tracking', () => {
     process.env.SEED_CONTEXT = 'true';
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-SLA-${ts}`, name: 'SLA Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-SLA-${ts}`, name: 'SLA Entity', type: 'parent', status: 'active' },
     });
     testEntityId = entity.id;
 
@@ -43,6 +43,7 @@ describe('PIC-53 — RFQ SLA tracking', () => {
 
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-SLA-${ts}`,
         name: 'SLA Project',
         entityId: testEntityId,
@@ -56,6 +57,7 @@ describe('PIC-53 — RFQ SLA tracking', () => {
 
     const secondProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-SLA-2-${ts}`,
         name: 'SLA Other Project',
         entityId: testEntityId,
@@ -69,6 +71,7 @@ describe('PIC-53 — RFQ SLA tracking', () => {
 
     const vendor = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: testEntityId,
         vendorCode: `V-SLA-${ts}`,
         name: 'SLA Vendor',
@@ -80,6 +83,7 @@ describe('PIC-53 — RFQ SLA tracking', () => {
 
     const rfq = await prisma.rFQ.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         rfqNumber: `RFQ-SLA-${ts}`,
         title: 'SLA Test RFQ',

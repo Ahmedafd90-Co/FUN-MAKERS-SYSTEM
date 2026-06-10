@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { postingService } from '../../src/posting/service';
 import {
   reversePostingEvent,
@@ -17,6 +17,7 @@ describe('reversePostingEvent', () => {
   beforeAll(async () => {
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-REV-${ts}`,
         name: 'Reversal Test Entity',
         type: 'parent',
@@ -37,6 +38,7 @@ describe('reversePostingEvent', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PRJ-REV-${ts}`,
         name: 'Reversal Test Project',
         entityId: entity.id,

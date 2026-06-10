@@ -29,7 +29,7 @@
  * DB-backed (test Postgres). Per-test fixtures; cleaned in afterAll.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getRevisedContractValue, getApprovedVariationDelta } from '../../src/commercial/revised-contract-value';
 
 const ts = `pic104-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -68,13 +68,14 @@ beforeAll(async () => {
     create: { code: 'SAR', name: 'Saudi Riyal', symbol: 'SR', decimalPlaces: 2 },
   });
   const entity = await prisma.entity.create({
-    data: { code: `ENT-${ts}`, name: 'PIC-104 Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-${ts}`, name: 'PIC-104 Entity', type: 'parent', status: 'active' },
   });
   entityId = entity.id;
 
   // Project A — stored revisedContractValue = 8M (stale), contractValue 10M
   const pa = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId, code: `PROJ-A-${ts}`, name: 'PIC-104 A', status: 'active',
       currencyCode: 'SAR', startDate: new Date('2026-01-01'), createdBy: actor,
       contractValue: CONTRACT_VALUE, revisedContractValue: STORED_STALE,
@@ -85,6 +86,7 @@ beforeAll(async () => {
   // Project B — stored revisedContractValue = null ("Not set"), contractValue 10M
   const pb = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId, code: `PROJ-B-${ts}`, name: 'PIC-104 B', status: 'active',
       currencyCode: 'SAR', startDate: new Date('2026-01-01'), createdBy: actor,
       contractValue: CONTRACT_VALUE, // revisedContractValue omitted → null
@@ -96,6 +98,7 @@ beforeAll(async () => {
   for (const projectId of [projA, projB]) {
     await prisma.variation.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId, subtype: 'vo', status: 'client_approved',
         title: `VO ${ts}`, description: 'approved after stored col last set', reason: 'client change',
         costImpact: APPROVED_VO_DELTA, approvedCostImpact: APPROVED_VO_DELTA,

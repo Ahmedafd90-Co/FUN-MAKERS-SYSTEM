@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   router,
@@ -68,6 +68,7 @@ beforeAll(async () => {
   // Entity
   const entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-ISO-${Date.now()}`,
       name: 'Isolation Test Entity',
       type: 'parent',
@@ -79,6 +80,7 @@ beforeAll(async () => {
   // Two projects
   projectA = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ISO-A-${Date.now()}`,
       name: 'Isolation Project A',
       entityId: entity.id,
@@ -91,6 +93,7 @@ beforeAll(async () => {
 
   projectB = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ISO-B-${Date.now()}`,
       name: 'Isolation Project B',
       entityId: entity.id,
@@ -110,6 +113,7 @@ beforeAll(async () => {
   // --- User A — assigned to Project A only ---
   const userADb = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `iso-user-a-${Date.now()}@test.com`,
       name: 'Isolation User A',
       passwordHash: 'test-hash',
@@ -143,6 +147,7 @@ beforeAll(async () => {
   // --- User B — assigned to Project B only ---
   const userBDb = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `iso-user-b-${Date.now()}@test.com`,
       name: 'Isolation User B',
       passwordHash: 'test-hash',
@@ -180,6 +185,7 @@ beforeAll(async () => {
 
   const masterAdminDb = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `iso-admin-${Date.now()}@test.com`,
       name: 'Isolation Platform Admin',
       passwordHash: 'test-hash',

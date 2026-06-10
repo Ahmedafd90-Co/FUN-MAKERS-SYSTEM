@@ -42,7 +42,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as ts from 'typescript';
-import { prisma, runAsWorkflowEngine } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   wrapOutsideTransaction,
@@ -581,6 +581,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const ent = await prisma.entity.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `ENT-PIC49-${ts}`,
           name: 'PIC-49 Test Entity',
           type: 'parent',
@@ -591,6 +592,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const project = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PROJ-PIC49-${ts}`,
           name: 'PIC-49 Test Project',
           entityId: ent.id,
@@ -604,6 +606,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `PIC-49 User ${ts}`,
           email: `pic49-${ts}@test.fmksa`,
           passwordHash: 'test-hash',
@@ -614,6 +617,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const vendor = await prisma.vendor.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           entityId: testEntityId,
           vendorCode: `VEN-PIC49-${ts}`,
           name: `PIC-49 Vendor ${ts}`,
@@ -626,6 +630,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
       // Per-entity fixture creation in initial status
       const ipa = await prisma.ipa.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           periodNumber: 99,
           periodFrom: new Date('2026-01-01'),
@@ -646,6 +651,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const ipc = await prisma.ipc.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           ipaId: ipa.id,
           certifiedAmount: 90000,
@@ -662,6 +668,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const variation = await prisma.variation.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           subtype: 'vo',
           status: 'draft',
@@ -676,6 +683,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const correspondence = await prisma.correspondence.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           subtype: 'letter',
           status: 'draft',
@@ -689,6 +697,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const cp = await prisma.costProposal.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           revisionNumber: 1,
           estimatedCost: 75000,
@@ -701,6 +710,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const ti = await prisma.taxInvoice.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           ipcId: testIpcId,
           invoiceNumber: `TI-PIC49-${ts}`,
@@ -720,6 +730,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const expense = await prisma.expense.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           subtype: 'general',
           title: 'PIC-49 Expense',
@@ -734,6 +745,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const po = await prisma.purchaseOrder.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           vendorId: testVendorId,
           poNumber: `PO-PIC49-${ts}`,
@@ -748,6 +760,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const rfq = await prisma.rFQ.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           rfqNumber: `RFQ-PIC49-${ts}`,
           title: 'PIC-49 RFQ',
@@ -761,6 +774,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const si = await prisma.supplierInvoice.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           vendorId: testVendorId,
           invoiceNumber: `SI-PIC49-${ts}`,
@@ -778,6 +792,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const cn = await prisma.creditNote.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           vendorId: testVendorId,
           subtype: 'credit_note',
@@ -794,6 +809,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const vc = await prisma.vendorContract.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           vendorId: testVendorId,
           contractNumber: `VC-PIC49-${ts}`,
@@ -811,6 +827,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
 
       const fa = await prisma.frameworkAgreement.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           entityId: testEntityId,
           vendorId: testVendorId,
           projectId: testProjectId,
@@ -907,7 +924,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
       process.env.SEED_CONTEXT = 'true';
       const ts = Date.now();
       const ent = await prisma.entity.create({
-        data: { code: `ENT-PIC49F-${ts}`, name: 'PIC-49 Fixture Entity', type: 'parent', status: 'active' },
+        data: { orgId: SINGLETON_ORG_ID, code: `ENT-PIC49F-${ts}`, name: 'PIC-49 Fixture Entity', type: 'parent', status: 'active' },
       });
       testEntityId = ent.id;
       await prisma.currency.upsert({
@@ -917,6 +934,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
       });
       const project = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PROJ-PIC49F-${ts}`,
           name: 'PIC-49 Fixture Project',
           entityId: ent.id,
@@ -929,6 +947,7 @@ describe('PIC-49 — engine-scoping structural guard', () => {
       testProjectId = project.id;
       const ipa = await prisma.ipa.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProjectId,
           periodNumber: 99,
           periodFrom: new Date('2026-01-01'),

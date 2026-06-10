@@ -27,7 +27,7 @@ import { prisma } from '@fmksa/db';
 async function main() {
   const project = await prisma.project.findUnique({
     where: { code: 'FMKSA-2026-001' },
-    select: { id: true, entityId: true, currencyCode: true, code: true },
+    select: { id: true, entityId: true, currencyCode: true, code: true, orgId: true },
   });
   if (!project) throw new Error('Project FMKSA-2026-001 not found.');
 
@@ -71,6 +71,7 @@ async function main() {
 
     const created_ = await prisma.postingEvent.create({
       data: {
+        orgId: project.orgId,
         eventType: 'EXPENSE_APPROVED',
         sourceService: 'procurement',
         sourceRecordType: 'expense',

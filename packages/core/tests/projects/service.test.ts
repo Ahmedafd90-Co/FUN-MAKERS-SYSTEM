@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { projectsService } from '../../src/projects/service';
 import { projectSettingsService } from '../../src/projects/settings';
 import { projectAssignmentsService } from '../../src/projects/assignments';
@@ -24,6 +24,7 @@ beforeAll(async () => {
 
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proj-test-1-${ts}@test.com`,
       name: 'Project Test User 1',
       passwordHash: 'test-hash',
@@ -33,6 +34,7 @@ beforeAll(async () => {
 
   testUser2 = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proj-test-2-${ts}@test.com`,
       name: 'Project Test User 2',
       passwordHash: 'test-hash',
@@ -42,6 +44,7 @@ beforeAll(async () => {
 
   testEntity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-TEST-${ts}`,
       name: 'Test Entity',
       type: 'parent',

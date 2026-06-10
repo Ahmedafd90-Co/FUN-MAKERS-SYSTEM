@@ -39,7 +39,7 @@
  * Database-backed (test Postgres). Per-test fixtures; cleaned in afterAll.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   getBudgetSummary,
   absorbPoCommitment,
@@ -85,11 +85,12 @@ beforeAll(async () => {
 
   // ── Project + budget for D1/D2/D3 ────────────────────────────────
   const entity = await prisma.entity.create({
-    data: { code: `ENT-${ts}`, name: 'PIC-101 Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-${ts}`, name: 'PIC-101 Entity', type: 'parent', status: 'active' },
   });
   entityId = entity.id;
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId, code: `PROJ-${ts}`, name: 'PIC-101 Budget Math',
       status: 'active', currencyCode: 'SAR', startDate: new Date('2026-01-01'),
       createdBy: actor, contractValue: INTERNAL_BASELINE,
@@ -99,6 +100,7 @@ beforeAll(async () => {
 
   const budget = await prisma.projectBudget.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, internalBaseline: INTERNAL_BASELINE, internalRevised: INTERNAL_BASELINE,
       contingencyAmount: 0, createdBy: actor,
     },
@@ -124,6 +126,7 @@ beforeAll(async () => {
   // ── Defect-4 fixture: PO + SI chain on a second project ──────────
   const d4Project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId, code: `PROJ-D4-${ts}`, name: 'PIC-101 D4 double-count',
       status: 'active', currencyCode: 'SAR', startDate: new Date('2026-01-01'),
       createdBy: actor, contractValue: 5_000_000,
@@ -132,6 +135,7 @@ beforeAll(async () => {
   d4ProjectId = d4Project.id;
   const d4Budget = await prisma.projectBudget.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: d4ProjectId, internalBaseline: 5_000_000, internalRevised: 5_000_000,
       contingencyAmount: 0, createdBy: actor,
     },
@@ -144,7 +148,7 @@ beforeAll(async () => {
     data: { code: sharedCode, name: 'D4 Materials', sortOrder: 1 },
   });
   const d4ProcCat = await prisma.procurementCategory.create({
-    data: { entityId, code: sharedCode, name: 'D4 Materials (proc)', level: 'category', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, entityId, code: sharedCode, name: 'D4 Materials (proc)', level: 'category', status: 'active' },
   });
   const d4Line = await prisma.budgetLine.create({
     data: { budgetId: d4BudgetId, categoryId: d4BudgetCat.id, budgetAmount: 5_000_000, committedAmount: 0, actualAmount: 0 },
@@ -152,12 +156,13 @@ beforeAll(async () => {
   d4BudgetLineId = d4Line.id;
 
   const vendor = await prisma.vendor.create({
-    data: { entityId, vendorCode: `VEN-${ts}`, name: 'PIC-101 Vendor', createdBy: actor },
+    data: { orgId: SINGLETON_ORG_ID, entityId, vendorCode: `VEN-${ts}`, name: 'PIC-101 Vendor', createdBy: actor },
   });
   d4VendorId = vendor.id;
 
   const po = await prisma.purchaseOrder.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: d4ProjectId, vendorId: d4VendorId, categoryId: d4ProcCat.id,
       poNumber: `PO-${ts}`, title: 'D4 PO', totalAmount: D4_PO_TOTAL, currency: 'SAR', createdBy: actor,
     },
@@ -166,6 +171,7 @@ beforeAll(async () => {
 
   const si = await prisma.supplierInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: d4ProjectId, vendorId: d4VendorId, purchaseOrderId: d4PoId,
       invoiceNumber: `SI-${ts}`, invoiceDate: new Date('2026-03-01'),
       grossAmount: D4_SI_TOTAL, vatRate: 0, vatAmount: 0, totalAmount: D4_SI_TOTAL,

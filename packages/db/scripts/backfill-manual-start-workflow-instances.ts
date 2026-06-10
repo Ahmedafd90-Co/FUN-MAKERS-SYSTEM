@@ -1,3 +1,4 @@
+import { SINGLETON_ORG_ID } from '@fmksa/db';
 /**
  * PR-W2A Step 2 — backfill workflow_instances for manual-start entities (PIC-35).
  *
@@ -155,6 +156,7 @@ async function backfillOne(
   await prisma.$transaction(async (tx) => {
     const instance = await tx.workflowInstance.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         templateId: template.id,
         recordType,
         recordId: orphan.id,

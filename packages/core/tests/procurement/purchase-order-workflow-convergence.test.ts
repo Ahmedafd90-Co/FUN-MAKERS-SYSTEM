@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createPurchaseOrder,
   transitionPurchaseOrder,
@@ -80,6 +80,7 @@ describe('Purchase Order Workflow Convergence Proof', () => {
 
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-POWF-${ts}`,
         name: 'PO WF Test Entity',
         type: 'parent',
@@ -93,6 +94,7 @@ describe('Purchase Order Workflow Convergence Proof', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-POWF-${ts}`,
         name: 'PO Workflow Test',
         entityId: entity.id,
@@ -107,6 +109,7 @@ describe('Purchase Order Workflow Convergence Proof', () => {
     // Vendor (entity-scoped)
     const vendor = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: entity.id,
         vendorCode: `VEN-POWF-${ts}`,
         name: `PO WF Test Vendor ${ts}`,
@@ -123,6 +126,7 @@ describe('Purchase Order Workflow Convergence Proof', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-po-${roleCode}-${ts}@po-wf.test`,
           passwordHash: 'test-hash',

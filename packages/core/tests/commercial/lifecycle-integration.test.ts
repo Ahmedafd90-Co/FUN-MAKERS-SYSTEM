@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { createIpc, transitionIpc } from '../../src/commercial/ipc/service';
 import { createVariation, transitionVariation } from '../../src/commercial/variation/service';
@@ -68,6 +68,7 @@ describe('Commercial Lifecycle Integration', () => {
       if (!userId) {
         const user = await prisma.user.create({
           data: {
+            orgId: SINGLETON_ORG_ID,
             name: `Test ${roleCode} ${ts}`,
             email: `test-int-${roleCode}-${ts}@test.com`,
             passwordHash: 'test-hash',
@@ -122,7 +123,7 @@ describe('Commercial Lifecycle Integration', () => {
     registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-INT-${ts}`, name: 'Integration Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-INT-${ts}`, name: 'Integration Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' },
@@ -131,6 +132,7 @@ describe('Commercial Lifecycle Integration', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-INT-${ts}`,
         name: 'Integration Test',
         entityId: entity.id,
@@ -473,10 +475,11 @@ describe('Commercial Lifecycle Integration', () => {
   it('Test 8: Reference numbers are sequential and follow PROJ-CODE-IPA-NNN pattern', async () => {
     // Create a dedicated project so reference counters start fresh
     const entity = await prisma.entity.create({
-      data: { code: `ENT-REF-${ts}`, name: 'Ref Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-REF-${ts}`, name: 'Ref Test Entity', type: 'parent', status: 'active' },
     });
     const refProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-REF-${ts}`,
         name: 'Ref Test',
         entityId: entity.id,
@@ -632,10 +635,11 @@ describe('Commercial Lifecycle Integration', () => {
   it('Test 12: Dashboard variance analytics compute correctly', async () => {
     // Create a dedicated project for clean dashboard numbers
     const entity = await prisma.entity.create({
-      data: { code: `ENT-DASH-INT-${ts}`, name: 'Dashboard Integration Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-DASH-INT-${ts}`, name: 'Dashboard Integration Entity', type: 'parent', status: 'active' },
     });
     const dashProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DASH-INT-${ts}`,
         name: 'Dashboard Integration',
         entityId: entity.id,
@@ -753,10 +757,11 @@ describe('Commercial Lifecycle Integration', () => {
   // Restored by PIC-79. Do NOT rewrite to assert degraded values.
   it.skip('Test 12b: dashboard variationVariance approved-side reflects approvedCostImpact [PIC-79-ORPHAN]', async () => {
     const entity = await prisma.entity.create({
-      data: { code: `ENT-VV-${ts}`, name: 'VV Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-VV-${ts}`, name: 'VV Test Entity', type: 'parent', status: 'active' },
     });
     const proj = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-VV-${ts}`, name: 'VV Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },

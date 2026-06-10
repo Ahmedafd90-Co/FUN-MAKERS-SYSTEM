@@ -14,7 +14,7 @@
  * If the seed drifts or breaks, these tests fail loudly in CI.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '../../src/index';
+import { prisma, SINGLETON_ORG_ID } from '../../src/index';
 import { assertTestDb } from '../helpers/assert-test-db';
 import { seedCommercialDemoData } from '../../src/seed/commercial-demo-data';
 
@@ -32,7 +32,7 @@ beforeAll(async () => {
   // crashes silently fail to revert it. Refuse against non-test databases.
   assertTestDb();
   const entity = await prisma.entity.create({
-    data: { code: `ENT-DEMO-${ts}`, name: 'Demo Test Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-DEMO-${ts}`, name: 'Demo Test Entity', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -52,6 +52,7 @@ beforeAll(async () => {
   // Create a clean test project with the code the seed expects
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: 'FMKSA-2026-001',
       name: 'Demo Integrity Test Project',
       entityId: entity.id,

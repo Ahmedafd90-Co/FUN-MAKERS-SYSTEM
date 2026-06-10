@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   isAssignedToProject,
@@ -37,6 +37,7 @@ beforeAll(async () => {
   assertTestDb();
   user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proj-scope-1-${Date.now()}@test.com`,
       name: 'Proj Scope User',
       passwordHash: 'test-hash',
@@ -46,6 +47,7 @@ beforeAll(async () => {
 
   noAssignUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proj-scope-none-${Date.now()}@test.com`,
       name: 'No Assignment User',
       passwordHash: 'test-hash',
@@ -55,6 +57,7 @@ beforeAll(async () => {
 
   entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-PS-${Date.now()}`,
       name: 'Project Scope Test Entity',
       type: 'parent',
@@ -64,6 +67,7 @@ beforeAll(async () => {
 
   projectA = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PA-${Date.now()}`,
       name: 'Project A',
       entityId: entity.id,
@@ -76,6 +80,7 @@ beforeAll(async () => {
 
   projectB = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PB-${Date.now()}`,
       name: 'Project B',
       entityId: entity.id,

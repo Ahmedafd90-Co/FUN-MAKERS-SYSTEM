@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { hashPassword } from '../../src/auth/password';
 import { sessionService } from '../../src/auth/session';
 import { assertTestDb } from '../helpers/assert-test-db';
@@ -35,6 +35,7 @@ beforeAll(async () => {
   const passwordHash = await hashPassword(TEST_PASSWORD);
   const user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: TEST_EMAIL,
       name: 'Session Test User',
       passwordHash,

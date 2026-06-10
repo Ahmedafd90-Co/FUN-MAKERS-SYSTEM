@@ -14,7 +14,7 @@ import {
   masterAdminCaller,
   authenticatedCaller,
 } from '../helpers/auth-test-callers';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 
 describe('dashboard.summary', () => {
@@ -56,6 +56,7 @@ describe('dashboard.summary', () => {
     const ts = Date.now();
     const user = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `dash-nonadmin-${ts}@test.com`,
         name: 'Dashboard Non-Admin',
         passwordHash: 'test-hash',

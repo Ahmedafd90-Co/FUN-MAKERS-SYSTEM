@@ -77,6 +77,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const ipa1 = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'IPA-DEMO-001',
       status: 'approved_internal',
@@ -99,6 +100,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const ipa2 = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'IPA-DEMO-002',
       status: 'approved_internal',
@@ -121,6 +123,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const ipc1 = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'IPC-DEMO-001',
       ipaId: ipa1.id,
@@ -139,6 +142,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const ipc2 = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'IPC-DEMO-002',
       ipaId: ipa2.id,
@@ -159,6 +163,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const inv1 = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       ipcId: ipc1.id,
       status: 'partially_collected',
@@ -183,6 +188,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       ipcId: ipc2.id,
       status: 'submitted',
@@ -220,6 +226,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const var1 = await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'VAR-DEMO-001',
       subtype: 'vo',
@@ -239,6 +246,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'VAR-DEMO-002',
       subtype: 'vo',
@@ -264,6 +272,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'IPA_APPROVED',
       sourceService: 'commercial',
       sourceRecordType: 'ipa',
@@ -288,6 +297,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'IPA_APPROVED',
       sourceService: 'commercial',
       sourceRecordType: 'ipa',
@@ -312,6 +322,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'IPC_SIGNED',
       sourceService: 'commercial',
       sourceRecordType: 'ipc',
@@ -336,6 +347,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'IPC_SIGNED',
       sourceService: 'commercial',
       sourceRecordType: 'ipc',
@@ -360,6 +372,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'TAX_INVOICE_ISSUED',
       sourceService: 'commercial',
       sourceRecordType: 'tax_invoice',
@@ -391,6 +404,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
   if (inv2) {
     await prisma.postingEvent.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         eventType: 'TAX_INVOICE_ISSUED',
         sourceService: 'commercial',
         sourceRecordType: 'tax_invoice',
@@ -417,6 +431,7 @@ export async function seedCommercialDemoData(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'VARIATION_APPROVED_INTERNAL',
       sourceService: 'commercial',
       sourceRecordType: 'variation',

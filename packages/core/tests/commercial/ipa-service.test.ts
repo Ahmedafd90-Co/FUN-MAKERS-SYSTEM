@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { createIpa, transitionIpa, getIpa, listIpas, deleteIpa, updateIpa } from '../../src/commercial/ipa/service';
 import { registerCommercialEventTypes } from '../../src/commercial/posting-hooks/register';
 import {
@@ -44,7 +44,7 @@ describe('IPA Service', () => {
     registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-IPA-${ts}`, name: 'IPA Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-IPA-${ts}`, name: 'IPA Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -52,6 +52,7 @@ describe('IPA Service', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-IPA-${ts}`, name: 'IPA Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },
@@ -64,6 +65,7 @@ describe('IPA Service', () => {
       if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-ipa-${roleCode}-${ts}@test.com`,
           passwordHash: 'test-hash',

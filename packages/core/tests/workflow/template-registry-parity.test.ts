@@ -37,7 +37,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, WORKFLOW_DRIVEN_MODELS } from '@fmksa/db';
+import { prisma, WORKFLOW_DRIVEN_MODELS, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   WORKFLOW_TEMPLATE_REGISTRY,
   type WorkflowTemplateRegistryEntry,
@@ -181,6 +181,7 @@ describe('PIC-50 — WORKFLOW_TEMPLATE_REGISTRY parity guard', () => {
 
       const entity = await prisma.entity.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PIC50-PARITY-ENT-${ts}`,
           name: `PIC-50 Parity Test Entity ${ts}`,
           type: 'parent',
@@ -197,6 +198,7 @@ describe('PIC-50 — WORKFLOW_TEMPLATE_REGISTRY parity guard', () => {
 
       const project = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           entityId: entity.id,
           code: `PIC50-PARITY-${ts}`,
           name: `PIC-50 Parity Test Project ${ts}`,
@@ -283,6 +285,7 @@ describe('PIC-50 — WORKFLOW_TEMPLATE_REGISTRY parity guard', () => {
 
       const entity = await prisma.entity.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PIC50-E2E-ENT-${ts}`,
           name: `PIC-50 E2E Test Entity ${ts}`,
           type: 'parent',
@@ -299,6 +302,7 @@ describe('PIC-50 — WORKFLOW_TEMPLATE_REGISTRY parity guard', () => {
 
       const project = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           entityId: entity.id,
           code: `PIC50-E2E-${ts}`,
           name: `PIC-50 E2E Test Project ${ts}`,

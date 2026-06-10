@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { SINGLETON_ORG_ID } from './organizations';
 
 // Exported for cross-seed reuse (PIC-33 layer1-demo-data references this as
 // the createdBy actor). Single source of truth for the master admin email.
@@ -109,6 +110,7 @@ export async function seedMasterAdmin(prisma: PrismaClient) {
   const admin = await prisma.user.upsert({
     where: { email: MASTER_ADMIN_EMAIL },
     create: {
+      orgId: SINGLETON_ORG_ID,
       email: MASTER_ADMIN_EMAIL,
       name: MASTER_ADMIN_NAME,
       passwordHash,
@@ -148,6 +150,7 @@ export async function seedMasterAdmin(prisma: PrismaClient) {
     const user = await prisma.user.upsert({
       where: { email: demoUser.email },
       create: {
+        orgId: SINGLETON_ORG_ID,
         email: demoUser.email,
         name: demoUser.name,
         passwordHash,

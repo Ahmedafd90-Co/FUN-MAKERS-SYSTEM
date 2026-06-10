@@ -14,7 +14,7 @@
  * these tests fail.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getFinancialKpis } from '../../src/commercial/dashboard/financial-kpis';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
@@ -39,7 +39,7 @@ let projectId: string;
 beforeAll(async () => {
   assertTestDb();
   const entity = await prisma.entity.create({
-    data: { code: `ENT-RECON-${ts}`, name: 'Reconciliation Test', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-RECON-${ts}`, name: 'Reconciliation Test', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -48,6 +48,7 @@ beforeAll(async () => {
 
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-RECON-${ts}`,
       name: 'Reconciliation Test Project',
       entityId: entity.id,
@@ -64,6 +65,7 @@ beforeAll(async () => {
   // IPA #1 — approved_internal, netClaimed = 1,000,000
   const ipa1 = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date('2026-01-01'), periodTo: new Date('2026-01-31'),
       grossAmount: 1100000, retentionRate: 0.10, retentionAmount: 110000,
@@ -75,6 +77,7 @@ beforeAll(async () => {
   // IPA #2 — signed, netClaimed = 500,000
   const ipa2 = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, status: 'signed', periodNumber: 2,
       periodFrom: new Date('2026-02-01'), periodTo: new Date('2026-02-28'),
       grossAmount: 550000, retentionRate: 0.10, retentionAmount: 55000,
@@ -86,6 +89,7 @@ beforeAll(async () => {
   // IPA #3 — draft (must NOT count)
   await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, status: 'draft', periodNumber: 3,
       periodFrom: new Date('2026-03-01'), periodTo: new Date('2026-03-31'),
       grossAmount: 999999, retentionRate: 0.10, retentionAmount: 99999,
@@ -97,6 +101,7 @@ beforeAll(async () => {
   // IPC #1 — signed, netCertified = 800,000
   const ipc1 = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, ipaId: ipa1.id, status: 'signed',
       certifiedAmount: 900000, retentionAmount: 100000, netCertified: 800000,
       certificationDate: new Date('2026-02-10'), currency: 'SAR', createdBy: 'test',
@@ -106,6 +111,7 @@ beforeAll(async () => {
   // IPC #2 — signed, netCertified = 400,000
   const ipc2 = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, ipaId: ipa2.id, status: 'signed',
       certifiedAmount: 450000, retentionAmount: 50000, netCertified: 400000,
       certificationDate: new Date('2026-03-10'), currency: 'SAR', createdBy: 'test',
@@ -115,6 +121,7 @@ beforeAll(async () => {
   // Invoice #1 — issued, totalAmount = 920,000, dueDate PAST (overdue)
   const inv1 = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, ipcId: ipc1.id, status: 'issued',
       invoiceNumber: `INV-RECON-${ts}-1`, invoiceDate: new Date('2026-02-15'),
       grossAmount: 800000, vatRate: 0.15, vatAmount: 120000, totalAmount: 920000,
@@ -126,6 +133,7 @@ beforeAll(async () => {
   // Invoice #2 — submitted, totalAmount = 460,000, dueDate FUTURE
   const inv2 = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, ipcId: ipc2.id, status: 'submitted',
       invoiceNumber: `INV-RECON-${ts}-2`, invoiceDate: new Date('2026-03-15'),
       grossAmount: 400000, vatRate: 0.15, vatAmount: 60000, totalAmount: 460000,
@@ -137,6 +145,7 @@ beforeAll(async () => {
   // Invoice #3 — draft (must NOT count in any KPI)
   await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, ipcId: ipc1.id, status: 'draft',
       invoiceNumber: `INV-RECON-${ts}-3`, invoiceDate: new Date('2026-04-01'),
       grossAmount: 777777, vatRate: 0.15, vatAmount: 116666, totalAmount: 894443,
@@ -158,6 +167,7 @@ beforeAll(async () => {
   // client_approved counts for both approved_variation_impact AND revised contract value delta
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, subtype: 'vo', status: 'client_approved',
       title: 'Recon VO 1', description: 'Test', reason: 'Test',
       costImpact: 200000, approvedCostImpact: 150000,
@@ -168,6 +178,7 @@ beforeAll(async () => {
   // Variation #2 — submitted, costImpact = 100,000, no approvedCostImpact
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, subtype: 'vo', status: 'submitted',
       title: 'Recon VO 2', description: 'Test', reason: 'Test',
       costImpact: 100000,
@@ -178,6 +189,7 @@ beforeAll(async () => {
   // Variation #3 — draft (must NOT count)
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId, subtype: 'vo', status: 'draft',
       title: 'Recon VO Draft', description: 'Test', reason: 'Test',
       costImpact: 999999,

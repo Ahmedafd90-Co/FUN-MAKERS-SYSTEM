@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { postingService } from '../../src/posting/service';
 import { postingExceptionService } from '../../src/posting/exceptions';
 
@@ -14,6 +14,7 @@ describe('postingExceptionService', () => {
   beforeAll(async () => {
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-EXC-${ts}`,
         name: 'Exception Test Entity',
         type: 'parent',
@@ -34,6 +35,7 @@ describe('postingExceptionService', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PRJ-EXC-${ts}`,
         name: 'Exception Test Project',
         entityId: entity.id,

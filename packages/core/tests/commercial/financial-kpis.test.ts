@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getFinancialKpis } from '../../src/commercial/dashboard/financial-kpis';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
@@ -26,7 +26,7 @@ let testIpc: { id: string };
 beforeAll(async () => {
   assertTestDb();
   const entity = await prisma.entity.create({
-    data: { code: `ENT-KPI-${ts}`, name: 'KPI Test Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-KPI-${ts}`, name: 'KPI Test Entity', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -35,6 +35,7 @@ beforeAll(async () => {
 
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-KPI-${ts}`,
       name: 'KPI Test Project',
       entityId: entity.id,
@@ -51,6 +52,7 @@ beforeAll(async () => {
   // Create IPA (approved_internal) — contributes to total_claimed
   const ipa = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date(), periodTo: new Date(), grossAmount: 1000000,
       retentionRate: 0.10, retentionAmount: 100000, previousCertified: 0,
@@ -61,6 +63,7 @@ beforeAll(async () => {
   // Create IPC (signed) — contributes to total_certified
   const ipc = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, ipaId: ipa.id, status: 'signed',
       certifiedAmount: 850000, retentionAmount: 85000, netCertified: 765000,
       certificationDate: new Date(), currency: 'SAR', createdBy: 'test',
@@ -71,6 +74,7 @@ beforeAll(async () => {
   // Create TaxInvoice (issued, with dueDate in the past for overdue testing)
   const invoice1 = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, ipcId: ipc.id, status: 'issued',
       invoiceNumber: `INV-KPI-${ts}-1`, invoiceDate: new Date(),
       grossAmount: 500000, vatRate: 0.15, vatAmount: 75000, totalAmount: 575000,
@@ -82,6 +86,7 @@ beforeAll(async () => {
   // Create a second TaxInvoice (submitted, due in future)
   await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, ipcId: ipc.id, status: 'submitted',
       invoiceNumber: `INV-KPI-${ts}-2`, invoiceDate: new Date(),
       grossAmount: 200000, vatRate: 0.15, vatAmount: 30000, totalAmount: 230000,
@@ -101,6 +106,7 @@ beforeAll(async () => {
   // Note: approved_internal VOs do NOT contribute to revised_budget (only client_approved/closed VOs do)
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, subtype: 'vo', status: 'approved_internal',
       title: 'KPI Test VO', description: 'Test', reason: 'Test',
       costImpact: 300000, approvedCostImpact: 250000,
@@ -111,6 +117,7 @@ beforeAll(async () => {
   // Create a VO (client_approved) — contributes to revised_budget delta
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, subtype: 'vo', status: 'client_approved',
       title: 'KPI Test VO Client Approved', description: 'Test', reason: 'Test',
       costImpact: 500000, approvedCostImpact: 400000,
@@ -121,6 +128,7 @@ beforeAll(async () => {
   // Create a CO (approved_internal) — contributes to revised_budget delta
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, subtype: 'change_order', status: 'approved_internal',
       title: 'KPI Test CO', description: 'Test', reason: 'Test',
       costImpact: 200000, approvedCostImpact: 180000,
@@ -131,6 +139,7 @@ beforeAll(async () => {
   // Create a Variation (submitted) with cost impact but no approved amount
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, subtype: 'vo', status: 'submitted',
       title: 'KPI Test VO 2', description: 'Test', reason: 'Test',
       costImpact: 150000,
@@ -141,6 +150,7 @@ beforeAll(async () => {
   // Create a draft Variation — must NOT count toward submitted_variation_impact
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, subtype: 'vo', status: 'draft',
       title: 'KPI Test VO Draft', description: 'Test', reason: 'Test',
       costImpact: 999999,
@@ -255,6 +265,7 @@ describe('Financial KPI Service', () => {
       const emptyEntity = await prisma.entity.findFirst({ where: { code: `ENT-KPI-${ts}` } });
       const emptyProject = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PROJ-KPI-EMPTY-${ts}`,
           name: 'Empty KPI Project',
           entityId: emptyEntity!.id,
@@ -302,6 +313,7 @@ describe('Financial KPI Service', () => {
       const entity = await prisma.entity.findFirst({ where: { code: `ENT-KPI-${ts}` } });
       const proj = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PROJ-KPI-FALL-${ts}`,
           name: 'No Variations KPI Project',
           entityId: entity!.id,

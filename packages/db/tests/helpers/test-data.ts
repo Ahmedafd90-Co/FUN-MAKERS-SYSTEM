@@ -1,5 +1,6 @@
 import { prisma } from '../../src/client';
 import { assertTestDb } from './assert-test-db';
+import { SINGLETON_ORG_ID } from '../../src/index';
 
 export async function createTestUser(
   overrides?: Partial<{
@@ -11,6 +12,7 @@ export async function createTestUser(
 ) {
   return prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@test.com`,
       name: 'Test User',
       passwordHash: 'test-hash',
@@ -23,6 +25,7 @@ export async function createTestUser(
 export async function createTestEntity() {
   return prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: 'Test Entity',
       type: 'parent',
@@ -34,6 +37,7 @@ export async function createTestEntity() {
 export async function createTestProject(entityId: string) {
   return prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `TEST-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: 'Test Project',
       entityId,
@@ -52,6 +56,7 @@ export async function createTestDocumentWithVersion(
 ) {
   const doc = await prisma.document.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId,
       title: 'Test Doc',
       category: 'general',

@@ -14,7 +14,7 @@
  * boundary is the only variable.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import { makeCtx, loadAuthUser } from '../helpers/auth-test-callers';
 import { appRouter } from '../../server/routers/_app';
@@ -83,6 +83,7 @@ beforeAll(async () => {
   // Org-A IPA → IPC → issued TaxInvoice (positive-path target)
   const ipaA = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectA.id, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date(), periodTo: new Date(), grossAmount: 10000,
       retentionRate: 0.10, retentionAmount: 1000, previousCertified: 0,
@@ -130,6 +131,7 @@ beforeAll(async () => {
   });
   const ipaB = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectB.id, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date(), periodTo: new Date(), grossAmount: 10000,
       retentionRate: 0.10, retentionAmount: 1000, previousCertified: 0,
@@ -138,6 +140,7 @@ beforeAll(async () => {
   });
   const ipcB = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectB.id, ipaId: ipaB.id, status: 'signed',
       certifiedAmount: 9000, retentionAmount: 900, netCertified: 8100,
       certificationDate: new Date(), currency: 'SAR', createdBy: 'test',

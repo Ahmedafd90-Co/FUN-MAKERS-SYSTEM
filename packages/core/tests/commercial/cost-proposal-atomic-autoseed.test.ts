@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow';
@@ -35,7 +35,7 @@ describe('CostProposal atomic create+autoSeed (PIC-80)', () => {
     assertTestDb();
 
     testUser = await prisma.user.create({
-      data: { email: `${ts}@test.com`, name: 'CP Atomic User', passwordHash: 'test-hash', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, email: `${ts}@test.com`, name: 'CP Atomic User', passwordHash: 'test-hash', status: 'active' },
     });
     testRole = await prisma.role.create({
       data: { code: `CPA-ROLE-${ts}`, name: 'CP Atomic Role', isSystem: false },
@@ -44,7 +44,7 @@ describe('CostProposal atomic create+autoSeed (PIC-80)', () => {
       data: { userId: testUser.id, roleId: testRole.id, effectiveFrom: new Date('2020-01-01'), assignedBy: testUser.id, assignedAt: new Date() },
     });
     testEntity = await prisma.entity.create({
-      data: { code: `ENT-CPA-${ts}`, name: 'CP Atomic Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-CPA-${ts}`, name: 'CP Atomic Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' },
@@ -53,6 +53,7 @@ describe('CostProposal atomic create+autoSeed (PIC-80)', () => {
     });
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-CPA-${ts}`, name: 'CP Atomic Project', entityId: testEntity.id,
         currencyCode: 'SAR', startDate: new Date(), createdBy: testUser.id, status: 'active',
       },

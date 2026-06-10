@@ -11,7 +11,7 @@
  * Requires DATABASE_URL to run.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from './helpers/assert-test-db';
 import {
   masterAdminCaller,
@@ -34,6 +34,7 @@ beforeAll(async () => {
   // Create an active user with a unique, searchable name
   const activeUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `${TEST_PREFIX}-active@test.com`,
       name: `${TEST_PREFIX} Active User`,
       passwordHash: 'test-hash',
@@ -45,6 +46,7 @@ beforeAll(async () => {
   // Create an inactive user — should be excluded from search results
   const inactiveUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `${TEST_PREFIX}-inactive@test.com`,
       name: `${TEST_PREFIX} Inactive User`,
       passwordHash: 'test-hash',
@@ -57,6 +59,7 @@ beforeAll(async () => {
   for (let i = 0; i < 22; i++) {
     const u = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `${TEST_PREFIX}-bulk${String(i).padStart(2, '0')}@test.com`,
         name: `${TEST_PREFIX} Bulk User ${String(i).padStart(2, '0')}`,
         passwordHash: 'test-hash',

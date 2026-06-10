@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../../helpers/assert-test-db';
 import {
   materialiseAward,
@@ -37,6 +37,7 @@ describe('PIC-53 — RFQ award materialisation', () => {
     process.env.SEED_CONTEXT = 'true';
     const rfq = await prisma.rFQ.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         rfqNumber: opts.rfqNumber,
         title: `Materialisation test ${opts.rfqNumber}`,
@@ -96,7 +97,7 @@ describe('PIC-53 — RFQ award materialisation', () => {
     process.env.SEED_CONTEXT = 'true';
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-MAT-${ts}`, name: 'Materialisation Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-MAT-${ts}`, name: 'Materialisation Entity', type: 'parent', status: 'active' },
     });
     testEntityId = entity.id;
 
@@ -108,6 +109,7 @@ describe('PIC-53 — RFQ award materialisation', () => {
 
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-MAT-${ts}`,
         name: 'Materialisation Project',
         entityId: testEntityId,
@@ -121,6 +123,7 @@ describe('PIC-53 — RFQ award materialisation', () => {
 
     const secondProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-MAT-2-${ts}`,
         name: 'Other Project',
         entityId: testEntityId,
@@ -134,6 +137,7 @@ describe('PIC-53 — RFQ award materialisation', () => {
 
     const vendor = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: testEntityId,
         vendorCode: `V-MAT-${ts}`,
         name: 'Materialisation Vendor',

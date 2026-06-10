@@ -21,7 +21,7 @@
  * The classifier must verify the inline check binds an actual scope field
  * (`projectId` / `entityId` / `orgId`), not just any field.
  */
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertProjectScope } from '../../src/scope-binding';
 
 // ---------------------------------------------------------------------------
@@ -81,6 +81,7 @@ export async function listScoped(projectId: string) {
 export async function createX(projectId: string) {
   return prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId,
       status: 'draft',
       periodNumber: 1,

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import * as workflowEvents from '../../src/workflow/events';
 import {
   registerWorkflowNotificationHandlers,
@@ -34,6 +34,7 @@ beforeAll(async () => {
   [starterUser, approverUser, adminUser] = await Promise.all([
     prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `starter-${ts}@test.com`,
         name: 'Workflow Starter',
         passwordHash: 'hash',
@@ -42,6 +43,7 @@ beforeAll(async () => {
     }),
     prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `approver-${ts}@test.com`,
         name: 'Step Approver',
         passwordHash: 'hash',
@@ -50,6 +52,7 @@ beforeAll(async () => {
     }),
     prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `admin-${ts}@test.com`,
         name: 'Platform Admin',
         passwordHash: 'hash',
@@ -60,11 +63,12 @@ beforeAll(async () => {
 
   // Create entity and project
   entity = await prisma.entity.create({
-    data: { name: `Entity ${ts}`, code: `ENT-${ts}`, type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, name: `Entity ${ts}`, code: `ENT-${ts}`, type: 'parent', status: 'active' },
   });
 
   project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       name: `Project ${ts}`,
       code: `PRJ-${ts}`,
       entityId: entity.id,
@@ -165,6 +169,7 @@ beforeAll(async () => {
   // Create workflow instance pointing at step2 (simulating step1 just approved)
   instance = await (prisma as any).workflowInstance.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       templateId: template.id,
       recordType: 'document',
       recordId: 'doc-123',

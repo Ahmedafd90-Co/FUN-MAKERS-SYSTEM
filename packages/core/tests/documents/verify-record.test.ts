@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   verifyRecordInProject,
@@ -24,6 +24,7 @@ describe('verifyRecordInProject', () => {
     // Entity (shared by both projects + the vendor)
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `VRP-ENT-${ts}`,
         name: `vrp-entity-${ts}`,
         type: 'parent',
@@ -42,6 +43,7 @@ describe('verifyRecordInProject', () => {
     // Two projects so we can test cross-project mismatch
     const p1 = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: entity.id,
         code: `VRP1-${ts}`,
         name: `vrp-p1-${ts}`,
@@ -55,6 +57,7 @@ describe('verifyRecordInProject', () => {
 
     const p2 = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: entity.id,
         code: `VRP2-${ts}`,
         name: `vrp-p2-${ts}`,
@@ -69,6 +72,7 @@ describe('verifyRecordInProject', () => {
     // One vendor (shared by PO/SI/CN — not used by Expense)
     const v = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: entity.id,
         vendorCode: `VRP-VEN-${ts}`,
         name: `vrp-vendor-${ts}`,
@@ -86,6 +90,7 @@ describe('verifyRecordInProject', () => {
     expenseId = (
       await prisma.expense.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: project1Id,
           subtype: 'general' as any,
           title: 'verify-record test expense',
@@ -101,6 +106,7 @@ describe('verifyRecordInProject', () => {
     poId = (
       await prisma.purchaseOrder.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: project1Id,
           vendorId,
           poNumber: `VRP-PO-${ts}`,
@@ -116,6 +122,7 @@ describe('verifyRecordInProject', () => {
     siId = (
       await prisma.supplierInvoice.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: project1Id,
           vendorId,
           invoiceNumber: `vrp-si-${ts}`,
@@ -134,6 +141,7 @@ describe('verifyRecordInProject', () => {
     cnId = (
       await prisma.creditNote.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: project1Id,
           vendorId,
           subtype: 'credit_note' as any,

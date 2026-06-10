@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   router,
   createCallerFactory,
@@ -70,6 +70,7 @@ beforeAll(async () => {
   // Create entity + project
   entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-MW-${Date.now()}`,
       name: 'Middleware Test Entity',
       type: 'parent',
@@ -79,6 +80,7 @@ beforeAll(async () => {
 
   project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `MW-${Date.now()}`,
       name: 'Middleware Test Project',
       entityId: entity.id,
@@ -98,6 +100,7 @@ beforeAll(async () => {
   // --- Assigned user ---
   const assignedDbUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `mw-assigned-${Date.now()}@test.com`,
       name: 'MW Assigned User',
       passwordHash: 'test-hash',
@@ -142,6 +145,7 @@ beforeAll(async () => {
   // --- Unassigned user ---
   const unassignedDbUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `mw-unassigned-${Date.now()}@test.com`,
       name: 'MW Unassigned User',
       passwordHash: 'test-hash',
@@ -178,6 +182,7 @@ beforeAll(async () => {
 
   const masterAdminDbUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `mw-admin-${Date.now()}@test.com`,
       name: 'MW Platform Admin',
       passwordHash: 'test-hash',

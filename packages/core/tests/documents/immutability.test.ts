@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { documentService } from '../../src/documents/service';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -23,6 +23,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Signed version immutability', () => {
 
     testUser = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `immut-test-${ts}@test.com`,
         name: 'Immutability Test User',
         passwordHash: 'test-hash',
@@ -32,6 +33,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Signed version immutability', () => {
 
     testEntity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-IMMUT-${ts}`,
         name: 'Immutability Test Entity',
         type: 'parent',
@@ -52,6 +54,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Signed version immutability', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-IMMUT-${ts}`,
         name: 'Immutability Test Project',
         entityId: testEntity.id,

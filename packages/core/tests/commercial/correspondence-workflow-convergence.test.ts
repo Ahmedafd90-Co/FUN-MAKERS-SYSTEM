@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createCorrespondence,
   transitionCorrespondence,
@@ -72,6 +72,7 @@ describe('Correspondence Workflow Convergence Proof', () => {
     // Create entity + project
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-CORWF-${ts}`,
         name: 'Correspondence WF Test Entity',
         type: 'parent',
@@ -85,6 +86,7 @@ describe('Correspondence Workflow Convergence Proof', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-CORWF-${ts}`,
         name: 'Correspondence Workflow Test',
         entityId: entity.id,
@@ -103,6 +105,7 @@ describe('Correspondence Workflow Convergence Proof', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-${roleCode}-${ts}@corr-wf.test`,
           passwordHash: 'test-hash',

@@ -17,7 +17,7 @@
  *   - Currency KPIs produce decimal-formatted monetary values
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getFinancialKpis, type KpiValue } from '../../src/commercial/dashboard/financial-kpis';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
@@ -40,7 +40,7 @@ let projectWithoutBudgetId: string;
 beforeAll(async () => {
   assertTestDb();
   const entity = await prisma.entity.create({
-    data: { code: `ENT-RENDER-${ts}`, name: 'Render Test', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-RENDER-${ts}`, name: 'Render Test', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -50,6 +50,7 @@ beforeAll(async () => {
   // Project WITH contractValue — budget + revised_budget will have values
   const p1 = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-RENDER-A-${ts}`,
       name: 'Render Test With Budget',
       entityId: entity.id,
@@ -66,6 +67,7 @@ beforeAll(async () => {
   // Variation to produce revised = 5,000,000 + 1,000,000 = 6,000,000
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: p1.id, subtype: 'vo', status: 'client_approved',
       title: 'Render VO Delta', description: 'Test', reason: 'Test',
       costImpact: 1200000, approvedCostImpact: 1000000,
@@ -76,6 +78,7 @@ beforeAll(async () => {
   // Project WITHOUT contractValue — budget + revised_budget will be null
   const p2 = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-RENDER-B-${ts}`,
       name: 'Render Test No Budget',
       entityId: entity.id,
