@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { SINGLETON_ORG_ID } from './organizations';
 
 type SubcategoryDef = {
   name: string;
@@ -119,6 +120,7 @@ export async function seedProcurementCategories(prisma: PrismaClient) {
       where: { entityId_code: { entityId: entity.id, code: cat.code } },
       update: { name: cat.name, status: 'active' },
       create: {
+        orgId: SINGLETON_ORG_ID,
         entityId: entity.id,
         name: cat.name,
         code: cat.code,
@@ -133,6 +135,7 @@ export async function seedProcurementCategories(prisma: PrismaClient) {
         where: { entityId_code: { entityId: entity.id, code: sub.code } },
         update: { name: sub.name, parentId: parent.id, status: 'active' },
         create: {
+          orgId: SINGLETON_ORG_ID,
           entityId: entity.id,
           name: sub.name,
           code: sub.code,

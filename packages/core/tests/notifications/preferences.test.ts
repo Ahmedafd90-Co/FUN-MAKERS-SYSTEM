@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getPreferences,
@@ -19,6 +19,7 @@ beforeAll(async () => {
   assertTestDb();
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `notif-pref-${ts}@test.com`,
       name: 'Pref Test User',
       passwordHash: 'hash',

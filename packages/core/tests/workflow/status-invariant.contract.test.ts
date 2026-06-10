@@ -37,7 +37,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, runAsWorkflowEngine } from '@fmksa/db';
+import { prisma, runAsWorkflowEngine, SINGLETON_ORG_ID } from '@fmksa/db';
 import { registerConvergenceHandlers } from '../../src/workflow/convergence-handlers';
 import * as workflowEvents from '../../src/workflow/events';
 import type { WorkflowEventPayload, WorkflowEventName } from '@fmksa/contracts';
@@ -279,13 +279,14 @@ describe('PIC-35 status-invariant contract', () => {
 
     // Entity (legal entity, not the test record entity)
     const ent = await prisma.entity.create({
-      data: { code: `ENT-PIC35-${ts}`, name: 'PIC-35 Contract Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-PIC35-${ts}`, name: 'PIC-35 Contract Test Entity', type: 'parent', status: 'active' },
     });
     testEntityId = ent.id;
 
     // Project
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-PIC35-${ts}`,
         name: 'PIC-35 Contract Test Project',
         entityId: ent.id,
@@ -300,6 +301,7 @@ describe('PIC-35 status-invariant contract', () => {
     // User (actor for events)
     const user = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         name: `PIC-35 Contract Test User ${ts}`,
         email: `pic35-contract-${ts}@test.fmksa`,
         passwordHash: 'test-hash',
@@ -312,6 +314,7 @@ describe('PIC-35 status-invariant contract', () => {
     // Vendor (for procurement entities) — requires entityId + vendorCode
     const vendor = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: testEntityId,
         vendorCode: `VEN-PIC35-${ts}`,
         name: `PIC-35 Test Vendor ${ts}`,
@@ -349,6 +352,7 @@ describe('PIC-35 status-invariant contract', () => {
     // for return-step lookup. Use a single instance shared across all events.
     const instance = await prisma.workflowInstance.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         templateId: template.id,
         recordType: 'test',
         recordId: 'placeholder',
@@ -365,6 +369,7 @@ describe('PIC-35 status-invariant contract', () => {
     // IPA — has period dates + financial fields
     const ipa = await prisma.ipa.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         periodNumber: 99,
         periodFrom: new Date('2026-01-01'),
@@ -386,6 +391,7 @@ describe('PIC-35 status-invariant contract', () => {
     // IPC — needs parent IPA
     const ipc = await prisma.ipc.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         ipaId: ipa.id,
         certifiedAmount: 90000,
@@ -403,6 +409,7 @@ describe('PIC-35 status-invariant contract', () => {
     // Variation
     const variation = await prisma.variation.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         subtype: 'vo',
         status: 'submitted',
@@ -418,6 +425,7 @@ describe('PIC-35 status-invariant contract', () => {
     // Correspondence (no 'submitted' in CorrespondenceStatus — start in 'draft')
     const correspondence = await prisma.correspondence.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         subtype: 'letter',
         status: 'draft',
@@ -432,6 +440,7 @@ describe('PIC-35 status-invariant contract', () => {
     // Expense
     const expense = await prisma.expense.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         subtype: 'general',
         title: 'PIC-35 Test Expense',
@@ -447,6 +456,7 @@ describe('PIC-35 status-invariant contract', () => {
     // PurchaseOrder
     const po = await prisma.purchaseOrder.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         vendorId: testVendorId,
         poNumber: `PO-PIC35-${ts}`,
@@ -462,6 +472,7 @@ describe('PIC-35 status-invariant contract', () => {
     // RFQ (no 'submitted' in RfqStatus — start in 'draft')
     const rfq = await prisma.rFQ.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         rfqNumber: `RFQ-PIC35-${ts}`,
         title: 'PIC-35 Test RFQ',
@@ -476,6 +487,7 @@ describe('PIC-35 status-invariant contract', () => {
     // SupplierInvoice — has invoice fields; SupplierInvoiceStatus starts at 'received'
     const si = await prisma.supplierInvoice.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         vendorId: testVendorId,
         invoiceNumber: `SI-PIC35-${ts}`,
@@ -494,6 +506,7 @@ describe('PIC-35 status-invariant contract', () => {
     // CostProposal
     const cp = await prisma.costProposal.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         revisionNumber: 1,
         estimatedCost: 75000,
@@ -507,6 +520,7 @@ describe('PIC-35 status-invariant contract', () => {
     // TaxInvoice — needs parent IPC
     const ti = await prisma.taxInvoice.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         ipcId: testIpcId,
         invoiceNumber: `TI-PIC35-${ts}`,
@@ -527,6 +541,7 @@ describe('PIC-35 status-invariant contract', () => {
     // VendorContract (no 'submitted' in enum — start in 'draft')
     const vc = await prisma.vendorContract.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         vendorId: testVendorId,
         contractNumber: `VC-PIC35-${ts}`,
@@ -545,6 +560,7 @@ describe('PIC-35 status-invariant contract', () => {
     // FrameworkAgreement (no 'submitted' in enum — start in 'draft')
     const fa = await prisma.frameworkAgreement.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: testEntityId,
         vendorId: testVendorId,
         projectId: testProjectId,
@@ -562,6 +578,7 @@ describe('PIC-35 status-invariant contract', () => {
     // CreditNote — has different initial state ('received')
     const cn = await prisma.creditNote.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         vendorId: testVendorId,
         subtype: 'credit_note',
@@ -717,6 +734,7 @@ describe('PIC-35 status-invariant contract', () => {
         prisma.variation.upsert({
           where: { id: recordId },
           create: {
+            orgId: SINGLETON_ORG_ID,
             // create branch is never executed (record exists) — left minimal
             id: recordId,
             projectId: testProjectId,

@@ -20,7 +20,7 @@ import {
   masterAdminCaller,
   authenticatedCaller,
 } from './helpers/auth-test-callers';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 
 // ---------------------------------------------------------------------------
 // Non-admin test user for FORBIDDEN checks
@@ -34,6 +34,7 @@ beforeAll(async () => {
   assertTestDb();
   const user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `permdeny-${ts}@test.com`,
       name: 'Permission Deny Test User',
       passwordHash: 'test-hash',

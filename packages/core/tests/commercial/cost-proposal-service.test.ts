@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createCostProposal,
   transitionCostProposal,
@@ -14,7 +14,7 @@ describe('CostProposal Service', () => {
 
   beforeAll(async () => {
     const entity = await prisma.entity.create({
-      data: { code: `ENT-CP-${ts}`, name: 'CostProposal Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-CP-${ts}`, name: 'CostProposal Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -22,6 +22,7 @@ describe('CostProposal Service', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-CP-${ts}`, name: 'CostProposal Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },

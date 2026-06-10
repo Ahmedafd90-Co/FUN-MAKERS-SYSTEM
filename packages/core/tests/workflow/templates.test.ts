@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   workflowTemplateService,
@@ -20,6 +20,7 @@ beforeAll(async () => {
 
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-tpl-${ts}@test.com`,
       name: 'Workflow Template Tester',
       passwordHash: 'test-hash',

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/client';
 import { assertTestDb } from '../helpers/assert-test-db';
+import { SINGLETON_ORG_ID } from '../../src/index';
 import {
   cleanTestData,
   createTestDocumentWithVersion,
@@ -71,6 +72,7 @@ describe('no-delete-on-immutable', () => {
       });
       const override = await prisma.overrideLog.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           auditLogId: auditLog.id,
           overrideType: 'test',
           overriderUserId: userId,
@@ -115,6 +117,7 @@ describe('no-delete-on-immutable', () => {
       });
       const instance = await prisma.workflowInstance.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           templateId: template.id,
           recordType: 'test',
           recordId: 'test-rec',
@@ -151,6 +154,7 @@ describe('no-delete-on-immutable', () => {
     it('rejects delete', async () => {
       const event = await prisma.postingEvent.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           eventType: 'test',
           sourceService: 'test',
           sourceRecordType: 'test',

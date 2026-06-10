@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHash } from 'node:crypto';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { documentService } from '../../src/documents/service';
 import { IntegrityError } from '../../src/documents/signatures';
 import { assertTestDb } from '../helpers/assert-test-db';
@@ -25,6 +25,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Document integrity check', () => {
 
     testUser = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `integrity-test-${ts}@test.com`,
         name: 'Integrity Test User',
         passwordHash: 'test-hash',
@@ -34,6 +35,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Document integrity check', () => {
 
     testEntity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-INTEG-${ts}`,
         name: 'Integrity Test Entity',
         type: 'parent',
@@ -54,6 +56,7 @@ describe.skipIf(!MINIO_AVAILABLE)('Document integrity check', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-INTEG-${ts}`,
         name: 'Integrity Test Project',
         entityId: testEntity.id,

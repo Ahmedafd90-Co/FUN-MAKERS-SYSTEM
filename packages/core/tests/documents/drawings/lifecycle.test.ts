@@ -35,7 +35,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createDrawing,
   createRevision,
@@ -79,6 +79,7 @@ describe('Drawing Register Lifecycle + Workflow Convergence (PIC-52)', () => {
 
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-DRWG-${ts}`,
         name: 'Drawing WF Test Entity',
         type: 'parent',
@@ -92,6 +93,7 @@ describe('Drawing Register Lifecycle + Workflow Convergence (PIC-52)', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DRWG-${ts}`,
         name: 'Drawing Workflow Test',
         entityId: entity.id,
@@ -106,6 +108,7 @@ describe('Drawing Register Lifecycle + Workflow Convergence (PIC-52)', () => {
     // Second project for the cross-project scope assertion test.
     const sp = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DRWG-2-${ts}`,
         name: 'Drawing Workflow Test (second project)',
         entityId: entity.id,
@@ -123,6 +126,7 @@ describe('Drawing Register Lifecycle + Workflow Convergence (PIC-52)', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-drwg-${roleCode}-${ts}@drwg-wf.test`,
           passwordHash: 'test-hash',

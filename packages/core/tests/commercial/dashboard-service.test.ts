@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getCommercialDashboard } from '../../src/commercial/dashboard/service';
 import { createIpa, transitionIpa } from '../../src/commercial/ipa/service';
 import { createIpc, transitionIpc } from '../../src/commercial/ipc/service';
@@ -70,7 +70,7 @@ describe('Dashboard Service', () => {
     registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-DASH-${ts}`, name: 'Dashboard Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-DASH-${ts}`, name: 'Dashboard Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -78,6 +78,7 @@ describe('Dashboard Service', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DASH-${ts}`, name: 'Dashboard Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },
@@ -90,6 +91,7 @@ describe('Dashboard Service', () => {
       if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-dash-${roleCode}-${ts}@test.com`,
           passwordHash: 'test-hash',
@@ -242,10 +244,11 @@ describe('Dashboard Service', () => {
 
   it('returns empty dashboard for project with no data', async () => {
     const entity2 = await prisma.entity.create({
-      data: { code: `ENT-DASH2-${ts}`, name: 'Empty Dash Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-DASH2-${ts}`, name: 'Empty Dash Entity', type: 'parent', status: 'active' },
     });
     const emptyProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DASH2-${ts}`, name: 'Empty Dashboard', entityId: entity2.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },

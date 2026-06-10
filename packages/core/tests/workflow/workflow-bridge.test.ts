@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow/instances';
 import { clearHandlers } from '../../src/workflow/events';
@@ -25,6 +25,7 @@ beforeAll(async () => {
   assertTestDb();
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-bridge-${ts}@test.com`,
       name: 'Bridge Test User',
       passwordHash: 'test-hash',
@@ -52,6 +53,7 @@ beforeAll(async () => {
 
   testEntity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-BRIDGE-${ts}`,
       name: 'Bridge Test Entity',
       type: 'parent',
@@ -67,6 +69,7 @@ beforeAll(async () => {
 
   testProject = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-BRIDGE-${ts}`,
       name: 'Bridge Test Project',
       entityId: testEntity.id,
@@ -226,6 +229,7 @@ describe('Workflow Bridge', () => {
       // Create an RFQ in draft status
       const rfq = await (prisma as any).rFQ.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProject.id,
           rfqNumber: `RFQ-BRIDGE-${ts}-1`,
           title: 'Bridge Test RFQ',
@@ -258,6 +262,7 @@ describe('Workflow Bridge', () => {
       try {
         const rfq = await (prisma as any).rFQ.create({
           data: {
+            orgId: SINGLETON_ORG_ID,
             projectId: testProject.id,
             rfqNumber: `RFQ-BRIDGE-${ts}-2`,
             title: 'Bridge Test RFQ No Template',
@@ -287,6 +292,7 @@ describe('Workflow Bridge', () => {
     it('creates a workflow instance when submitting an IPA (draft → submitted)', async () => {
       const ipa = await prisma.ipa.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProject.id,
           status: 'draft',
           periodNumber: 1,
@@ -324,6 +330,7 @@ describe('Workflow Bridge', () => {
       try {
         const ipa = await prisma.ipa.create({
           data: {
+            orgId: SINGLETON_ORG_ID,
             projectId: testProject.id,
             status: 'draft',
             periodNumber: 2,
@@ -358,6 +365,7 @@ describe('Workflow Bridge', () => {
       // Create a fresh RFQ and transition it to trigger workflow creation
       const rfq = await (prisma as any).rFQ.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProject.id,
           rfqNumber: `RFQ-BRIDGE-${ts}-3`,
           title: 'Bridge Test RFQ Lookup',

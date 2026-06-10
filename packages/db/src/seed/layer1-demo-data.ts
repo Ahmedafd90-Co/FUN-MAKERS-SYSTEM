@@ -123,6 +123,7 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
       if (existing) continue;
       await prisma.projectParticipant.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: project.id,
           entityId: p.entityId,
           role: p.role,

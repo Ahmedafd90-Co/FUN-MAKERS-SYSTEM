@@ -17,7 +17,7 @@ import {
   unauthenticatedCaller,
   authenticatedCaller,
 } from './helpers/auth-test-callers';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 
 // ---------------------------------------------------------------------------
 // Test setup: two users — one with no perms, one with terminate perms
@@ -51,6 +51,7 @@ beforeAll(async () => {
 
   const user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proc-noperm-${ts}@test.com`,
       name: 'Procurement No Perm User',
       passwordHash: 'test-hash',
@@ -92,6 +93,7 @@ beforeAll(async () => {
 
   const termUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `proc-terminate-${ts}@test.com`,
       name: 'Procurement Terminate User',
       passwordHash: 'test-hash',
@@ -117,6 +119,7 @@ beforeAll(async () => {
   } else {
     const e = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROCTEST-${ts}`,
         name: 'Procurement Test Entity',
         type: 'branch',
@@ -132,6 +135,7 @@ beforeAll(async () => {
   } else {
     const p = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROCTEST-${ts}`,
         name: 'Procurement Test Project',
         status: 'active',

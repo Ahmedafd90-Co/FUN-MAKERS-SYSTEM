@@ -34,7 +34,7 @@
  *     same-project sign path against a uploaded buffer.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import { makeCtx, loadAuthUser } from '../helpers/auth-test-callers';
 import { appRouter } from '../../server/routers/_app';
@@ -146,6 +146,7 @@ beforeAll(async () => {
   });
   const docB = await prisma.document.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectB.id, title: 'Doc B SECRET', category: 'contract_attachment',
       status: 'in_review', createdBy: 'test',
     },

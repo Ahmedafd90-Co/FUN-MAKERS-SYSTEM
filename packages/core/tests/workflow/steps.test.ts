@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow/instances';
 import { assertTestDb } from '../helpers/assert-test-db';
@@ -30,6 +30,7 @@ beforeAll(async () => {
   assertTestDb();
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-step-1-${ts}@test.com`,
       name: 'Step Test User 1',
       passwordHash: 'test-hash',
@@ -39,6 +40,7 @@ beforeAll(async () => {
 
   testUser2 = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-step-2-${ts}@test.com`,
       name: 'Step Test User 2',
       passwordHash: 'test-hash',
@@ -67,6 +69,7 @@ beforeAll(async () => {
 
   testEntity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-STEP-${ts}`,
       name: 'Step Test Entity',
       type: 'parent',
@@ -82,6 +85,7 @@ beforeAll(async () => {
 
   testProject = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-STEP-${ts}`,
       name: 'Step Test Project',
       entityId: testEntity.id,

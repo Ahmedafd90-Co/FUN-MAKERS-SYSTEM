@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow';
@@ -23,13 +23,13 @@ describe('CreditNote atomic create+autoSeed (PIC-80)', () => {
 
   beforeAll(async () => {
     assertTestDb();
-    testUser = await prisma.user.create({ data: { email: `${ts}@test.com`, name: 'CN Atomic User', passwordHash: 'test-hash', status: 'active' } });
+    testUser = await prisma.user.create({ data: { orgId: SINGLETON_ORG_ID, email: `${ts}@test.com`, name: 'CN Atomic User', passwordHash: 'test-hash', status: 'active' } });
     testRole = await prisma.role.create({ data: { code: `CNA-ROLE-${ts}`, name: 'CN Atomic Role', isSystem: false } });
     await prisma.userRole.create({ data: { userId: testUser.id, roleId: testRole.id, effectiveFrom: new Date('2020-01-01'), assignedBy: testUser.id, assignedAt: new Date() } });
-    testEntity = await prisma.entity.create({ data: { code: `ENT-CNA-${ts}`, name: 'CN Atomic Entity', type: 'parent', status: 'active' } });
-    testVendor = await prisma.vendor.create({ data: { entityId: testEntity.id, vendorCode: `VEN-CNA-${ts}`, name: `CN Atomic Vendor ${ts}`, status: 'active', createdBy: testUser.id } });
+    testEntity = await prisma.entity.create({ data: { orgId: SINGLETON_ORG_ID, code: `ENT-CNA-${ts}`, name: 'CN Atomic Entity', type: 'parent', status: 'active' } });
+    testVendor = await prisma.vendor.create({ data: { orgId: SINGLETON_ORG_ID, entityId: testEntity.id, vendorCode: `VEN-CNA-${ts}`, name: `CN Atomic Vendor ${ts}`, status: 'active', createdBy: testUser.id } });
     await prisma.currency.upsert({ where: { code: 'SAR' }, create: { code: 'SAR', name: 'Saudi Riyal', symbol: 'SR', decimalPlaces: 2 }, update: {} });
-    testProject = await prisma.project.create({ data: { code: `PROJ-CNA-${ts}`, name: 'CN Atomic Project', entityId: testEntity.id, currencyCode: 'SAR', startDate: new Date(), createdBy: testUser.id, status: 'active' } });
+    testProject = await prisma.project.create({ data: { orgId: SINGLETON_ORG_ID, code: `PROJ-CNA-${ts}`, name: 'CN Atomic Project', entityId: testEntity.id, currencyCode: 'SAR', startDate: new Date(), createdBy: testUser.id, status: 'active' } });
     await prisma.projectAssignment.create({ data: { projectId: testProject.id, userId: testUser.id, roleId: testRole.id, effectiveFrom: new Date('2020-01-01'), assignedBy: testUser.id, assignedAt: new Date() } });
 
     const tpl = await workflowTemplateService.createTemplate({

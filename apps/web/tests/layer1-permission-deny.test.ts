@@ -22,7 +22,7 @@ import {
   unauthenticatedCaller,
   authenticatedCaller,
 } from './helpers/auth-test-callers';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -120,6 +120,7 @@ async function makeUserWithRole(opts: {
 
   const user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: opts.email,
       name: opts.name,
       passwordHash: 'test-hash',
@@ -162,6 +163,7 @@ beforeAll(async () => {
   // entity we just created.
   const entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `E_${runId}`,
       name: `Layer 1 Test Entity ${runId}`,
       type: 'branch',
@@ -172,6 +174,7 @@ beforeAll(async () => {
 
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `P_${runId}`,
       name: `Layer 1 Test Project ${runId}`,
       status: 'active',

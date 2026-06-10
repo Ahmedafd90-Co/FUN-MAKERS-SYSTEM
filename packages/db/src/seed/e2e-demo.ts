@@ -82,6 +82,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const costProposal = await prisma.costProposal.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       status: 'submitted',
       referenceNumber: IDEMPOTENCY_REFERENCE,
@@ -98,6 +99,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   const engineerInstruction = await prisma.engineerInstruction.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       referenceNumber: 'EI-E2E-001',
       title: 'Relocate service corridor — zone B',
@@ -116,6 +118,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   await prisma.correspondence.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       subtype: 'letter',
       status: 'issued',
@@ -133,6 +136,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Imported-historical IPA — period 3 so it doesn't collide with 1/2
   const importedIpa = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       status: 'approved_internal',
       referenceNumber: 'IPA-E2E-HIST-001',
@@ -160,6 +164,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const importBatch = await prisma.importBatch.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       importType: 'ipa_history',
       sourceFileName: '2026-01-historical-ipa.xlsx',
@@ -262,6 +267,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
       notes: budgetNote,
     },
     create: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       internalBaseline: 15000000,
       internalRevised: 17000000,
@@ -379,6 +385,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Absorption exception
   await prisma.budgetAbsorptionException.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       sourceModule: 'procurement',
       sourceRecordType: 'purchase_order',
@@ -399,6 +406,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // ---------------------------------------------------------------------------
   const vendor = await prisma.vendor.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId,
       vendorCode: 'V-E2E-001',
       name: 'Al-Yamamah Steel Supply Co.',
@@ -430,6 +438,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // RFQ + RFQItem + RFQVendor
   const rfq = await prisma.rFQ.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       rfqNumber: 'RFQ-E2E-001',
       title: 'Structural steel supply — zone B',
@@ -498,6 +507,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Purchase Order + item
   const purchaseOrder = await prisma.purchaseOrder.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       vendorId: vendor.id,
       rfqId: rfq.id,
@@ -531,6 +541,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Supplier Invoice
   const supplierInvoice = await prisma.supplierInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       vendorId: vendor.id,
       purchaseOrderId: purchaseOrder.id,
@@ -550,6 +561,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Credit Note
   const creditNote = await prisma.creditNote.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       vendorId: vendor.id,
       subtype: 'credit_note',
@@ -568,6 +580,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Expense
   const expense = await prisma.expense.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       subtype: 'general',
       title: 'Site signage printing',
@@ -584,6 +597,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Framework Agreement + item
   const frameworkAgreement = await prisma.frameworkAgreement.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       entityId,
       vendorId: vendor.id,
       projectId: project.id,
@@ -616,6 +630,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
   // Vendor Contract
   const vendorContract = await prisma.vendorContract.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id,
       vendorId: vendor.id,
       contractNumber: 'VC-E2E-001',
@@ -670,6 +685,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
       status === 'approved' || status === 'rejected' ? new Date() : null;
     const instance = await prisma.workflowInstance.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         templateId: tpl.id,
         recordType,
         recordId,
@@ -747,6 +763,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'IPA_APPROVED',
       sourceService: 'commercial',
       sourceRecordType: 'ipa',
@@ -778,6 +795,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'PO_COMMITTED',
       sourceService: 'procurement',
       sourceRecordType: 'purchase_order',
@@ -801,6 +819,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   const supplierInvoicePostingEvent = await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'SUPPLIER_INVOICE_APPROVED',
       sourceService: 'procurement',
       sourceRecordType: 'supplier_invoice',
@@ -833,6 +852,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   await prisma.postingEvent.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       eventType: 'EXPENSE_APPROVED',
       sourceService: 'procurement',
       sourceRecordType: 'expense',
@@ -874,6 +894,7 @@ export async function seedE2eDemo(prisma: PrismaClient) {
 
   await prisma.overrideLog.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       auditLogId: auditForOverride.id,
       overrideType: 'workflow_skip',
       overriderUserId: actorId,

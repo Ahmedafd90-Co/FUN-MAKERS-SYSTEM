@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   getEffectiveRoles,
@@ -41,6 +41,7 @@ beforeAll(async () => {
   // Create test users
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `perm-test-1-${Date.now()}@test.com`,
       name: 'Perm Test User 1',
       passwordHash: 'test-hash',
@@ -50,6 +51,7 @@ beforeAll(async () => {
 
   testUser2 = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `perm-test-2-${Date.now()}@test.com`,
       name: 'Perm Test User 2',
       passwordHash: 'test-hash',
@@ -59,6 +61,7 @@ beforeAll(async () => {
 
   noRoleUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `perm-test-norole-${Date.now()}@test.com`,
       name: 'No Role User',
       passwordHash: 'test-hash',
@@ -68,6 +71,7 @@ beforeAll(async () => {
 
   masterAdminUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `perm-test-admin-${Date.now()}@test.com`,
       name: 'Test Platform Admin',
       passwordHash: 'test-hash',

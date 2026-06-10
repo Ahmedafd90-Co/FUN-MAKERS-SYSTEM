@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { referenceDataService } from '../../src/reference-data/service';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -16,6 +16,7 @@ beforeAll(async () => {
 
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `refdata-test-${ts}@test.com`,
       name: 'RefData Test User',
       passwordHash: 'test-hash',

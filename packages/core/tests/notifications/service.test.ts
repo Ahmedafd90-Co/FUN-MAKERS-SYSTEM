@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
   notify,
@@ -24,6 +24,7 @@ beforeAll(async () => {
   [testUser, otherUser] = await Promise.all([
     prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `notif-svc-${ts}@test.com`,
         name: 'Notif Service User',
         passwordHash: 'hash',
@@ -32,6 +33,7 @@ beforeAll(async () => {
     }),
     prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `notif-svc-other-${ts}@test.com`,
         name: 'Other User',
         passwordHash: 'hash',

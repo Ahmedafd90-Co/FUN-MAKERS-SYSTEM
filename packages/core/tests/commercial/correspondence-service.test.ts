@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createCorrespondence,
   transitionCorrespondence,
@@ -55,7 +55,7 @@ describe('Correspondence Service', () => {
     registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-COR-${ts}`, name: 'Correspondence Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-COR-${ts}`, name: 'Correspondence Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -63,6 +63,7 @@ describe('Correspondence Service', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-COR-${ts}`, name: 'Correspondence Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },
@@ -75,6 +76,7 @@ describe('Correspondence Service', () => {
       if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-cor-${roleCode}-${ts}@test.com`,
           passwordHash: 'test-hash',

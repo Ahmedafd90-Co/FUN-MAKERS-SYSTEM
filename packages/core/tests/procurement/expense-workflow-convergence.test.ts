@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import {
   createExpense,
   transitionExpense,
@@ -70,6 +70,7 @@ describe('Expense Workflow Convergence Proof', () => {
 
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-EXPWF-${ts}`,
         name: 'Expense WF Test Entity',
         type: 'parent',
@@ -83,6 +84,7 @@ describe('Expense Workflow Convergence Proof', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-EXPWF-${ts}`,
         name: 'Expense Workflow Test',
         entityId: entity.id,
@@ -100,6 +102,7 @@ describe('Expense Workflow Convergence Proof', () => {
 
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-expense-${roleCode}-${ts}@expense-wf.test`,
           passwordHash: 'test-hash',

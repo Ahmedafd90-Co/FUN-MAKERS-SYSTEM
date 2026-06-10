@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import * as workflowEvents from '../../src/workflow/events';
 import {
   createTaxInvoice,
@@ -71,7 +71,7 @@ describe('TaxInvoice Service', () => {
     registerConvergenceHandlers();
 
     const entity = await prisma.entity.create({
-      data: { code: `ENT-TI-${ts}`, name: 'TaxInvoice Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-TI-${ts}`, name: 'TaxInvoice Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -79,6 +79,7 @@ describe('TaxInvoice Service', () => {
     });
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-TI-${ts}`, name: 'TaxInvoice Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },
@@ -91,6 +92,7 @@ describe('TaxInvoice Service', () => {
       if (!role) throw new Error(`Role '${roleCode}' not found — run seed first`);
       const user = await prisma.user.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           name: `Test ${roleCode} ${ts}`,
           email: `test-ti-${roleCode}-${ts}@test.com`,
           passwordHash: 'test-hash',

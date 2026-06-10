@@ -18,7 +18,7 @@
  * Database-backed — runs against the test Postgres configured by CI.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getMonthlyCostSheet, __testing } from '../../src/commercial/monthly-cost-sheet';
 
 const ts = `mcs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -32,7 +32,6 @@ const actor = 'test-user';
  * (platform-admin/PMO/assigned) is exercised by the apps/web e2e isolation
  * suite, NOT here.
  */
-const SINGLETON_ORG_ID = '00000000-0000-0000-0000-000000000001';
 
 // Fixed "now" in May 2026 so trailing-12 covers Jun 2025 → May 2026 inclusive.
 const NOW = new Date('2026-05-15T00:00:00.000Z');
@@ -44,7 +43,7 @@ let usdProject: string;  // different currency — triggers mixed-currency guard
 
 beforeAll(async () => {
   const entity = await prisma.entity.create({
-    data: { code: `ENT-${ts}`, name: 'MCS Test', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-${ts}`, name: 'MCS Test', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -58,6 +57,7 @@ beforeAll(async () => {
   // ── Project A — SAR, full monthly dataset ─────────────────────────
   const pA = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-A-${ts}`, name: 'MCS A', entityId: entity.id,
       status: 'active', currencyCode: 'SAR',
       startDate: new Date('2026-02-01'),
@@ -69,15 +69,16 @@ beforeAll(async () => {
   // Forecasts Feb/Mar/Apr (one per period)
   await prisma.ipaForecast.createMany({
     data: [
-      { projectId: sarProjectA, periodNumber: 1, periodStart: new Date('2026-02-01'), forecastAmount: 1000000, currency: 'SAR', createdBy: actor },
-      { projectId: sarProjectA, periodNumber: 2, periodStart: new Date('2026-03-01'), forecastAmount: 2000000, currency: 'SAR', createdBy: actor },
-      { projectId: sarProjectA, periodNumber: 3, periodStart: new Date('2026-04-01'), forecastAmount: 3000000, currency: 'SAR', createdBy: actor },
+      { orgId: SINGLETON_ORG_ID, projectId: sarProjectA, periodNumber: 1, periodStart: new Date('2026-02-01'), forecastAmount: 1000000, currency: 'SAR', createdBy: actor },
+      { orgId: SINGLETON_ORG_ID, projectId: sarProjectA, periodNumber: 2, periodStart: new Date('2026-03-01'), forecastAmount: 2000000, currency: 'SAR', createdBy: actor },
+      { orgId: SINGLETON_ORG_ID, projectId: sarProjectA, periodNumber: 3, periodStart: new Date('2026-04-01'), forecastAmount: 3000000, currency: 'SAR', createdBy: actor },
     ],
   });
 
   // Live IPA — period 1 (Feb, on plan) and period 2 (Mar, behind)
   await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date('2026-02-01'), periodTo: new Date('2026-02-28'),
       grossAmount: 1100000, retentionRate: 0.10, retentionAmount: 100000,
@@ -87,6 +88,7 @@ beforeAll(async () => {
   });
   await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, status: 'approved_internal', periodNumber: 2,
       periodFrom: new Date('2026-03-01'), periodTo: new Date('2026-03-31'),
       grossAmount: 1800000, retentionRate: 0.10, retentionAmount: 200000,
@@ -97,6 +99,7 @@ beforeAll(async () => {
   // Imported-historical IPA — period 3 (must count toward Apr achieved)
   await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, status: 'approved_internal', periodNumber: 3,
       periodFrom: new Date('2026-04-01'), periodTo: new Date('2026-04-30'),
       grossAmount: 1500000, retentionRate: 0.10, retentionAmount: 150000,
@@ -108,6 +111,7 @@ beforeAll(async () => {
   // DRAFT IPA — must NOT count toward Achieved
   await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, status: 'draft', periodNumber: 4,
       periodFrom: new Date('2026-05-01'), periodTo: new Date('2026-05-31'),
       grossAmount: 5000000, retentionRate: 0.10, retentionAmount: 500000,
@@ -119,6 +123,7 @@ beforeAll(async () => {
   // IPC — one signed IPC in March (certificationDate month 2026-03)
   await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, ipaId: (await prisma.ipa.findFirst({ where: { projectId: sarProjectA, periodNumber: 1 } }))!.id,
       status: 'signed',
       certifiedAmount: 900000, retentionAmount: 90000, netCertified: 810000,
@@ -130,6 +135,7 @@ beforeAll(async () => {
   // Tax invoice — one issued in April, grossAmount 800k, vat 120k → ex-VAT = 680k
   const inv = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA,
       ipcId: (await prisma.ipc.findFirst({ where: { projectId: sarProjectA } }))!.id,
       status: 'issued',
@@ -152,6 +158,7 @@ beforeAll(async () => {
   //              one VO submitted (only in proposed) + one rejected (in NEITHER)
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, subtype: 'vo', status: 'client_approved',
       title: 'MCS VO', description: 't', reason: 't',
       costImpact: 600000, approvedCostImpact: 500000,
@@ -160,6 +167,7 @@ beforeAll(async () => {
   });
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, subtype: 'change_order', status: 'approved_internal',
       title: 'MCS CO', description: 't', reason: 't',
       costImpact: 300000, approvedCostImpact: 250000,
@@ -168,6 +176,7 @@ beforeAll(async () => {
   });
   await prisma.variation.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: sarProjectA, subtype: 'vo', status: 'submitted',
       title: 'MCS VO Submitted', description: 't', reason: 't',
       costImpact: 100000,
@@ -178,6 +187,7 @@ beforeAll(async () => {
   // ── Project B — SAR, tiny, for portfolio aggregation ─────────────
   const pB = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-B-${ts}`, name: 'MCS B', entityId: entity.id,
       status: 'active', currencyCode: 'SAR',
       startDate: new Date('2026-02-01'),
@@ -189,6 +199,7 @@ beforeAll(async () => {
   // ── Project C — USD, mixed-currency trigger ──────────────────────
   const pC = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-C-${ts}`, name: 'MCS C USD', entityId: entity.id,
       status: 'active', currencyCode: 'USD',
       startDate: new Date('2026-02-01'),

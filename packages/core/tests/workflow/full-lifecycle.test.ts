@@ -9,7 +9,7 @@
  *   - Verify all actions are immutably recorded for each lifecycle
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { workflowInstanceService } from '../../src/workflow/instances';
 import { workflowStepService } from '../../src/workflow/steps';
@@ -31,6 +31,7 @@ beforeAll(async () => {
   assertTestDb();
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-lifecycle-${ts}@test.com`,
       name: 'Lifecycle Test User',
       passwordHash: 'test-hash',
@@ -58,6 +59,7 @@ beforeAll(async () => {
 
   testEntity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-LC-${ts}`,
       name: 'Lifecycle Test Entity',
       type: 'parent',
@@ -73,6 +75,7 @@ beforeAll(async () => {
 
   testProject = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-LC-${ts}`,
       name: 'Lifecycle Test Project',
       entityId: testEntity.id,

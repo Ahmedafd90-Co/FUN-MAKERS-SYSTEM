@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { recordCollection, listCollections, getOutstandingAmount } from '../../src/commercial/invoice-collection/service';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -18,6 +18,7 @@ let testIpc: { id: string };
 async function createCollectableInvoice(totalAmount = 10000) {
   const inv = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: testProject.id,
       ipcId: testIpc.id,
       status: 'issued',
@@ -40,7 +41,7 @@ async function createCollectableInvoice(totalAmount = 10000) {
 beforeAll(async () => {
   assertTestDb();
   const entity = await prisma.entity.create({
-    data: { code: `ENT-COLL-${ts}`, name: 'Collection Test Entity', type: 'parent', status: 'active' },
+    data: { orgId: SINGLETON_ORG_ID, code: `ENT-COLL-${ts}`, name: 'Collection Test Entity', type: 'parent', status: 'active' },
   });
   await prisma.currency.upsert({
     where: { code: 'SAR' }, update: {},
@@ -48,6 +49,7 @@ beforeAll(async () => {
   });
   const project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-COLL-${ts}`, name: 'Collection Test', entityId: entity.id,
       status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
     },
@@ -57,6 +59,7 @@ beforeAll(async () => {
   // Create a parent IPA and IPC so TaxInvoice has valid FK refs
   const ipa = await prisma.ipa.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, status: 'approved_internal', periodNumber: 1,
       periodFrom: new Date(), periodTo: new Date(), grossAmount: 100000,
       retentionRate: 0.10, retentionAmount: 10000, previousCertified: 0,
@@ -65,6 +68,7 @@ beforeAll(async () => {
   });
   const ipc = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: project.id, ipaId: ipa.id, status: 'signed',
       certifiedAmount: 90000, retentionAmount: 9000, netCertified: 81000,
       certificationDate: new Date(), currency: 'SAR', createdBy: 'test',
@@ -173,6 +177,7 @@ describe('Invoice Collection Service', () => {
     it('rejects collection on non-collectable invoice (draft)', async () => {
       const draftInvoice = await prisma.taxInvoice.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           projectId: testProject.id, ipcId: testIpc.id, status: 'draft',
           invoiceNumber: `INV-DRAFT-${ts}-${Date.now()}`,
           invoiceDate: new Date(), grossAmount: 5000, vatRate: 0.15,

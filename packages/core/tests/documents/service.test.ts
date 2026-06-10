@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { documentService } from '../../src/documents/service';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -24,6 +24,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
 
     testUser = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `doc-test-1-${ts}@test.com`,
         name: 'Doc Test User 1',
         passwordHash: 'test-hash',
@@ -33,6 +34,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
 
     testUser2 = await prisma.user.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         email: `doc-test-2-${ts}@test.com`,
         name: 'Doc Test User 2',
         passwordHash: 'test-hash',
@@ -42,6 +44,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
 
     testEntity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-DOC-${ts}`,
         name: 'Doc Test Entity',
         type: 'parent',
@@ -62,6 +65,7 @@ describe.skipIf(!MINIO_AVAILABLE)('documentService', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-DOC-${ts}`,
         name: 'Doc Test Project',
         entityId: testEntity.id,

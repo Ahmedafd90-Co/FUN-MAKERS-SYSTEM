@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { generateReferenceNumber } from '../../src/commercial/reference-number/service';
 
 describe('generateReferenceNumber', () => {
@@ -8,7 +8,7 @@ describe('generateReferenceNumber', () => {
 
   beforeAll(async () => {
     const entity = await prisma.entity.create({
-      data: { code: `ENT-REF-${ts}`, name: 'Ref Test Entity', type: 'parent', status: 'active' },
+      data: { orgId: SINGLETON_ORG_ID, code: `ENT-REF-${ts}`, name: 'Ref Test Entity', type: 'parent', status: 'active' },
     });
     await prisma.currency.upsert({
       where: { code: 'SAR' }, update: {},
@@ -16,6 +16,7 @@ describe('generateReferenceNumber', () => {
     });
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-REF-${ts}`, name: 'Ref Test', entityId: entity.id,
         status: 'active', currencyCode: 'SAR', startDate: new Date(), createdBy: 'test',
       },

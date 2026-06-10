@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { getScreenPermissions } from '../../src/access-control/screen-permissions';
 import { assertTestDb } from '../helpers/assert-test-db';
 
@@ -28,6 +28,7 @@ beforeAll(async () => {
   assertTestDb();
   user = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `screen-perm-${Date.now()}@test.com`,
       name: 'Screen Perm User',
       passwordHash: 'test-hash',
@@ -37,6 +38,7 @@ beforeAll(async () => {
 
   entity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-SP-${Date.now()}`,
       name: 'Screen Perm Test Entity',
       type: 'parent',
@@ -46,6 +48,7 @@ beforeAll(async () => {
 
   project = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `SP-${Date.now()}`,
       name: 'Screen Perm Project',
       entityId: entity.id,

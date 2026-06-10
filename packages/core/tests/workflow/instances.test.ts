@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { workflowTemplateService } from '../../src/workflow/templates';
 import { assertTestDb } from '../helpers/assert-test-db';
 import {
@@ -25,6 +25,7 @@ beforeAll(async () => {
   assertTestDb();
   testUser = await prisma.user.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       email: `wf-inst-${ts}@test.com`,
       name: 'Instance Test User',
       passwordHash: 'test-hash',
@@ -52,6 +53,7 @@ beforeAll(async () => {
 
   testEntity = await prisma.entity.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `ENT-INST-${ts}`,
       name: 'Instance Test Entity',
       type: 'parent',
@@ -67,6 +69,7 @@ beforeAll(async () => {
 
   testProject = await prisma.project.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       code: `PROJ-INST-${ts}`,
       name: 'Instance Test Project',
       entityId: testEntity.id,

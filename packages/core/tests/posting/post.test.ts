@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { prisma } from '@fmksa/db';
+import { prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { postingService } from '../../src/posting/service';
 import { UnknownEventTypeError } from '../../src/posting/event-registry';
 
@@ -16,6 +16,7 @@ describe('postingService.post', () => {
     // Create entity + currency + project for FK constraints
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-POST-${ts}`,
         name: 'Post Test Entity',
         type: 'parent',
@@ -36,6 +37,7 @@ describe('postingService.post', () => {
 
     testProject = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PRJ-POST-${ts}`,
         name: 'Post Test Project',
         entityId: entity.id,

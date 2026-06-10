@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { prisma, Prisma } from '@fmksa/db';
+import { prisma, Prisma, SINGLETON_ORG_ID } from '@fmksa/db';
 import { assertTestDb } from '../../helpers/assert-test-db';
 import {
   evaluateQuotation,
@@ -45,6 +45,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
 
     const entity = await prisma.entity.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `ENT-EVAL-${ts}`,
         name: 'Evaluation Test Entity',
         type: 'parent',
@@ -61,6 +62,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
 
     const project = await prisma.project.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         code: `PROJ-EVAL-${ts}`,
         name: 'Evaluation Test Project',
         entityId: testEntityId,
@@ -74,6 +76,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
 
     const vendor = await prisma.vendor.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         entityId: testEntityId,
         vendorCode: `V-EVAL-${ts}`,
         name: 'Evaluation Test Vendor',
@@ -85,6 +88,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
 
     const rfq = await prisma.rFQ.create({
       data: {
+        orgId: SINGLETON_ORG_ID,
         projectId: testProjectId,
         rfqNumber: `RFQ-EVAL-${ts}`,
         title: 'Evaluation Test RFQ',
@@ -433,6 +437,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
       process.env.SEED_CONTEXT = 'true';
       const otherProject = await prisma.project.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           code: `PROJ-OTHER-${Date.now()}`,
           name: 'Other Project',
           entityId: testEntityId,
@@ -477,6 +482,7 @@ describe('PIC-53 — RFQ bid evaluation', () => {
       process.env.SEED_CONTEXT = 'true';
       const vendor2 = await prisma.vendor.create({
         data: {
+          orgId: SINGLETON_ORG_ID,
           entityId: testEntityId,
           vendorCode: `V-EVAL2-${Date.now()}`,
           name: 'Vendor 2',
