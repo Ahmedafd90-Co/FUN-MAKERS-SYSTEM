@@ -83,12 +83,12 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
   // 1. Upsert shared external entities (design + sub).
   const designEntity = await prisma.entity.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: DESIGN_ENTITY.code } },
-    create: { code: DESIGN_ENTITY.code, name: DESIGN_ENTITY.name, type: 'operating_unit', status: 'active' },
+    create: { orgId: SINGLETON_ORG_ID, code: DESIGN_ENTITY.code, name: DESIGN_ENTITY.name, type: 'operating_unit', status: 'active' },
     update: { name: DESIGN_ENTITY.name, status: 'active' },
   });
   const subEntity = await prisma.entity.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: SUB_ENTITY.code } },
-    create: { code: SUB_ENTITY.code, name: SUB_ENTITY.name, type: 'operating_unit', status: 'active' },
+    create: { orgId: SINGLETON_ORG_ID, code: SUB_ENTITY.code, name: SUB_ENTITY.name, type: 'operating_unit', status: 'active' },
     update: { name: SUB_ENTITY.name, status: 'active' },
   });
 
@@ -104,7 +104,7 @@ export async function seedLayer1DemoData(prisma: PrismaClient) {
     // 2. Upsert the per-project client entity.
     const clientEntity = await prisma.entity.upsert({
       where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: client.entityCode } },
-      create: { code: client.entityCode, name: client.name, type: 'operating_unit', status: 'active' },
+      create: { orgId: SINGLETON_ORG_ID, code: client.entityCode, name: client.name, type: 'operating_unit', status: 'active' },
       update: { name: client.name, status: 'active' },
     });
 

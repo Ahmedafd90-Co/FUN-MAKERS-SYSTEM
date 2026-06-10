@@ -92,6 +92,7 @@ beforeAll(async () => {
   });
   const ipcA = await prisma.ipc.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectA.id, ipaId: ipaA.id, status: 'signed',
       certifiedAmount: 9000, retentionAmount: 900, netCertified: 8100,
       certificationDate: new Date(), currency: 'SAR', createdBy: 'test',
@@ -99,6 +100,7 @@ beforeAll(async () => {
   });
   const invoiceA = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectA.id, ipcId: ipcA.id, status: 'issued',
       invoiceNumber: `INV-INVA-${ts}`, invoiceDate: new Date(),
       grossAmount: 10000, vatRate: 0.15, vatAmount: 1500, totalAmount: 10000,
@@ -148,6 +150,7 @@ beforeAll(async () => {
   });
   const invoiceB = await prisma.taxInvoice.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectB.id, ipcId: ipcB.id, status: 'issued',
       invoiceNumber: `INV-INVB-${ts}`, invoiceDate: new Date(),
       grossAmount: 50000, vatRate: 0.15, vatAmount: 7500, totalAmount: 50000,

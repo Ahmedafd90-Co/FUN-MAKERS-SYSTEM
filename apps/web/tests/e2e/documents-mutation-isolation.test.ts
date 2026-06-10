@@ -107,6 +107,7 @@ beforeAll(async () => {
   // Org-A document + version (POS-path target)
   const docA = await prisma.document.create({
     data: {
+      orgId: SINGLETON_ORG_ID,
       projectId: projectAId, title: 'Doc A', category: 'contract_attachment',
       status: 'in_review', createdBy: 'test',
     },

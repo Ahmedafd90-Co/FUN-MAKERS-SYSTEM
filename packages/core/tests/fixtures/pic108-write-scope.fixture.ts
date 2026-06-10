@@ -51,6 +51,7 @@ export async function createSuppliesOrgId(orgId: string, projectId: string) {
 // ---------------------------------------------------------------------------
 export async function createOmitsOrgId(projectId: string) {
   return prisma.ipa.create({
+    // @ts-expect-error PIC-108-G-final: intentional omit — this fixture IS the write-scope-guard bite-proof; supplying orgId destroys the omit-detection test
     data: {
       projectId,
       status: 'draft',

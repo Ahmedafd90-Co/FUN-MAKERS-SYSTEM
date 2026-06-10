@@ -24,6 +24,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
   await prisma.project.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-001' } },
     create: {
+      orgId: SINGLETON_ORG_ID,
       code: 'FMKSA-2026-001',
       name: 'Al Yamamah Entertainment Complex',
       entityId: opsEntity.id,
@@ -49,6 +50,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
   await prisma.project.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-002' } },
     create: {
+      orgId: SINGLETON_ORG_ID,
       code: 'FMKSA-2026-002',
       name: 'Riyadh Season Pavilion',
       entityId: ruhEntity?.id ?? opsEntity.id,
@@ -70,6 +72,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
   await prisma.project.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-2026-003' } },
     create: {
+      orgId: SINGLETON_ORG_ID,
       code: 'FMKSA-2026-003',
       name: 'Jeddah Waterfront Experience Zone',
       entityId: jedEntity?.id ?? opsEntity.id,
@@ -90,6 +93,7 @@ export async function seedSampleProject(prisma: PrismaClient) {
   await prisma.project.upsert({
     where: { orgId_code: { orgId: SINGLETON_ORG_ID, code: 'FMKSA-DEMO-001' } },
     create: {
+      orgId: SINGLETON_ORG_ID,
       code: 'FMKSA-DEMO-001',
       name: 'Fun Makers KSA Demo Project',
       entityId: opsEntity.id,
