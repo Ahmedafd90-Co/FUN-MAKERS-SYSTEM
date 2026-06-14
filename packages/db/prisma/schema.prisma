@@ -87,19 +87,6 @@ enum UserStatus {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Identity tables
-// ---------------------------------------------------------------------------
-
-model Department {
-  id          String  @id @default(uuid()) @map("id")
-  code        String  @unique @map("code")
-  name        String  @map("name")
-  description String? @map("description")
-
-  @@map("departments")
-}
-
-// ---------------------------------------------------------------------------
 // PIC-75 — Multi-tenancy root: Organization
 //
 // First structural application of SR-Multi-Tenancy. Each tenant is one
