@@ -25,6 +25,7 @@ import {
   setPreference,
   NotificationNotFoundError,
   NotificationOwnershipError,
+  auditService,
 } from '@fmksa/core';
 import { prisma } from '@fmksa/db';
 
@@ -100,8 +101,13 @@ const templatesRouter = router({
           },
         });
 
-        await tx.auditLog.create({
-          data: {
+        // PIC-108-H: route through the audit chokepoint (was a direct
+        // tx.auditLog.create). The chokepoint supplies orgId via
+        // `entry.orgId ?? SINGLETON_ORG_ID`; this caller threads no org, so the
+        // row keeps the singleton — byte-identical to the prior write. Threading
+        // a real org here is the banked audit-threading pass, not this PR.
+        await auditService.log(
+          {
             actorUserId: ctx.user.id,
             actorSource: 'user',
             action: 'notification_template_updated',
@@ -116,7 +122,8 @@ const templatesRouter = router({
               bodyTemplate: input.bodyTemplate,
             },
           },
-        });
+          tx,
+        );
 
         return template;
       });

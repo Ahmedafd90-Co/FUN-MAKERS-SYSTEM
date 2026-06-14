@@ -250,6 +250,26 @@ export const adminRouter = router({
         });
       }
 
+      // PIC-98 PR-3a (F4) / PIC-108-H: the new user belongs to the caller's org.
+      // tenant_admin creates users in their own org by construction. PIC-108-G
+      // dropped User.orgId's @default singleton, so org MUST be supplied
+      // explicitly — there is no longer a default backstop. A platform_admin
+      // whose session carries no org context (ctx.orgId === null) cannot pick a
+      // target org here yet; that arrives with the PR-4 master-provisioning
+      // surface. Until then, reject rather than silently mis-attribute or
+      // NOT-NULL-fail at the DB.
+      // CodeRabbit (PIC-108-H): this org-context precondition runs BEFORE the
+      // duplicate-email lookup so an unsupported (null-org) request fails fast
+      // with BAD_REQUEST regardless of whether the email already exists —
+      // rather than being masked by a CONFLICT.
+      if (!ctx.orgId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message:
+            'Cannot create a user without an org context. Platform-admin cross-org user creation arrives with the PR-4 target-org surface and is not yet supported.',
+        });
+      }
+
       // Check for duplicate email — emails are unique GLOBALLY (not per-org)
       // so this stays a global check. PR-4 may introduce per-org email
       // namespacing if needed for multi-tenant UX, but for PR-3a the global
@@ -264,18 +284,10 @@ export const adminRouter = router({
         });
       }
 
-      // PIC-98 PR-3a (F4): default new user's orgId to caller's org.
-      // tenant_admin can only create users in their own org by construction;
-      // platform_admin in current single-tenant state lands the same default
-      // (the master-provisioning procedure in PR-4 adds the surface for
-      // platform-admin to specify any orgId when multi-tenant goes live).
-      // Conditional spread avoids passing `orgId: undefined` (rejected by
-      // `exactOptionalPropertyTypes`); when ctx.orgId is null the field is
-      // omitted and Prisma's singleton `@default` on User.orgId fills it.
       const passwordHash = await hashPassword(input.password);
       const user = await prisma.user.create({
         data: {
-          ...(ctx.orgId ? { orgId: ctx.orgId } : {}),
+          orgId: ctx.orgId,
           name: input.name,
           email: input.email,
           passwordHash,
