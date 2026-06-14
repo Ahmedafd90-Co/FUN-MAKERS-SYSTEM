@@ -28,15 +28,18 @@
  * the machine-checked proof every tenant write supplies orgId → safe for 108-G
  * to drop the @default (a create omitting orgId then fails loud, NOT NULL).
  *
- * NOTE: apps/web router/REST writes (admin.ts createUser, notifications.ts
- * auditLog, platform-admin.ts) are NOT scanned here — 108-A ranges over
- * packages/core/src only. They are folded into 108-H (apps/web coverage).
+ * SCOPE (PIC-108-H): the walk now covers THREE roots, syntactically (no import
+ * resolution): packages/core/src, apps/web/server/routers (tRPC mutations), and
+ * apps/web/app/api/**∕route.ts (REST handlers). apps/web is scoped TIGHTLY to
+ * those two sub-trees — NOT a broad apps/web root, which would sweep .tsx
+ * component creates and apps/web/tests fixtures. Each root's files are
+ * relativized against THAT root so the `file` field stays clean + meaningful.
  *
  * Run:  pnpm -F @fmksa/core test write-scope-guard
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, basename } from 'node:path';
 import * as ts from 'typescript';
 
 // ---------------------------------------------------------------------------
@@ -247,14 +250,30 @@ function isExempt(site: CreateSite): boolean {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+// PIC-108-H — three guarded roots. __dirname = packages/core/tests, so
+// '..','..','..' is the monorepo root. apps/web is scoped tightly to the tRPC
+// router tree + REST route handlers (route.ts only); a broad apps/web root
+// would sweep .tsx component creates and apps/web/tests fixtures.
 const SRC_ROOT = join(__dirname, '..', 'src');
+const WEB_ROUTERS_ROOT = join(__dirname, '..', '..', '..', 'apps', 'web', 'server', 'routers');
+const WEB_API_ROOT = join(__dirname, '..', '..', '..', 'apps', 'web', 'app', 'api');
+const GUARD_ROOTS: Array<{ root: string; only?: (f: string) => boolean }> = [
+  { root: SRC_ROOT },
+  { root: WEB_ROUTERS_ROOT },
+  // REST handlers only — Next.js route files are named route.ts.
+  { root: WEB_API_ROOT, only: (f) => basename(f) === 'route.ts' },
+];
 
 describe('PIC-108-A — write-side scope guard (every tenant-model write supplies orgId or is documented-default-reliant)', () => {
   const allSites: CreateSite[] = [];
-  for (const file of [...walkSrcFiles(SRC_ROOT)]) {
-    const content = readFileSync(file, 'utf-8');
-    const sf = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
-    allSites.push(...findTenantWritesInFile(sf, SRC_ROOT));
+  for (const { root, only } of GUARD_ROOTS) {
+    for (const file of walkSrcFiles(root)) {
+      if (only && !only(file)) continue;
+      const content = readFileSync(file, 'utf-8');
+      const sf = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true);
+      // Relativize against THIS root so `file` fields stay clean + meaningful.
+      allSites.push(...findTenantWritesInFile(sf, root));
+    }
   }
 
   it('PROPERTY: every tenant-model write supplies orgId (dynamic, unconditional) OR is in KNOWN_DEFAULT_RELIANT', () => {
@@ -273,7 +292,8 @@ describe('PIC-108-A — write-side scope guard (every tenant-model write supplie
     const total = allSites.length;
     const supplied = allSites.filter((s) => s.verdict === 'supplied').length;
     const exemptViolations = allSites.filter((s) => s.verdict !== 'supplied' && isExempt(s)).length;
-    // Enumerator sanity: we know there are ~43 tenant-model writes in core/src.
+    // Enumerator sanity: ~43 tenant-model writes in core/src + the apps/web
+    // router/REST sites (PIC-108-H) — ~45 total.
     expect(total, 'tenant-model writes — too few suggests WRITE_TENANT_MODELS drift').toBeGreaterThan(35);
     expect(total, 'tenant-model writes — too many suggests a non-tenant accessor leaked in').toBeLessThan(200);
     // Nothing silent: every site is either supplied or documented-default-reliant.
